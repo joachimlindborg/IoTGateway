@@ -1,12 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Drawing;
-using System.Drawing.Imaging;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using SkiaSharp;
 using Waher.Content;
+using Waher.Content.Xml;
 using Waher.Events;
 using Waher.Networking.HTTP;
 using Waher.Script;
@@ -17,11 +17,19 @@ using Waher.Script.Objects;
 
 namespace Waher.WebService.Script
 {
+	/// <summary>
+	/// Web service that can be used to execute script on the server.
+	/// </summary>
 	public class ScriptService : HttpAsynchronousResource, IHttpPostMethod
 	{
-		private HttpAuthenticationScheme[] authenticationSchemes;
-		private Dictionary<string, Expression> expressions = new Dictionary<string, Expression>();
+		private readonly HttpAuthenticationScheme[] authenticationSchemes;
+		private readonly Dictionary<string, Expression> expressions = new Dictionary<string, Expression>();
 
+		/// <summary>
+		/// Web service that can be used to execute script on the server.
+		/// </summary>
+		/// <param name="ResourceName">Name of resource.</param>
+		/// <param name="AuthenticationSchemes">Authentication schemes.</param>
 		public ScriptService(string ResourceName, params HttpAuthenticationScheme[] AuthenticationSchemes)
 			: base(ResourceName)
 		{
@@ -48,6 +56,14 @@ namespace Waher.WebService.Script
 			{
 				return true;
 			}
+		}
+
+		/// <summary>
+		/// If the POST method is allowed.
+		/// </summary>
+		public bool AllowsPOST
+		{
+			get { return true; }
 		}
 
 		/// <summary>
@@ -82,13 +98,10 @@ namespace Waher.WebService.Script
 
 			if (string.IsNullOrEmpty(s))
 			{
-				int x, y;
-
-				if (!string.IsNullOrEmpty(s = Request.Header["X-X"]) && int.TryParse(s, out x) &&
-					!string.IsNullOrEmpty(s = Request.Header["X-Y"]) && int.TryParse(s, out y))
+				if (!string.IsNullOrEmpty(s = Request.Header["X-X"]) && int.TryParse(s, out int x) &&
+					!string.IsNullOrEmpty(s = Request.Header["X-Y"]) && int.TryParse(s, out int y))
 				{
-					Dictionary<string, KeyValuePair<Graph, object[]>> Graphs = Variables["Graphs"] as Dictionary<string, KeyValuePair<Graph, object[]>>;
-					if (Graphs == null)
+					if (!(Variables["Graphs"] is Dictionary<string, KeyValuePair<Graph, object[]>> Graphs))
 						throw new NotFoundException();
 
 					KeyValuePair<Graph, object[]> Rec;
@@ -137,9 +150,7 @@ namespace Waher.WebService.Script
 
 				Exp.OnPreview += (sender, e) =>
 				{
-					HttpResponse Response2 = Exp.Tag as HttpResponse;
-
-					if (Response2 != null && !Response2.HeaderSent)
+					if (Exp.Tag is HttpResponse Response2 && !Response2.HeaderSent)
 						this.SendResponse(Variables, e.Preview, null, Response2, true);
 				};
 
@@ -160,9 +171,7 @@ namespace Waher.WebService.Script
 							Result = new ObjectValue(ex);
 						}
 
-						HttpResponse Response2 = Exp.Tag as HttpResponse;
-
-						if (Response2 != null && !Response2.HeaderSent)
+						if (Exp.Tag is HttpResponse Response2 && !Response2.HeaderSent)
 						{
 							lock (this.expressions)
 							{
@@ -187,22 +196,20 @@ namespace Waher.WebService.Script
 		{
 			Variables["Ans"] = Result;
 
-			Graph G = Result as Graph;
-			Image Img;
+			SKImage Img;
 			object Obj;
 			string s;
 
-			if (G != null)
+			if (Result is Graph G)
 			{
 				GraphSettings Settings = new GraphSettings();
-				Variable v;
-				Size? Size;
+				Tuple<int, int> Size;
 				double d;
 
-				if ((Size = G.RecommendedBitmapSize).HasValue)
+				if ((Size = G.RecommendedBitmapSize) != null)
 				{
-					Settings.Width = Size.Value.Width;
-					Settings.Height = Size.Value.Height;
+					Settings.Width = Size.Item1;
+					Settings.Height = Size.Item2;
 
 					Settings.MarginLeft = (int)Math.Round(15.0 * Settings.Width / 640);
 					Settings.MarginRight = Settings.MarginLeft;
@@ -213,7 +220,7 @@ namespace Waher.WebService.Script
 				}
 				else
 				{
-					if (Variables.TryGetVariable("GraphWidth", out v) && (Obj = v.ValueObject) is double && (d = (double)Obj) >= 1)
+					if (Variables.TryGetVariable("GraphWidth", out Variable v) && (Obj = v.ValueObject) is double && (d = (double)Obj) >= 1)
 					{
 						Settings.Width = (int)Math.Round(d);
 						Settings.MarginLeft = (int)Math.Round(15 * d / 640);
@@ -233,20 +240,18 @@ namespace Waher.WebService.Script
 						Variables["GraphHeight"] = (double)Settings.Height;
 				}
 
-				object[] States;
-
-				using (Bitmap Bmp = G.CreateBitmap(Settings, out States))
+				using (SKImage Bmp = G.CreateBitmap(Settings, out object[] States))
 				{
 					string Tag = Guid.NewGuid().ToString();
-					MemoryStream ms = new MemoryStream();
-					Bmp.Save(ms, ImageFormat.Png);
-					byte[] Data = ms.GetBuffer();
-					s = System.Convert.ToBase64String(Data, 0, (int)ms.Position, Base64FormattingOptions.None);
+					SKData Data = Bmp.Encode(SKEncodedImageFormat.Png, 100);
+					byte[] Bin = Data.ToArray();
+					s = Convert.ToBase64String(Bin, 0, Bin.Length);
 					s = "<figure><img border=\"2\" width=\"" + Settings.Width.ToString() + "\" height=\"" + Settings.Height.ToString() +
 						"\" src=\"data:image/png;base64," + s + "\" onclick=\"GraphClicked(this,event,'" + Tag + "');\" /></figure>";
 
-					Dictionary<string, KeyValuePair<Graph, object[]>> Graphs = Variables["Graphs"] as Dictionary<string, KeyValuePair<Graph, object[]>>;
-					if (Graphs == null)
+					Data.Dispose();
+
+					if (!(Variables["Graphs"] is Dictionary<string, KeyValuePair<Graph, object[]>> Graphs))
 					{
 						Graphs = new Dictionary<string, KeyValuePair<Graph, object[]>>();
 						Variables["Graphs"] = Graphs;
@@ -258,23 +263,36 @@ namespace Waher.WebService.Script
 					}
 				}
 			}
-			else if ((Img = Result.AssociatedObjectValue as Image) != null)
+			else if ((Img = Result.AssociatedObjectValue as SKImage) != null)
 			{
-				string ContentType;
-				byte[] Data = InternetContent.Encode(Img, Encoding.UTF8, out ContentType);
+				SKData Data = Img.Encode(SKEncodedImageFormat.Png, 100);
+				byte[] Bin = Data.ToArray();
 
-				s = System.Convert.ToBase64String(Data, 0, Data.Length, Base64FormattingOptions.None);
+				s = Convert.ToBase64String(Bin, 0, Bin.Length);
 				s = "<figure><img border=\"2\" width=\"" + Img.Width.ToString() + "\" height=\"" + Img.Height.ToString() +
-					"\" src=\"data:" + ContentType + ";base64," + s + "\" /></figure>";
+					"\" src=\"data:image/png;base64," + s + "\" /></figure>";
+
+				Data.Dispose();
 			}
-			else if (Result.AssociatedObjectValue is Exception)
+			else if (Result.AssociatedObjectValue is Exception ex)
 			{
-				Exception ex = (Exception)Result.AssociatedObjectValue;
+				ex = Log.UnnestException(ex);
 
-				while ((ex is TargetInvocationException || ex is AggregateException) && ex.InnerException != null)
-					ex = ex.InnerException;
+				if (ex is AggregateException ex2)
+				{
+					StringBuilder sb2 = new StringBuilder();
 
-				s = "<p><font style=\"color:red;font-weight:bold\"><code>" + this.FormatText(XML.HtmlValueEncode(ex.Message)) + "</code></font></p>";
+					foreach (Exception ex3 in ex2.InnerExceptions)
+					{
+						sb2.Append("<p><font style=\"color:red;font-weight:bold\"><code>");
+						sb2.Append(this.FormatText(XML.HtmlValueEncode(ex3.Message)));
+						sb2.Append("</code></font></p>");
+					}
+
+					s = sb2.ToString();
+				}
+				else
+					s = "<p><font style=\"color:red;font-weight:bold\"><code>" + this.FormatText(XML.HtmlValueEncode(ex.Message)) + "</code></font></p>";
 			}
 			else
 			{
@@ -290,9 +308,11 @@ namespace Waher.WebService.Script
 					s = "<p><font style=\"color:blue\"><code>" + this.FormatText(XML.HtmlValueEncode(s2)) + "</code></font></p>" + s;
 			}
 
-			s = "{\"more\":" + CommonTypes.Encode(More) + ",\"html\":\"" + CommonTypes.JsonStringEncode(s) + "\"}";
+			s = "{\"more\":" + CommonTypes.Encode(More) + ",\"html\":\"" + JSON.Encode(s) + "\"}";
 			Response.ContentType = "application/json";
-			Response.Return(s);
+			Response.Write(s);
+			Response.SendResponse();
+			Response.Dispose();
 		}
 
 		private string FormatText(string s)
@@ -309,6 +329,5 @@ namespace Waher.WebService.Script
 		{
 			return this.authenticationSchemes;
 		}
-
 	}
 }

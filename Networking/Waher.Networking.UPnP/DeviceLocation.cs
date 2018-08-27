@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
+using System.Threading.Tasks;
 
 namespace Waher.Networking.UPnP
 {
@@ -19,6 +19,7 @@ namespace Waher.Networking.UPnP
 		/// <summary>
 		/// Contains information about the location of a device on the network.
 		/// </summary>
+		/// <param name="Client">UPnP Client.</param>
 		/// <param name="SearchTarget">SSDP Search Target</param>
 		/// <param name="Server">Server</param>
 		/// <param name="Location">Location of device information</param>
@@ -68,9 +69,8 @@ namespace Waher.Networking.UPnP
 
 		/// <summary>
 		/// Gets the device description document from a device in the network. 
-		/// This method is the synchronous version of <see cref="StartGetDevice"/>.
+		/// This method is the synchronous version of <see cref="GetDeviceAsync"/>.
 		/// </summary>
-		/// <param name="Location">URL of the Device Description Document.</param>
 		/// <returns>Device Description Document.</returns>
 		/// <exception cref="TimeoutException">If the document could not be retrieved within the timeout time.</exception>
 		/// <exception cref="Exception">If the document could not be retrieved, or could not be parsed.</exception>
@@ -78,12 +78,11 @@ namespace Waher.Networking.UPnP
 		{
 			return this.client.GetDevice(this.location);
 		}
-		
+
 		/// <summary>
 		/// Gets the device description document from a device in the network. 
-		/// This method is the synchronous version of <see cref="StartGetDevice"/>.
+		/// This method is the synchronous version of <see cref="GetDeviceAsync"/>.
 		/// </summary>
-		/// <param name="Location">URL of the Device Description Document.</param>
 		/// <param name="Timeout">Timeout, in milliseconds.</param>
 		/// <returns>Device Description Document.</returns>
 		/// <exception cref="TimeoutException">If the document could not be retrieved within the timeout time.</exception>
@@ -94,13 +93,12 @@ namespace Waher.Networking.UPnP
 		}
 
 		/// <summary>
-		/// Starts the retrieval of a Device Description Document.
+		/// Gets a Device Description Document from a device.
 		/// </summary>
-		/// <param name="Callback">Callback method. Will be called when the document has been downloaded, or an error has occurred.</param>
-		/// <param name="State">State object propagated to the callback method.</param>
-		public void StartGetDevice(DeviceDescriptionEventHandler Callback, object State)
+		/// <returns>Device description document, if found, or null otherwise.</returns>
+		public Task<DeviceDescriptionDocument> GetDeviceAsync()
 		{
-			this.client.StartGetDevice(this.location, Callback, State);
+			return this.client.GetDeviceAsync(this.location);
 		}
 
 		/// <summary>

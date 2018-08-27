@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="en-us" xmlns="http://schemas.microsoft.com/wix/2006/localization">
+	<String Id="ButtonText_Yes">&amp;Yes</String>
+	<String Id="ButtonText_No">&amp;No</String>
+	<String Id="ButtonText_OK">&amp;OK</String>
+	<String Id="ButtonText_Cancel">&amp;Cancel</String>
+</WixLocalization>

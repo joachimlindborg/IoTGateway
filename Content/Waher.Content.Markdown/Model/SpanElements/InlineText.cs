@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Xml;
+using Waher.Content.Xml;
 
 namespace Waher.Content.Markdown.Model.SpanElements
 {
@@ -75,6 +76,15 @@ namespace Waher.Content.Markdown.Model.SpanElements
 		internal override bool InlineSpanElement
 		{
 			get { return true; }
+		}
+
+		/// <summary>
+		/// Exports the element to XML.
+		/// </summary>
+		/// <param name="Output">XML Output.</param>
+		public override void Export(XmlWriter Output)
+		{
+			Output.WriteElementString("InlineText", this.value);
 		}
 	}
 }

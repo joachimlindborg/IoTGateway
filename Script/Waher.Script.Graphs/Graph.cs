@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Drawing;
+using SkiaSharp;
 using System.Globalization;
 using System.Text;
 using Waher.Script;
@@ -75,6 +75,9 @@ namespace Waher.Script.Graphs
 	/// </summary>
 	public abstract class Graph : SemiGroupElement
 	{
+		/// <summary>
+		/// Base class for graphs.
+		/// </summary>
 		public Graph()
 			: base()
 		{
@@ -103,14 +106,125 @@ namespace Waher.Script.Graphs
 		}
 
 		/// <summary>
+		/// Gets default graph settings for drawing the graph.
+		/// </summary>
+		/// <param name="Variables">Current set of variables, where graph settings might be available.</param>
+		/// <returns>Graph settings.</returns>
+		public GraphSettings GetSettings(Variables Variables)
+		{
+			return this.GetSettings(Variables, null, null);
+		}
+
+		/// <summary>
+		/// Gets default graph settings for drawing the graph.
+		/// </summary>
+		/// <param name="Variables">Current set of variables, where graph settings might be available.</param>
+		/// <param name="DefaultWidth">Default width.</param>
+		/// <param name="DefaultHeight">Default height.</param>
+		/// <returns>Graph settings.</returns>
+		public GraphSettings GetSettings(Variables Variables, int? DefaultWidth, int? DefaultHeight)
+		{
+			GraphSettings Settings = new GraphSettings();
+			Tuple<int, int> Size;
+
+			if (DefaultWidth.HasValue)
+				Settings.Width = DefaultWidth.Value;
+
+			if (DefaultHeight.HasValue)
+				Settings.Height = DefaultHeight.Value;
+
+			if ((Size = this.RecommendedBitmapSize) != null)
+			{
+				Settings.Width = Size.Item1;
+				Settings.Height = Size.Item2;
+
+				Settings.MarginLeft = (int)Math.Round(15.0 * Settings.Width / 640);
+				Settings.MarginRight = Settings.MarginLeft;
+
+				Settings.MarginTop = (int)Math.Round(15.0 * Settings.Height / 480);
+				Settings.MarginBottom = Settings.MarginTop;
+				Settings.LabelFontSize = 12.0 * Settings.Height / 480;
+			}
+			else
+			{
+				if (Variables.TryGetVariable("GraphWidth", out Variable v) && v.ValueObject is double d && d >= 1)
+				{
+					Settings.Width = (int)Math.Round(d);
+					Settings.MarginLeft = (int)Math.Round(15 * d / 640);
+					Settings.MarginRight = Settings.MarginLeft;
+				}
+				else if (!Variables.ContainsVariable("GraphWidth"))
+					Variables["GraphWidth"] = (double)Settings.Width;
+
+				if (Variables.TryGetVariable("GraphHeight", out v) && v.ValueObject is double d2 && d2 >= 1)
+				{
+					Settings.Height = (int)Math.Round(d2);
+					Settings.MarginTop = (int)Math.Round(15 * d2 / 480);
+					Settings.MarginBottom = Settings.MarginTop;
+					Settings.LabelFontSize = 12 * d2 / 480;
+				}
+				else if (!Variables.ContainsVariable("GraphHeight"))
+					Variables["GraphHeight"] = (double)Settings.Height;
+			}
+
+			return Settings;
+		}
+
+		/// <summary>
+		/// Creates a bitmap of the graph.
+		/// </summary>
+		/// <param name="Variables">Variables from where default settings can be retrieved if not avalable in graph.</param>
+		/// <returns>Bitmap</returns>
+		public SKImage CreateBitmap(Variables Variables)
+		{
+			return this.CreateBitmap(Variables, out GraphSettings Settings, out object[] States);
+		}
+
+		/// <summary>
+		/// Creates a bitmap of the graph.
+		/// </summary>
+		/// <param name="Variables">Variables from where default settings can be retrieved if not avalable in graph.</param>
+		/// <param name="Settings">Settings used to create the graph.</param>
+		/// <returns>Bitmap</returns>
+		public SKImage CreateBitmap(Variables Variables, out GraphSettings Settings)
+		{
+			return this.CreateBitmap(Variables, out Settings, out object[] States);
+		}
+
+		/// <summary>
+		/// Creates a bitmap of the graph.
+		/// </summary>
+		/// <param name="Variables">Variables from where default settings can be retrieved if not avalable in graph.</param>
+		/// <param name="States">State objects that contain graph-specific information about its inner states.
+		/// These can be used in calls back to the graph object to make actions on the generated graph.</param>
+		/// <returns>Bitmap</returns>
+		public SKImage CreateBitmap(Variables Variables, out object[] States)
+		{
+			return this.CreateBitmap(Variables, out GraphSettings Settings, out States);
+		}
+
+		/// <summary>
+		/// Creates a bitmap of the graph.
+		/// </summary>
+		/// <param name="Variables">Variables from where default settings can be retrieved if not avalable in graph.</param>
+		/// <param name="Settings">Settings used to create the graph.</param>
+		/// <param name="States">State objects that contain graph-specific information about its inner states.
+		/// These can be used in calls back to the graph object to make actions on the generated graph.</param>
+		/// <returns>Bitmap</returns>
+		public SKImage CreateBitmap(Variables Variables, out GraphSettings Settings, out object[] States)
+		{
+			Settings = this.GetSettings(Variables);
+			return this.CreateBitmap(Settings, out States);
+		}
+
+		/// <summary>
 		/// Creates a bitmap of the graph.
 		/// </summary>
 		/// <param name="Settings">Graph settings.</param>
 		/// <returns>Bitmap</returns>
-		public Bitmap CreateBitmap(GraphSettings Settings)
+		public SKImage CreateBitmap(GraphSettings Settings)
 		{
-			object[] States;
-			return this.CreateBitmap(Settings, out States);
+			return this.CreateBitmap(Settings, out object[] States);
 		}
 
 		/// <summary>
@@ -120,7 +234,7 @@ namespace Waher.Script.Graphs
 		/// <param name="States">State objects that contain graph-specific information about its inner states.
 		/// These can be used in calls back to the graph object to make actions on the generated graph.</param>
 		/// <returns>Bitmap</returns>
-		public abstract Bitmap CreateBitmap(GraphSettings Settings, out object[] States);
+		public abstract SKImage CreateBitmap(GraphSettings Settings, out object[] States);
 
 		/// <summary>
 		/// Gets script corresponding to a point in a generated bitmap representation of the graph.
@@ -132,9 +246,9 @@ namespace Waher.Script.Graphs
 		public abstract string GetBitmapClickScript(double X, double Y, object[] States);
 
 		/// <summary>
-		/// The recommended bitmap size of the graph, if such is available.
+		/// The recommended bitmap size of the graph, if such is available, or null if not.
 		/// </summary>
-		public virtual Size? RecommendedBitmapSize
+		public virtual Tuple<int, int> RecommendedBitmapSize
 		{
 			get { return null; }
 		}
@@ -153,7 +267,7 @@ namespace Waher.Script.Graphs
 		/// <param name="Width">Width of area.</param>
 		/// <param name="Height">Height of area.</param>
 		/// <returns>Sequence of points.</returns>
-		public static PointF[] Scale(IVector VectorX, IVector VectorY, IElement MinX, IElement MaxX,
+		public static SKPoint[] Scale(IVector VectorX, IVector VectorY, IElement MinX, IElement MaxX,
 			IElement MinY, IElement MaxY, double OffsetX, double OffsetY, double Width, double Height)
 		{
 			if (VectorX.Dimension != VectorY.Dimension)
@@ -162,10 +276,10 @@ namespace Waher.Script.Graphs
 			double[] X = Scale(VectorX, MinX, MaxX, OffsetX, Width);
 			double[] Y = Scale(VectorY, MinY, MaxY, OffsetY, Height);
 			int i, c = X.Length;
-			PointF[] Points = new PointF[c];
+			SKPoint[] Points = new SKPoint[c];
 
 			for (i = 0; i < c; i++)
-				Points[i] = new PointF((float)X[i], (float)Y[i]);
+				Points[i] = new SKPoint((float)X[i], (float)Y[i]);
 
 			return Points;
 		}
@@ -183,46 +297,40 @@ namespace Waher.Script.Graphs
 		{
 			if (Vector is DoubleVector)
 			{
-				DoubleNumber dMin = Min as DoubleNumber;
 				DoubleNumber dMax = Max as DoubleNumber;
 
-				if (dMin == null || dMax == null)
+				if (!(Min is DoubleNumber dMin) || dMax == null)
 					throw new ScriptException("Incompatible values.");
 
 				return Scale(((DoubleVector)Vector).Values, dMin.Value, dMax.Value, Offset, Size);
 			}
 			else if (Vector is Interval)
 			{
-				DoubleNumber dMin = Min as DoubleNumber;
 				DoubleNumber dMax = Max as DoubleNumber;
 
-				if (dMin == null || dMax == null)
+				if (!(Min is DoubleNumber dMin) || dMax == null)
 					throw new ScriptException("Incompatible values.");
 
 				return Scale(((Interval)Vector).GetArray(), dMin.Value, dMax.Value, Offset, Size);
 			}
 			else if (Vector is DateTimeVector)
 			{
-				DateTimeValue dMin = Min as DateTimeValue;
 				DateTimeValue dMax = Max as DateTimeValue;
 
-				if (dMin == null || dMax == null)
+				if (!(Min is DateTimeValue dMin) || dMax == null)
 					throw new ScriptException("Incompatible values.");
 
 				return Scale(((DateTimeVector)Vector).Values, dMin.Value, dMax.Value, Offset, Size);
 			}
 			else if (Vector is ObjectVector)
 			{
-				PhysicalQuantity MinQ = Min as PhysicalQuantity;
 				PhysicalQuantity MaxQ = Max as PhysicalQuantity;
 
-				if (MinQ != null && MaxQ != null)
+				if (Min is PhysicalQuantity MinQ && MaxQ != null)
 				{
 					if (MinQ.Unit != MaxQ.Unit)
 					{
-						double d;
-
-						if (!Unit.TryConvert(MaxQ.Magnitude, MaxQ.Unit, MinQ.Unit, out d))
+						if (!Unit.TryConvert(MaxQ.Magnitude, MaxQ.Unit, MinQ.Unit, out double d))
 							throw new ScriptException("Incompatible units.");
 
 						MaxQ = new PhysicalQuantity(d, MinQ.Unit);
@@ -235,10 +343,7 @@ namespace Waher.Script.Graphs
 
 					foreach (IElement E in Vector.ChildElements)
 					{
-						Q = E as PhysicalQuantity;
-						if (Q == null)
-							throw new ScriptException("Incompatible values.");
-
+						Q = E as PhysicalQuantity ?? throw new ScriptException("Incompatible values.");
 						Vector2[i++] = Q;
 					}
 
@@ -246,10 +351,9 @@ namespace Waher.Script.Graphs
 				}
 				else
 				{
-					DoubleNumber MinD = Min as DoubleNumber;
 					DoubleNumber MaxD = Max as DoubleNumber;
 
-					if (MinD != null && MaxD != null)
+					if (Min is DoubleNumber MinD && MaxD != null)
 					{
 						int i = 0;
 						int c = Vector.Dimension;
@@ -269,10 +373,9 @@ namespace Waher.Script.Graphs
 					}
 					else
 					{
-						DateTimeValue MinDT = Min as DateTimeValue;
 						DateTimeValue MaxDT = Max as DateTimeValue;
 
-						if (MinDT != null && MaxDT != null)
+						if (Min is DateTimeValue MinDT && MaxDT != null)
 						{
 							int i = 0;
 							int c = Vector.Dimension;
@@ -335,10 +438,12 @@ namespace Waher.Script.Graphs
 			double[] v = new double[c];
 
 			for (i = 0; i < c; i++)
-				v[i] = Vector[i].ToOADate();
+				v[i] = (Vector[i] - referenceTimestamp).TotalDays;
 
-			return Scale(v, Min.ToOADate(), Max.ToOADate(), Offset, Size);
+			return Scale(v, (Min - referenceTimestamp).TotalDays, (Max - referenceTimestamp).TotalDays, Offset, Size);
 		}
+
+		private static readonly DateTime referenceTimestamp = new DateTime(2000, 1, 1, 0, 0, 0);
 
 		/// <summary>
 		/// Scales a vector to fit a given area.
@@ -377,7 +482,7 @@ namespace Waher.Script.Graphs
 			for (i = 0; i < c; i++)
 			{
 				Q = Vector[i];
-				if (Q.Unit.Equals(Unit))
+				if (Q.Unit.Equals(Unit) || Q.Unit.IsEmpty)
 					v[i] = Q.Magnitude;
 				else if (!Unit.TryConvert(Q.Magnitude, Q.Unit, Unit, out v[i]))
 					throw new ScriptException("Incompatible units.");
@@ -387,23 +492,69 @@ namespace Waher.Script.Graphs
 		}
 
 		/// <summary>
+		/// Descales a scaled value.
+		/// </summary>
+		/// <param name="Value">Scaled value.</param>
+		/// <param name="Min">Smallest value.</param>
+		/// <param name="Max">Largest value.</param>
+		/// <param name="Offset">Drawing offset.</param>
+		/// <param name="Size">Size of drawing area.</param>
+		/// <returns>Descaled value.</returns>
+		public static IElement Descale(double Value, IElement Min, IElement Max, double Offset, double Size)
+		{
+			// (v-Offset)*(Max-Min)/Size+Min
+
+			if (Min is DoubleNumber && Max is DoubleNumber)
+			{
+				double min = ((DoubleNumber)Min).Value;
+				double max = ((DoubleNumber)Max).Value;
+
+				return new DoubleNumber((Value - Offset) * (max - min) / Size + min);
+			}
+			else
+			{
+				IElement Delta = Operators.Arithmetics.Subtract.EvaluateSubtraction(Max, Min, null);
+				IElement Result = Operators.Arithmetics.Multiply.EvaluateMultiplication(new DoubleNumber(Value - Offset), Delta, null);
+				Result = Operators.Arithmetics.Divide.EvaluateDivision(Result, new DoubleNumber(Size), null);
+				return Operators.Arithmetics.Add.EvaluateAddition(Result, Min, null);
+			}
+		}
+
+		/// <summary>
 		/// Converts an object to a pen value.
 		/// </summary>
 		/// <param name="Object">Object</param>
 		/// <param name="Size">Optional size.</param>
 		/// <returns>Pen object.</returns>
-		public static Pen ToPen(object Object, object Size)
+		public static SKPaint ToPen(object Object, object Size)
 		{
 			double Width = Size == null ? 1 : Expression.ToDouble(Size);
 
-			if (Object is Pen)
-				return (Pen)Object;
-			else if (Object is Color)
-				return new Pen((Color)Object, (float)Width);
-			else if (Object is Brush)
-				return new Pen((Brush)Object, (float)Width);
+			if (Object is SKPaint Pen)
+				return Pen;
+			else if (Object is SKColor Color)
+			{
+				return new SKPaint()
+				{
+					FilterQuality = SKFilterQuality.High,
+					IsAntialias = true,
+					Style = SKPaintStyle.Stroke,
+					Color = Color,
+					StrokeWidth = (float)Width
+				};
+			}
+			else if (Object is SKPaint Brush)
+				return Brush;
 			else
-				return new Pen(ToColor(Object), (float)Width);
+			{
+				return new SKPaint()
+				{
+					IsAntialias = true,
+					Style = SKPaintStyle.Stroke,
+					Color = ToColor(Object),
+					StrokeWidth = (float)Width
+				};
+			}
 		}
 
 		/// <summary>
@@ -411,44 +562,12 @@ namespace Waher.Script.Graphs
 		/// </summary>
 		/// <param name="Object">Object.</param>
 		/// <returns>Color value.</returns>
-		public static Color ToColor(object Object)
+		public static SKColor ToColor(object Object)
 		{
-			if (Object is Color)
-				return (Color)Object;
-			else if (Object is string)
-			{
-				string s = (string)Object;
-				KnownColor cl;
-
-				if (s.StartsWith("#"))
-				{
-					byte R, G, B, A;
-
-					switch (s.Length)
-					{
-						case 7:
-							if (byte.TryParse(s.Substring(1, 2), NumberStyles.HexNumber, null, out R) &&
-								byte.TryParse(s.Substring(3, 2), NumberStyles.HexNumber, null, out G) &&
-								byte.TryParse(s.Substring(5, 2), NumberStyles.HexNumber, null, out B))
-							{
-								return Color.FromArgb(R, G, B);
-							}
-							break;
-
-						case 9:
-							if (byte.TryParse(s.Substring(1, 2), NumberStyles.HexNumber, null, out R) &&
-								byte.TryParse(s.Substring(3, 2), NumberStyles.HexNumber, null, out G) &&
-								byte.TryParse(s.Substring(5, 2), NumberStyles.HexNumber, null, out B) &&
-								byte.TryParse(s.Substring(7, 2), NumberStyles.HexNumber, null, out A))
-							{
-								return Color.FromArgb(A, R, G, B);
-							}
-							break;
-					}
-				}
-				else if (Enum.TryParse<KnownColor>(s, out cl))
-					return Color.FromKnownColor(cl);
-			}
+			if (Object is SKColor Color)
+				return Color;
+			else if (Object is string s && Functions.Colors.Color.TryParse(s, out Color))
+				return Color;
 
 			throw new ScriptException("Expected a color.");
 		}
@@ -460,12 +579,12 @@ namespace Waher.Script.Graphs
 		/// https://en.wikipedia.org/wiki/HSL_and_HSV#From_HSL
 		/// </summary>
 		/// <param name="H">Hue H ∈ [0°, 360°).</param>
-		/// <param name="S">Saturation SHSL ∈ [0, 1].</param>
+		/// <param name="S">Saturation S ∈ [0, 1].</param>
 		/// <param name="L">Lightness L ∈ [0, 1].</param>
 		/// <returns>Color</returns>
-		public static Color ToColorHSL(double H, double S, double L)
+		public static SKColor ToColorHSL(double H, double S, double L)
 		{
-			return ToColorHSL(H, S, L, 255);
+			return SKColor.FromHsl((float)H, (float)(S * 100), (float)(L * 100));
 		}
 
 		/// <summary>
@@ -475,79 +594,13 @@ namespace Waher.Script.Graphs
 		/// https://en.wikipedia.org/wiki/HSL_and_HSV#From_HSL
 		/// </summary>
 		/// <param name="H">Hue H ∈ [0°, 360°).</param>
-		/// <param name="S">Saturation SHSL ∈ [0, 1].</param>
+		/// <param name="S">Saturation S ∈ [0, 1].</param>
 		/// <param name="L">Lightness L ∈ [0, 1].</param>
 		/// <param name="A">Alpha A ∈ [0, 255].</param>
 		/// <returns>Color</returns>
-		public static Color ToColorHSL(double H, double S, double L, int A)
+		public static SKColor ToColorHSL(double H, double S, double L, byte A)
 		{
-			H = Math.IEEERemainder(H, 360);
-			if (H < 0)
-				H += 360;
-
-			if (S < 0 || S > 1)
-				throw new ArgumentException("Valid saturations are 0 <= S <= 1.", "S");
-
-			if (L < 0 || L > 1)
-				throw new ArgumentException("Valid lightnesses are 0 <= L <= 1.", "L");
-
-			if (A < 0 || A > 255)
-				throw new ArgumentException("Valid alpha values are 0 <= A <= 255.", "A");
-
-			double C = (1 - Math.Abs(2 * L - 1)) * S;						// C ∈ [0, 1]
-			double H2 = H / 60;                                             // H2 ∈ [0, 6)
-			double H3 = Math.IEEERemainder(H2, 2);
-			if (H3 < 0)
-				H3 += 2;
-			double X = C * (1 - Math.Abs(H3 - 1));   // X ∈ [0, 1]
-			double R, G, B;
-
-			switch ((int)H2)
-			{
-				case 0:
-					R = C;
-					G = X;
-					B = 0;
-					break;
-
-				case 1:
-					R = X;
-					G = C;
-					B = 0;
-					break;
-
-				case 2:
-					R = 0;
-					G = C;
-					B = X;
-					break;
-
-				case 3:
-					R = 0;
-					G = X;
-					B = C;
-					break;
-
-				case 4:
-					R = X;
-					G = 0;
-					B = C;
-					break;
-
-				case 5:
-				default:
-					R = C;
-					G = 0;
-					B = X;
-					break;
-			}
-
-			double m = L - 0.5 * C;
-			R = (R + m) * 255;
-			G = (G + m) * 255;
-			B = (B + m) * 255;
-
-			return Color.FromArgb(A, (int)(R + 0.5), (int)(G + 0.5), (int)(B + 0.5));
+			return SKColor.FromHsl((float)H, (float)(S * 100), (float)(L * 100), A);
 		}
 
 		/// <summary>
@@ -557,12 +610,12 @@ namespace Waher.Script.Graphs
 		/// https://en.wikipedia.org/wiki/HSL_and_HSV#From_HSV
 		/// </summary>
 		/// <param name="H">Hue H ∈ [0°, 360°).</param>
-		/// <param name="S">Saturation SHSL ∈ [0, 1].</param>
+		/// <param name="S">Saturation S ∈ [0, 1].</param>
 		/// <param name="V">Value V ∈ [0, 1].</param>
 		/// <returns>Color</returns>
-		public static Color ToColorHSV(double H, double S, double V)
+		public static SKColor ToColorHSV(double H, double S, double V)
 		{
-			return ToColorHSV(H, S, V, 255);
+			return SKColor.FromHsv((float)H, (float)(S * 100), (float)(V * 100));
 		}
 
 		/// <summary>
@@ -572,93 +625,13 @@ namespace Waher.Script.Graphs
 		/// https://en.wikipedia.org/wiki/HSL_and_HSV#From_HSV
 		/// </summary>
 		/// <param name="H">Hue H ∈ [0°, 360°).</param>
-		/// <param name="S">Saturation SHSL ∈ [0, 1].</param>
+		/// <param name="S">Saturation S ∈ [0, 1].</param>
 		/// <param name="V">Value V ∈ [0, 1].</param>
 		/// <param name="A">Alpha A ∈ [0, 255].</param>
 		/// <returns>Color</returns>
-		public static Color ToColorHSV(double H, double S, double V, int A)
+		public static SKColor ToColorHSV(double H, double S, double V, byte A)
 		{
-			H = Math.IEEERemainder(H, 360);
-			if (H < 0)
-				H += 360;
-
-			if (S < 0 || S > 1)
-				throw new ArgumentException("Valid saturations are 0 <= S <= 1.", "S");
-
-			if (V < 0 || V > 1)
-				throw new ArgumentException("Valid values are 0 <= V <= 1.", "V");
-
-			if (A < 0 || A > 255)
-				throw new ArgumentException("Valid alpha values are 0 <= A <= 255.", "A");
-
-			double C = V * S;												// C ∈ [0, 1]
-			double H2 = H / 60;                                             // H2 ∈ [0, 6)
-			double H3 = Math.IEEERemainder(H2, 2);
-			if (H3 < 0)
-				H3 += 2;
-			double X = C * (1 - Math.Abs(H3 - 1));   // X ∈ [0, 1]
-			double R, G, B;
-
-			switch ((int)H2)
-			{
-				case 0:
-					R = C;
-					G = X;
-					B = 0;
-					break;
-
-				case 1:
-					R = X;
-					G = C;
-					B = 0;
-					break;
-
-				case 2:
-					R = 0;
-					G = C;
-					B = X;
-					break;
-
-				case 3:
-					R = 0;
-					G = X;
-					B = C;
-					break;
-
-				case 4:
-					R = X;
-					G = 0;
-					B = C;
-					break;
-
-				case 5:
-				default:
-					R = C;
-					G = 0;
-					B = X;
-					break;
-			}
-
-			double m = V - C;	// = V - V*S = V*(1-S)
-			R = (R + m) * 255;
-			if (R < 0)
-				R = 0;
-			else if (R > 255)
-				R = 255;
-
-			G = (G + m) * 255;
-			if (G < 0)
-				G = 0;
-			else if (G > 255)
-				G = 255;
-
-			B = (B + m) * 255;
-			if (B < 0)
-				B = 0;
-			else if (B > 255)
-				B = 255;
-
-			return Color.FromArgb(A, (int)(R + 0.5), (int)(G + 0.5), (int)(B + 0.5));
+			return SKColor.FromHsv((float)H, (float)(S * 100), (float)(V * 100), A);
 		}
 
 		/// <summary>
@@ -666,10 +639,11 @@ namespace Waher.Script.Graphs
 		/// </summary>
 		/// <param name="Min">Smallest value.</param>
 		/// <param name="Max">Largest value.</param>
+		/// <param name="Series">Series to draw.</param>
 		/// <param name="ApproxNrLabels">Number of labels.</param>
 		/// <param name="LabelType">Type of labels produced.</param>
 		/// <returns>Vector of labels.</returns>
-		public static IVector GetLabels(IElement Min, IElement Max, IEnumerable<IVector> Series, int ApproxNrLabels, out LabelType LabelType)
+		public static IVector GetLabels(ref IElement Min, ref IElement Max, IEnumerable<IVector> Series, int ApproxNrLabels, out LabelType LabelType)
 		{
 			if (Min is DoubleNumber && Max is DoubleNumber)
 			{
@@ -682,6 +656,35 @@ namespace Waher.Script.Graphs
 			{
 				LabelType = LabelType.PhysicalQuantity;
 				return new ObjectVector(GetLabels((PhysicalQuantity)Min, (PhysicalQuantity)Max, ApproxNrLabels));
+			}
+			else if (Min is StringValue && Max is StringValue)
+			{
+				Dictionary<string, bool> Indices = new Dictionary<string, bool>();
+				List<IElement> Labels = new List<IElement>();
+				string s;
+
+				foreach (IVector Vector in Series)
+				{
+					foreach (IElement E in Vector.ChildElements)
+					{
+						s = E.AssociatedObjectValue.ToString();
+						if (Indices.ContainsKey(s))
+							continue;
+
+						Labels.Add(E);
+						Indices[s] = true;
+					}
+				}
+
+				LabelType = LabelType.String;
+
+				if (Labels.Count > 0)
+				{
+					Min = Labels[0];
+					Max = Labels[Labels.Count - 1];
+				}
+
+				return new ObjectVector(Labels.ToArray());
 			}
 			else
 			{
@@ -710,6 +713,12 @@ namespace Waher.Script.Graphs
 		/// <returns>Vector of labels.</returns>
 		public static double[] GetLabels(double Min, double Max, int ApproxNrLabels)
 		{
+			if (double.IsInfinity(Min))
+				throw new ArgumentException("Infinite interval.", nameof(Min));
+
+			if (double.IsInfinity(Max))
+				throw new ArgumentException("Infinite interval.", nameof(Max));
+
 			double StepSize = GetStepSize(Min, Max, ApproxNrLabels);
 			List<double> Steps = new List<double>();
 			int i = (int)Math.Ceiling(Min / StepSize);
@@ -823,7 +832,7 @@ namespace Waher.Script.Graphs
 
 			for (i = 0, c = timeStepSizes.Length - 2; i < c; i++)
 			{
-				if (StepSize > timeStepSizes[i] && StepSize < timeStepSizes[i + 1])
+				if (StepSize >= timeStepSizes[i] && StepSize < timeStepSizes[i + 1])
 					break;
 			}
 
@@ -954,7 +963,8 @@ namespace Waher.Script.Graphs
 								{
 									LabelType = LabelType.DateTimeYear;
 
-									i = (int)Math.Floor(GetStepSize(Min.ToOADate() / 365.25, Max.ToOADate() / 365.25, ApproxNrLabels));
+									i = (int)Math.Floor(GetStepSize((Min - referenceTimestamp).TotalDays / 365.25,
+										(Max - referenceTimestamp).TotalDays / 365.25, ApproxNrLabels));
 									if (i == 0)
 										i++;
 
@@ -1096,19 +1106,19 @@ namespace Waher.Script.Graphs
 					return GetIso8601WeekOfYear(((DateTimeValue)Label).Value).ToString();
 
 				case LabelType.DateTimeDate:
-					return ((DateTimeValue)Label).Value.ToShortDateString();
+					return ((DateTimeValue)Label).Value.ToString("d");
 
 				case LabelType.DateTimeShortTime:
-					return ((DateTimeValue)Label).Value.ToShortTimeString();
+					return ((DateTimeValue)Label).Value.ToString("t");
 
 				case LabelType.DateTimeLongTime:
-					return ((DateTimeValue)Label).Value.ToLongTimeString();
+					return ((DateTimeValue)Label).Value.ToString("T");
 
 				case LabelType.Double:
 				case LabelType.PhysicalQuantity:
 				case LabelType.String:
 				default:
-					return Label.ToString();
+					return Label.AssociatedObjectValue.ToString();
 			}
 		}
 

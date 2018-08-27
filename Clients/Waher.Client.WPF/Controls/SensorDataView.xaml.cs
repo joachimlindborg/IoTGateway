@@ -17,7 +17,9 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using Microsoft.Win32;
-using Waher.Content;
+using Waher.Content.Xml;
+using Waher.Content.Xsl;
+using Waher.Events;
 using Waher.Networking.XMPP.Sensor;
 using Waher.Things;
 using Waher.Things.SensorData;
@@ -35,19 +37,26 @@ namespace Waher.Client.WPF.Controls
 		private TreeNode node;
 		private Dictionary<string, bool> nodes = new Dictionary<string, bool>();
 		private Dictionary<string, bool> failed = new Dictionary<string, bool>();
+		private bool subscription;
 
-		public SensorDataView(SensorDataClientRequest Request, TreeNode Node)
+		public SensorDataView(SensorDataClientRequest Request, TreeNode Node, bool Subscription)
 		{
 			this.request = Request;
 			this.node = Node;
+			this.subscription = Subscription;
 
 			InitializeComponent();
 
 			if (this.request != null)
 			{
-				this.request.OnStateChanged += new SensorDataReadoutStateChangedEventHandler(request_OnStateChanged);
-				this.request.OnFieldsReceived += new SensorDataReadoutFieldsReportedEventHandler(request_OnFieldsReceived);
-				this.request.OnErrorsReceived += new SensorDataReadoutErrorsReportedEventHandler(request_OnErrorsReceived);
+				this.Request_OnErrorsReceived(this, Request.Errors);
+				this.request.OnErrorsReceived += new SensorDataReadoutErrorsReportedEventHandler(Request_OnErrorsReceived);
+
+				this.Request_OnFieldsReceived(this, Request.ReadFields);
+				this.request.OnFieldsReceived += new SensorDataReadoutFieldsReportedEventHandler(Request_OnFieldsReceived);
+
+				this.Request_OnStateChanged(this, Request.State);
+				this.request.OnStateChanged += new SensorDataReadoutStateChangedEventHandler(Request_OnStateChanged);
 			}
 		}
 
@@ -55,13 +64,15 @@ namespace Waher.Client.WPF.Controls
 		{
 			if (this.request != null)
 			{
-				this.request.OnStateChanged -= new SensorDataReadoutStateChangedEventHandler(request_OnStateChanged);
-				this.request.OnFieldsReceived -= new SensorDataReadoutFieldsReportedEventHandler(request_OnFieldsReceived);
-				this.request.OnErrorsReceived -= new SensorDataReadoutErrorsReportedEventHandler(request_OnErrorsReceived);
+				if (this.request is SensorDataSubscriptionRequest Subscription)
+					Subscription.Unsubscribe();
+
+				this.request.OnStateChanged -= new SensorDataReadoutStateChangedEventHandler(Request_OnStateChanged);
+				this.request.OnFieldsReceived -= new SensorDataReadoutFieldsReportedEventHandler(Request_OnFieldsReceived);
+				this.request.OnErrorsReceived -= new SensorDataReadoutErrorsReportedEventHandler(Request_OnErrorsReceived);
 			}
 
-			GridView GridView = this.SensorDataListView.View as GridView;
-			if (GridView != null)
+			if (this.SensorDataListView.View is GridView GridView)
 			{
 				Registry.SetValue(MainWindow.registryKey, "SensorDataTimestampWidth", (int)GridView.Columns[0].Width, RegistryValueKind.DWord);
 				Registry.SetValue(MainWindow.registryKey, "SensorDataFieldWidth", (int)GridView.Columns[1].Width, RegistryValueKind.DWord);
@@ -79,16 +90,15 @@ namespace Waher.Client.WPF.Controls
 
 		private void UserControl_SizeChanged(object sender, SizeChangedEventArgs e)
 		{
-			GridView GridView = this.SensorDataListView.View as GridView;
-			if (GridView != null)
+			if (this.SensorDataListView.View is GridView GridView)
 			{
-				GridView.Columns[2].Width = this.ActualWidth - GridView.Columns[0].ActualWidth - GridView.Columns[1].ActualWidth -
+				GridView.Columns[2].Width = Math.Max(this.ActualWidth - GridView.Columns[0].ActualWidth - GridView.Columns[1].ActualWidth -
 					GridView.Columns[3].ActualWidth - GridView.Columns[4].ActualWidth - GridView.Columns[5].ActualWidth -
-					SystemParameters.VerticalScrollBarWidth - 8;
+					SystemParameters.VerticalScrollBarWidth - 8, 10);
 			}
 		}
 
-		private void request_OnErrorsReceived(object Sender, IEnumerable<ThingError> NewErrors)
+		private void Request_OnErrorsReceived(object Sender, IEnumerable<ThingError> NewErrors)
 		{
 			this.Dispatcher.BeginInvoke(new ParameterizedThreadStart(this.OnErrorsReceived), NewErrors);
 		}
@@ -96,25 +106,30 @@ namespace Waher.Client.WPF.Controls
 		private void OnErrorsReceived(object P)
 		{
 			IEnumerable<ThingError> NewErrors = (IEnumerable<ThingError>)P;
+			string LastKey = null;
 			string Key;
 
-			lock (this.failed)
+			lock (this.nodes)
 			{
 				foreach (ThingError Error in NewErrors)
 				{
 					Key = Error.Key;
-					this.failed[Key] = true;
-					this.nodes[Key] = true;
+					if (LastKey == null || Key != LastKey)
+					{
+						LastKey = Key;
+						this.failed[Key] = true;
+						this.nodes[Key] = true;
+					}
+
+					this.SensorDataListView.Items.Add(new ErrorItem(Error));
 				}
 
 				this.NodesFailedLabel.Content = this.failed.Count.ToString();
 				this.NodesTotalLabel.Content = this.nodes.Count.ToString();
 			}
-
-			// TODO: Display errors.
 		}
 
-		private void request_OnFieldsReceived(object Sender, IEnumerable<Field> NewFields)
+		private void Request_OnFieldsReceived(object Sender, IEnumerable<Field> NewFields)
 		{
 			this.Dispatcher.BeginInvoke(new ParameterizedThreadStart(this.OnFieldsReceived), NewFields);
 		}
@@ -144,7 +159,7 @@ namespace Waher.Client.WPF.Controls
 			}
 		}
 
-		private void request_OnStateChanged(object Sender, SensorDataReadoutState NewState)
+		private void Request_OnStateChanged(object Sender, SensorDataReadoutState NewState)
 		{
 			this.Dispatcher.BeginInvoke(new ParameterizedThreadStart(this.OnStateChanged), NewState);
 		}
@@ -198,6 +213,39 @@ namespace Waher.Client.WPF.Controls
 				this.NodesTotalLabel.Content = this.nodes.Count;
 				this.NodesOkLabel.Content = this.nodes.Count - this.failed.Count;
 			}
+
+			if (this.subscription && !(this.request is SensorDataSubscriptionRequest))
+			{
+				List<FieldSubscriptionRule> Rules = new List<FieldSubscriptionRule>();
+				Field Field;
+
+				foreach (FieldItem FieldItem in this.SensorDataListView.Items)
+				{
+					Field = FieldItem.Field;
+
+					if (Field is BooleanField B)
+						Rules.Add(new FieldSubscriptionRule(Field.Name, B.Value ? 1 : 0, 1));
+					else if (Field is QuantityField Q)
+						Rules.Add(new FieldSubscriptionRule(Field.Name, Q.Value, 1));
+					else if (Field is Int32Field I32)
+						Rules.Add(new FieldSubscriptionRule(Field.Name, I32.Value, 1));
+					else if (Field is Int64Field I64)
+						Rules.Add(new FieldSubscriptionRule(Field.Name, I64.Value, 1));
+					else if (Field is StringField || Field is TimeField || Field is DateField || Field is DateTimeField || Field is DurationField)
+						Rules.Add(new FieldSubscriptionRule(Field.Name, string.Empty, 1));
+				}
+
+				this.request.OnStateChanged -= new SensorDataReadoutStateChangedEventHandler(Request_OnStateChanged);
+				this.request.OnFieldsReceived -= new SensorDataReadoutFieldsReportedEventHandler(Request_OnFieldsReceived);
+				this.request.OnErrorsReceived -= new SensorDataReadoutErrorsReportedEventHandler(Request_OnErrorsReceived);
+				this.request = null;
+
+				this.request = this.node.SubscribeSensorDataMomentaryReadout(Rules.ToArray());
+
+				this.request.OnStateChanged += new SensorDataReadoutStateChangedEventHandler(Request_OnStateChanged);
+				this.request.OnFieldsReceived += new SensorDataReadoutFieldsReportedEventHandler(Request_OnFieldsReceived);
+				this.request.OnErrorsReceived += new SensorDataReadoutErrorsReportedEventHandler(Request_OnErrorsReceived);
+			}
 		}
 
 		public void NewButton_Click(object sender, RoutedEventArgs e)
@@ -212,13 +260,15 @@ namespace Waher.Client.WPF.Controls
 
 		public void SaveAsButton_Click(object sender, RoutedEventArgs e)
 		{
-			SaveFileDialog Dialog = new SaveFileDialog();
-			Dialog.AddExtension = true;
-			Dialog.CheckPathExists = true;
-			Dialog.CreatePrompt = false;
-			Dialog.DefaultExt = "html";
-			Dialog.Filter = "XML Files (*.xml)|*.xml|HTML Files (*.html;*.htm)|*.html;*.htm|All Files (*.*)|*.*";
-			Dialog.Title = "Save Sensor data readout";
+			SaveFileDialog Dialog = new SaveFileDialog()
+			{
+				AddExtension = true,
+				CheckPathExists = true,
+				CreatePrompt = false,
+				DefaultExt = "html",
+				Filter = "XML Files (*.xml)|*.xml|HTML Files (*.html,*.htm)|*.html,*.htm|All Files (*.*)|*.*",
+				Title = "Save Sensor data readout"
+			};
 
 			bool? Result = Dialog.ShowDialog(MainWindow.FindWindow(this));
 
@@ -234,7 +284,7 @@ namespace Waher.Client.WPF.Controls
 							this.SaveAsXml(w);
 						}
 
-						string Html = XML.Transform(Xml.ToString(), sensorDataToHtml);
+						string Html = XSL.Transform(Xml.ToString(), sensorDataToHtml);
 
 						File.WriteAllText(Dialog.FileName, Html, System.Text.Encoding.UTF8);
 					}
@@ -256,10 +306,10 @@ namespace Waher.Client.WPF.Controls
 			}
 		}
 
-		private static readonly XslCompiledTransform sensorDataToHtml = Waher.Content.Resources.LoadTransform("Waher.Client.WPF.Transforms.SensorDataToHTML.xslt");
-		private static readonly XmlSchema schema1 = Waher.Content.Resources.LoadSchema("Waher.Client.WPF.Schema.SensorData.xsd");
-		private static readonly XmlSchema schema2 = Waher.Content.Resources.LoadSchema("Waher.Client.WPF.Schema.sensor-data.xsd");
-		private const string sensorDataNamespace = "http://waher.se/SensorData.xsd";
+		private static readonly XslCompiledTransform sensorDataToHtml = XSL.LoadTransform("Waher.Client.WPF.Transforms.SensorDataToHTML.xslt");
+		private static readonly XmlSchema schema1 = XSL.LoadSchema("Waher.Client.WPF.Schema.SensorData.xsd");
+		private static readonly XmlSchema schema2 = XSL.LoadSchema("Waher.Client.WPF.Schema.sensor-data.xsd");
+		private const string sensorDataNamespace = "http://waher.se/Schema/SensorData.xsd";
 		private const string sensorDataRoot = "SensorData";
 
 		private void SaveAsXml(XmlWriter w)
@@ -278,9 +328,7 @@ namespace Waher.Client.WPF.Controls
 			// TODO: Nr errors.
 
 			if (Fields.Count > 0)
-				SensorDataServerRequest.OutputFields(w, Fields, this.request.SeqNr, true, null);
-
-			// TODO: Failure, if errors reported.
+				SensorDataServerRequest.OutputFields(w, Fields, this.request.Id, true, null);
 
 			w.WriteEndElement();
 			w.Flush();
@@ -290,15 +338,17 @@ namespace Waher.Client.WPF.Controls
 		{
 			try
 			{
-				OpenFileDialog Dialog = new OpenFileDialog();
-				Dialog.AddExtension = true;
-				Dialog.CheckFileExists = true;
-				Dialog.CheckPathExists = true;
-				Dialog.DefaultExt = "xml";
-				Dialog.Filter = "XML Files (*.xml)|*.xml|All Files (*.*)|*.*";
-				Dialog.Multiselect = false;
-				Dialog.ShowReadOnly = true;
-				Dialog.Title = "Open sensor data readout";
+				OpenFileDialog Dialog = new OpenFileDialog()
+				{
+					AddExtension = true,
+					CheckFileExists = true,
+					CheckPathExists = true,
+					DefaultExt = "xml",
+					Filter = "XML Files (*.xml)|*.xml|All Files (*.*)|*.*",
+					Multiselect = false,
+					ShowReadOnly = true,
+					Title = "Open sensor data readout"
+				};
 
 				bool? Result = Dialog.ShowDialog(MainWindow.FindWindow(this));
 
@@ -312,17 +362,16 @@ namespace Waher.Client.WPF.Controls
 			}
 			catch (Exception ex)
 			{
+				ex = Log.UnnestException(ex);
 				MessageBox.Show(ex.Message, "Unable to load file.", MessageBoxButton.OK, MessageBoxImage.Error);
 			}
 		}
 
 		public void Load(XmlDocument Xml, string FileName)
 		{
-			List<Field> Fields;
 			XmlElement E;
-			bool Done;
 
-			XML.Validate(FileName, Xml, sensorDataRoot, sensorDataNamespace, schema1, schema2);
+			XSL.Validate(FileName, Xml, sensorDataRoot, sensorDataNamespace, schema1, schema2);
 
 			this.SensorDataListView.Items.Clear();
 			this.nodes.Clear();
@@ -342,50 +391,65 @@ namespace Waher.Client.WPF.Controls
 
 				switch (E.LocalName)
 				{
-					case "fields":
-						Fields = SensorClient.ParseFields(E, out Done);
-						foreach (Field Field in Fields)
-						{
-							this.nodes[Field.Thing.Key] = true;
-							this.SensorDataListView.Items.Add(new FieldItem(Field));
-						}
-						break;
+					case "resp":
+						Tuple<List<Field>, List<ThingError>> Response = SensorClient.ParseFields(E, out bool Done);
 
-					// TODO: failure
+						if (Response.Item1 != null)
+						{
+							foreach (Field Field in Response.Item1)
+							{
+								this.nodes[Field.Thing.Key] = true;
+								this.SensorDataListView.Items.Add(new FieldItem(Field));
+							}
+						}
+
+						if (Response.Item2 != null)
+						{
+							foreach (ThingError Error in Response.Item2)
+							{
+								string Key = Error.Key;
+								this.failed[Key] = true;
+								this.nodes[Key] = true;
+							}
+						}
+
+						this.NodesFailedLabel.Content = this.failed.Count.ToString();
+						this.NodesTotalLabel.Content = this.nodes.Count.ToString();
+
+						break;
 				}
 			}
 		}
 
 		private void UserControl_Loaded(object sender, RoutedEventArgs e)
 		{
-			GridView GridView = this.SensorDataListView.View as GridView;
-			if (GridView != null)
+			if (this.SensorDataListView.View is GridView GridView)
 			{
 				object Value;
 
 				Value = Registry.GetValue(MainWindow.registryKey, "SensorDataTimestampWidth", (int)GridView.Columns[0].Width);
-				if (Value != null && Value is int)
-					GridView.Columns[0].Width = (int)Value;
+				if (Value != null && Value is int i && i > 0)
+					GridView.Columns[0].Width = i;
 
 				Value = Registry.GetValue(MainWindow.registryKey, "SensorDataFieldWidth", (int)GridView.Columns[1].Width);
-				if (Value != null && Value is int)
-					GridView.Columns[1].Width = (int)Value;
+				if (Value != null && Value is int i2 && i2 > 0)
+					GridView.Columns[1].Width = i2;
 
 				Value = Registry.GetValue(MainWindow.registryKey, "SensorDataValueWidth", (int)GridView.Columns[2].Width);
-				if (Value != null && Value is int)
-					GridView.Columns[2].Width = (int)Value;
+				if (Value != null && Value is int i3 && i3 > 0)
+					GridView.Columns[2].Width = i3;
 
 				Value = Registry.GetValue(MainWindow.registryKey, "SensorDataUnitWidth", (int)GridView.Columns[3].Width);
-				if (Value != null && Value is int)
-					GridView.Columns[3].Width = (int)Value;
+				if (Value != null && Value is int i4 && i4 > 0)
+					GridView.Columns[3].Width = i4;
 
 				Value = Registry.GetValue(MainWindow.registryKey, "SensorDataStatusWidth", (int)GridView.Columns[4].Width);
-				if (Value != null && Value is int)
-					GridView.Columns[4].Width = (int)Value;
+				if (Value != null && Value is int i5 && i5 > 0)
+					GridView.Columns[4].Width = i5;
 
 				Value = Registry.GetValue(MainWindow.registryKey, "SensorDataTypeWidth", (int)GridView.Columns[5].Width);
-				if (Value != null && Value is int)
-					GridView.Columns[5].Width = (int)Value;
+				if (Value != null && Value is int i6 && i6 > 0)
+					GridView.Columns[5].Width = i6;
 			}
 
 		}

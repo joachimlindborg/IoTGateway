@@ -128,7 +128,8 @@ namespace Waher.Script.Objects.VectorSpaces
 				else
 					sb.Append(", ");
 
-				sb.Append(Element.ToString());
+				if (Element != null)
+					sb.Append(Element.ToString());
 			}
 
 			if (sb == null)
@@ -356,7 +357,7 @@ namespace Waher.Script.Objects.VectorSpaces
 				Value = this.Values;
 				return true;
 			}
-			else if (DesiredType.IsAssignableFrom(typeof(ObjectVector)))
+			else if (DesiredType.GetTypeInfo().IsAssignableFrom(typeof(ObjectVector).GetTypeInfo()))
 			{
 				Value = this;
 				return true;

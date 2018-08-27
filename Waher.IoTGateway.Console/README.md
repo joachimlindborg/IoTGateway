@@ -4,10 +4,9 @@ The **Waher.IoTGateway.Console** is a console application version of the [IoT Ga
 It's easy to use and experiment with. It uses XMPP and can be administered using the 
 [Waher.Client.WPF](../Clients/Waher.Client.WPF) application.
 
-The first time the application is run, it provides a simple console interface for the user to provide network 
-credentials. These credentials are then stored in the `xmpp.config` file. Passwords are hashed. If installed using
-the [IoT Gateway installer](../Executables/IoTGatewaySetip.exe), all web files will be written to the **Program Data** 
-folder `IoT Gateway`, and the `xmpp.config` file will be generated automatically.
+When running the application for the first time, you need to configure it. You do this by navigating to it using
+a browse. You will be displayed a sequence of dialogs that you need to fill in, to configure different aspects
+of the system. This includes setting up the connection to the XMPP network.
 
 The [Waher.IoTGateway.Svc](../Waher.IoTGateway.Svc) project provides a Windows Service for the **IoT Gateway**.
 
@@ -36,7 +35,7 @@ automatically be converted to HTML if viewed by a browser. To retrieve the markd
 
 ### Using standard HTTP ports
 
-If you want to allow the gateway to have access to the HTTP (80) and HTTPS (443) ports, you need to 
+If you want to allow the gateway to have access to the HTTP (80) and HTTPS (443) ports, you might need to 
 [disable any web server or service running on the machine](http://www.devside.net/wamp-server/opening-up-port-80-for-apache-to-use-on-windows),
 or tell them to use different ports. This includes the HTTP Server API, (http.sys), if it is running on the machine, or any other application that 
 has these ports open, like Skype. 
@@ -67,28 +66,31 @@ implementing the `Waher.Script.IModule` interface will be informed corresponding
 `Waher.Script.Types` class contains static methods for accessing *module parameters*. These are used to pass information from the server
 to each module. There are different module parameters defined by the IoT Gateway:
 
-| Name   | Description |
-|--------|-------------|
-| `AppData` | Where the **IoT Gateway** application data folder is situated. |
-| `HTTP` | `HttpServer` object hosting the web server. |
-| `HTTPX` | `HttpxProxy` object providing `httpx` support to web clients. |
-| `Root` | Where the **IoT Gateway** web folder is situated. All content in this folder, including subfolders, is accessible through the web interface. |
-| `XMPP` | `XmppClient` object managing the XMPP connection of the gateway. |
+| Name           | Description |
+|----------------|-------------|
+| `AppData`      | Where the **IoT Gateway** application data folder is situated. |
+| `CoAP`         | `CoapEndpoint` object managing the local CoAP endpoint of the gateway, as well as acting CoAP client for accessing CoAP devices. |
+| `Control`      | `ControlServer` object, publishing a XMPP IoT Control Server interface on the XMPP network. |
+| `Concentrator` | `ConcentratorServer` object, publishing a XMPP IoT Concentrator Server interface on the XMPP network. |
+| `HTTP`         | `HttpServer` object hosting the web server. |
+| `HTTPX`        | `HttpxProxy` object providing `httpx` support to web clients. |
+| `HTTPXS`       | `HttpxServer` object providing `httpx` support to web servers. |
+| `IBB`          | `IbbClient` object providing In-band Bytestream support to the XMPP connection. |
+| `Root`         | Where the **IoT Gateway** web folder is situated. All content in this folder, including subfolders, is accessible through the web interface. |
+| `Sensor`       | `SensorServer` object, publishing a XMPP IoT Sensor Server interface on the XMPP network. |
+| `SOCKS5`       | `Socks5Proxy` object managing SOCKS5 stream negotiations over XMPP. |
+| `XMPP`         | `XmppClient` object managing the XMPP connection of the gateway. |
 
 ## Object database
 
-The IoT Gateway hosts an object database based on [MongoDB](https://www.mongodb.com/download-center), via interfaces provided by the
-`Waher.Persistence` library. The interface to the [MongoDB](https://www.mongodb.com/download-center) database is not published to modules 
-in any way, forcing them to go through `Waher.Persistence`. This makes it easy to port the gateway to other object database providers,
-without having to update code in all pluggable modules.
-
-**Note**: If using the [IoT Gateway installer](../Executables/IoTGatewaySetip.exe) to install the application, 
-MongoDB is automatically installed on the machine, if not already installed.
+The IoT Gateway hosts an encrypted object database based on the `Waher.Persistence.Files` library, via interfaces provided by the
+`Waher.Persistence` library. It can be replaced by [MongoDB](https://www.mongodb.com/download-center), by using the `Waher.Persistence.MongoDB`
+library instead. Since all interaction with the object database goes through `Waher.Persistence`, it is easy to port the gateway to other object 
+database providers, without having to update code in all pluggable modules.
 
 ## Binary executable
 
-You can test the application by downloading a [binary executable](../Executables/Waher.IoTGateway.zip). You can also
-install it using the [IoT Gateway installer](../Executables/IoTGatewaySetup.exe).
+You can test the application by downloading and installing the IoT Gateway using the [IoT Gateway installer](../Executables/IoTGatewaySetup.exe).
 
 ## License
 
@@ -101,22 +103,27 @@ You may not use, copy, emulate, clone, rent, lease, sell, modify, decompile, dis
 licensed program, or any subset of the licensed program, except as provided for in this agreement.  Any such unauthorised use shall
 result in immediate and automatic termination of this license and may result in criminal and/or civil prosecution.
 
-The [source code](https://github.com/PeterWaher/IoTGateway) provided in this project is provided open for the following uses:
+The [source code](https://github.com/PeterWaher/IoTGateway) and libraries provided in this repository is provided open for the following uses:
 
 * For **Personal evaluation**. Personal evaluation means evaluating the code, its libraries and underlying technologies, including learning 
 	about underlying technologies.
 
 * For **Academic use**. If you want to use the following code for academic use, all you need to do is to inform the author of who you are, what 
 	academic institution you work for (or study for), and in what projects you intend to use the code. All I ask in return is for an 
-	acknowledgement and visible attribution to this project, inluding a link, and that you do not redistribute the source code, or parts thereof 
-	in the solutions you develop. If any solutions developed in an academic setting, become commercial, it will need a commercial license.
+	acknowledgement and visible attribution to this repository, including a link, and that you do not redistribute the source code, or parts thereof 
+	in the solutions you develop. Any solutions developed for academic use, that become commercial, require a commercial license.
 
-* For **Security analysis**. If you perform any security analysis on the code, to see what security aspects the code might have,
-	all I ask is that you inform me of any findings so that any vulnerabilities might be addressed. I am thankful for any such contributions,
-	and will acknowledge them.
+* For **Security analysis**. If you perform any security analysis on the code, to see what security aspects the code might have, all that is 
+	asked of you, is that you inform the author of any findings at least forty-five days before publication of the findings, so that any vulnerabilities 
+	might be addressed. Such contributions are much appreciated and will be acknowledged.
 
-All rights to the source code are reserved and exclusively owned by [Waher Data AB](http://waher.se/). If you're interested in using the 
-source code, as a whole, or partially, you need a license agreement with the author. You can contact him through [LinkedIn](http://waher.se/).
+Commercial use of the code, in part or in full, in compiled binary form, or its source code, requires
+a **Commercial License**. Contact the author for details.
+
+All rights to the source code are reserved and exclusively owned by [Waher Data AB](http://waher.se/). 
+Any contributions made to the **IoT Gateway** repository become the intellectual property of [Waher Data AB](http://waher.se/).
+If you're interested in using the source code, as a whole, or in part, you need a license agreement 
+with the author. You can contact him through [LinkedIn](http://waher.se/).
 
 This software is provided by the copyright holder and contributors "as is" and any express or implied warranties, including, but not limited to, 
 the implied warranties of merchantability and fitness for a particular purpose are disclaimed. In no event shall the copyright owner or contributors 
@@ -125,6 +132,6 @@ goods or services; loss of use, data, or profits; or business interruption) howe
 liability, or tort (including negligence or otherwise) arising in any way out of the use of this software, even if advised of the possibility of such 
 damage.
 
-The **IoT Gateway** is &copy; [Waher Data AB](http://waher.se/) 2016.
+The **IoT Gateway** is &copy; [Waher Data AB](http://waher.se/) 2016-2018. All rights reserved.
  
-[![](../Images/logo-Futura-300x58.png)](http://waher.se/)
+[![](../Images/logo-WaherDataAB-300x58.png)](http://waher.se/)

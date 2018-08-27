@@ -2,9 +2,13 @@
 using System.Threading;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading.Tasks;
 using System.Xml;
-using Waher.Content;
+using Waher.Content.Xml;
 using Waher.Networking.XMPP.DataForms;
+using Waher.Networking.XMPP.DataForms.DataTypes;
+using Waher.Networking.XMPP.DataForms.FieldTypes;
+using Waher.Networking.XMPP.DataForms.ValidationMethods;
 
 namespace Waher.Networking.XMPP.Search
 {
@@ -27,9 +31,10 @@ namespace Waher.Networking.XMPP.Search
 		private string last;
 		private string nick;
 		private string email;
+		private bool supportsForms;
 
 		internal SearchFormEventArgs(XmppClient Client, IqResultEventArgs e, string Instructions, string First, string Last, string Nick, string EMail,
-			DataForm SearchForm)
+			DataForm SearchForm, bool SupportsForms)
 			: base(e)
 		{
 			this.client = Client;
@@ -39,6 +44,7 @@ namespace Waher.Networking.XMPP.Search
 			this.nick = Nick;
 			this.email = EMail;
 			this.searchForm = SearchForm;
+			this.supportsForms = SupportsForms;
 		}
 
 		/// <summary>
@@ -130,6 +136,14 @@ namespace Waher.Networking.XMPP.Search
 			}
 		}
 
+		/// <summary>
+		/// If the remote end supports search forms, or if the form was constructed on the client side.
+		/// </summary>
+		public bool SupportsForms
+		{
+			get { return this.supportsForms; }
+		}
+
 		private string GetField(string FixedValue, string Var)
 		{
 			if (!string.IsNullOrEmpty(FixedValue))
@@ -155,6 +169,25 @@ namespace Waher.Networking.XMPP.Search
 				if (Field != null)
 					Field.SetValue(Value);
 			}
+
+			switch (Var)
+			{
+				case "first":
+					this.first = Value;
+					break;
+
+				case "last":
+					this.last = Value;
+					break;
+
+				case "nick":
+					this.nick = Value;
+					break;
+
+				case "email":
+					this.email = Value;
+					break;
+			}
 		}
 
 		/// <summary>
@@ -170,7 +203,7 @@ namespace Waher.Networking.XMPP.Search
 			Xml.Append(XmppClient.NamespaceSearch);
 			Xml.Append("'>");
 
-			if (this.searchForm == null)
+			if (!this.supportsForms)
 			{
 				if (!string.IsNullOrEmpty(this.first))
 				{
@@ -220,6 +253,7 @@ namespace Waher.Networking.XMPP.Search
 			SearchResultEventHandler Callback = (SearchResultEventHandler)P[0];
 			object State = P[1];
 			List<Dictionary<string, string>> Records = new List<Dictionary<string, string>>();
+			List<Field> Headers = new List<Field>();
 
 			if (e.Ok)
 			{
@@ -227,18 +261,58 @@ namespace Waher.Networking.XMPP.Search
 				{
 					if (N.LocalName == "query")
 					{
+						Dictionary<string, bool> HeadersSorted = new Dictionary<string, bool>();
+						string Header;
+
 						foreach (XmlNode N2 in N.ChildNodes)
 						{
 							if (N2.LocalName == "item")
 							{
-								Dictionary<string, string> Record = new Dictionary<string, string>();
-								Record["jid"] = XML.Attribute((XmlElement)N2, "jid");
+								Dictionary<string, string> Record = new Dictionary<string, string>()
+								{
+									{ "jid", XML.Attribute((XmlElement)N2, "jid") }
+								};
 
 								foreach (XmlNode N3 in N2.ChildNodes)
 								{
-									XmlElement E = N3 as XmlElement;
-									if (E != null)
-										Record[E.LocalName] = E.InnerText;
+									if (N3 is XmlElement E)
+									{
+										Header = E.LocalName;
+										Record[Header] = E.InnerText;
+
+										if (!HeadersSorted.ContainsKey(Header))
+										{
+											HeadersSorted[Header] = true;
+
+											switch (Header)
+											{
+												case "first":
+													Headers.Add(new TextSingleField(null, Header, "First Name", false, null, null, string.Empty,
+														new StringDataType(), new BasicValidation(), string.Empty, false, false, false));
+													break;
+
+												case "last":
+													Headers.Add(new TextSingleField(null, Header, "Last Name", false, null, null, string.Empty,
+														new StringDataType(), new BasicValidation(), string.Empty, false, false, false));
+													break;
+
+												case "nick":
+													Headers.Add(new TextSingleField(null, Header, "Nick Name", false, null, null, string.Empty,
+														new StringDataType(), new BasicValidation(), string.Empty, false, false, false));
+													break;
+
+												case "email":
+													Headers.Add(new TextSingleField(null, Header, "e-Mail", false, null, null, string.Empty,
+														new StringDataType(), new BasicValidation(), string.Empty, false, false, false));
+													break;
+
+												default:
+													Headers.Add(new TextSingleField(null, Header, Header, false, null, null, string.Empty,
+														new StringDataType(), new BasicValidation(), string.Empty, false, false, false));
+													break;
+											}
+										}
+									}
 								}
 
 								Records.Add(Record);
@@ -248,13 +322,16 @@ namespace Waher.Networking.XMPP.Search
 				}
 			}
 
-			this.CallResponseMethod(Callback, State, Records, e);
+			this.CallResponseMethod(Callback, State, Records, Headers.ToArray(), e);
 		}
 
-		private void CallResponseMethod(SearchResultEventHandler Callback, object State, List<Dictionary<string, string>> Records, IqResultEventArgs e)
+		private void CallResponseMethod(SearchResultEventHandler Callback, object State, List<Dictionary<string, string>> Records,
+			Field[] Headers, IqResultEventArgs e)
 		{
-			SearchResultEventArgs e2 = new SearchResultEventArgs(Records.ToArray(), e);
-			e2.State = State;
+			SearchResultEventArgs e2 = new SearchResultEventArgs(Records.ToArray(), Headers, e)
+			{
+				State = State
+			};
 
 			if (Callback != null)
 			{
@@ -275,7 +352,8 @@ namespace Waher.Networking.XMPP.Search
 			SearchResultEventHandler Callback = (SearchResultEventHandler)P[0];
 			object State = P[1];
 			List<Dictionary<string, string>> Records = new List<Dictionary<string, string>>();
-			
+			List<Field> Headers = new List<Field>();
+
 			if (e.Ok)
 			{
 				foreach (XmlNode N in e.Response.ChildNodes)
@@ -287,54 +365,84 @@ namespace Waher.Networking.XMPP.Search
 							if (N2.LocalName == "x")
 							{
 								DataForm Form = new DataForm(this.client, (XmlElement)N2, null, null, e.From, e.To);
-								Dictionary<string, string> Record = new Dictionary<string, string>();
+								Dictionary<string, bool> HeadersSorted = new Dictionary<string, bool>();
+								string Header;
+
+								if (Form.Header != null)
+								{
+									foreach (Field F in Form.Header)
+									{
+										Header = F.Var;
+
+										if (!HeadersSorted.ContainsKey(Header))
+										{
+											HeadersSorted[Header] = true;
+											Headers.Add(F);
+										}
+									}
+								}
 
 								foreach (Field[] FormRecord in Form.Records)
 								{
-									foreach (Field FormField in FormRecord)
-										Record[FormField.Var] = FormField.ValueString;
-								}
+									Dictionary<string, string> Record = new Dictionary<string, string>();
 
-								Records.Add(Record);
+									foreach (Field FormField in FormRecord)
+									{
+										Header = FormField.Var;
+										Record[Header] = FormField.ValueString;
+
+										if (!HeadersSorted.ContainsKey(Header))
+										{
+											HeadersSorted[Header] = true;
+
+											Headers.Add(new TextSingleField(null, Header, string.IsNullOrEmpty(FormField.Label) ? Header : FormField.Label,
+												false, null, null, string.Empty, new StringDataType(), new BasicValidation(), string.Empty, false, false, false));
+										}
+									}
+
+									Records.Add(Record);
+								}
 							}
 						}
 					}
 				}
 			}
 
-			this.CallResponseMethod(Callback, State, Records, e);
+			this.CallResponseMethod(Callback, State, Records, Headers.ToArray(), e);
 		}
 
 		/// <summary>
-		/// Performs a search request
+		/// Performs a synchronous search request
 		/// </summary>
 		/// <param name="Timeout">Timeout in milliseconds.</param>
 		/// <exception cref="TimeoutException">If timeout occurs.</exception>
 		public SearchResultEventArgs Search(int Timeout)
 		{
-			ManualResetEvent Done = new ManualResetEvent(false);
-			SearchResultEventArgs e = null;
+			Task<SearchResultEventArgs> Result = this.SearchAsync();
 
-			try
+			if (!Result.Wait(Timeout))
+				throw new TimeoutException();
+
+			return Result.Result;
+		}
+
+		/// <summary>
+		/// Performs a synchronous search request
+		/// </summary>
+		/// <exception cref="TimeoutException">If timeout occurs.</exception>
+		public Task<SearchResultEventArgs> SearchAsync()
+		{
+			TaskCompletionSource<SearchResultEventArgs> Result = new TaskCompletionSource<SearchResultEventArgs>();
+
+			this.SendSearchRequest((sender, e) =>
 			{
-				this.SendSearchRequest((sender, e2) =>
-				{
-					e = e2;
-					Done.Set();
-				}, null);
+				if (e.Ok)
+					Result.SetResult(e);
+				else
+					Result.SetException(e.StanzaError ?? new XmppException("Unable to perform search operation."));
+			}, null);
 
-				if (!Done.WaitOne(Timeout))
-					throw new TimeoutException();
-			}
-			finally
-			{
-				Done.Dispose();
-			}
-
-			if (!e.Ok)
-				throw e.StanzaError;
-
-			return e;
+			return Result.Task;
 		}
 
 	}

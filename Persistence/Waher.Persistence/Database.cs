@@ -1,9 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Xml;
 using Waher.Persistence.Filters;
+using Waher.Persistence.Serialization;
 
 namespace Waher.Persistence
 {
@@ -11,8 +12,8 @@ namespace Waher.Persistence
 	/// Static interface for database persistence. In order to work, a database provider has to be assigned to it. This is
 	/// ideally done as one of the first steps in the startup of an application.
 	/// </summary>
-    public static class Database
-    {
+	public static class Database
+	{
 		private static IDatabaseProvider provider = null;
 
 		/// <summary>
@@ -48,27 +49,27 @@ namespace Waher.Persistence
 		/// Inserts an object into the default collection of the database.
 		/// </summary>
 		/// <param name="Object">Object to insert.</param>
-		public static void Insert(object Object)
+		public static Task Insert(object Object)
 		{
-			Provider.Insert(Object);
+			return Provider.Insert(Object);
 		}
 
 		/// <summary>
 		/// Inserts a set of objects into the default collection of the database.
 		/// </summary>
 		/// <param name="Objects">Objects to insert.</param>
-		public static void Insert(params object[] Objects)
+		public static Task Insert(params object[] Objects)
 		{
-			Provider.Insert(Objects);
+			return Provider.Insert(Objects);
 		}
 
 		/// <summary>
 		/// Inserts a set of objects into the default collection of the database.
 		/// </summary>
 		/// <param name="Objects">Objects to insert.</param>
-		public static void Insert(IEnumerable<object> Objects)
+		public static Task Insert(IEnumerable<object> Objects)
 		{
-			Provider.Insert(Objects);
+			return Provider.Insert(Objects);
 		}
 
 		/// <summary>
@@ -129,26 +130,21 @@ namespace Waher.Persistence
 		/// Finds the first object of a given class <typeparamref name="T"/> and deletes the rest.
 		/// </summary>
 		/// <typeparam name="T">Class defining how to deserialize objects found.</typeparam>
-		/// <param name="Timeout">Timeout, in milliseconds.</param>
 		/// <param name="SortOrder">Sort order. Each string represents a field name. By default, sort order is ascending.
 		/// If descending sort order is desired, prefix the field name by a hyphen (minus) sign.</param>
 		/// <returns>Objects found.</returns>
 		///	<exception cref="TimeoutException">Thrown if a response is not returned from the database within the given number of milliseconds.</exception>
-		public static T FindFirstDeleteRest<T>(int Timeout, params string[] SortOrder)
+		public async static Task<T> FindFirstDeleteRest<T>(params string[] SortOrder)
 		{
-			return FirstDeleteRest<T>(Timeout, Provider.Find<T>(0, int.MaxValue, SortOrder));
+			return await FirstDeleteRest<T>(await Provider.Find<T>(0, int.MaxValue, SortOrder));
 		}
 
-		private static T FirstDeleteRest<T>(int Timeout, Task<IEnumerable<T>> Set)
+		private static async Task<T> FirstDeleteRest<T>(IEnumerable<T> Set)
 		{
-			if (!Set.Wait(int.MaxValue))
-			//if (!Set.Wait(Timeout))
-					throw new TimeoutException();
-
 			T Result = default(T);
 			bool First = true;
 
-			foreach (T Obj in Set.Result)
+			foreach (T Obj in Set)
 			{
 				if (First)
 				{
@@ -156,7 +152,7 @@ namespace Waher.Persistence
 					Result = Obj;
 				}
 				else
-					Database.Delete(Obj);
+					await Database.Delete(Obj);
 			}
 
 			return Result;
@@ -166,69 +162,115 @@ namespace Waher.Persistence
 		/// Finds objects of a given class <typeparamref name="T"/>.
 		/// </summary>
 		/// <typeparam name="T">Class defining how to deserialize objects found.</typeparam>
-		/// <param name="Timeout">Timeout, in milliseconds.</param>
 		/// <param name="Filter">Optional filter. Can be null.</param>
 		/// <param name="SortOrder">Sort order. Each string represents a field name. By default, sort order is ascending.
 		/// If descending sort order is desired, prefix the field name by a hyphen (minus) sign.</param>
 		/// <returns>Objects found.</returns>
 		///	<exception cref="TimeoutException">Thrown if a response is not returned from the database within the given number of milliseconds.</exception>
-		public static T FindFirstDeleteRest<T>(int Timeout, Filter Filter, params string[] SortOrder)
+		public static async Task<T> FindFirstDeleteRest<T>(Filter Filter, params string[] SortOrder)
 		{
-			return FirstDeleteRest<T>(Timeout, Provider.Find<T>(0, int.MaxValue, Filter, SortOrder));
+			return await FirstDeleteRest<T>(await Provider.Find<T>(0, int.MaxValue, Filter, SortOrder));
 		}
 
 		/// <summary>
 		/// Updates an object in the database.
 		/// </summary>
 		/// <param name="Object">Object to insert.</param>
-		public static void Update(object Object)
+		public static Task Update(object Object)
 		{
-			Provider.Update(Object);
+			return Provider.Update(Object);
 		}
 
 		/// <summary>
 		/// Updates a collection of objects in the database.
 		/// </summary>
 		/// <param name="Objects">Objects to insert.</param>
-		public static void Update(params object[] Objects)
+		public static Task Update(params object[] Objects)
 		{
-			Provider.Update(Objects);
+			return Provider.Update(Objects);
 		}
 
 		/// <summary>
 		/// Updates a collection of objects in the database.
 		/// </summary>
 		/// <param name="Objects">Objects to insert.</param>
-		public static void Update(IEnumerable<object> Objects)
+		public static Task Update(IEnumerable<object> Objects)
 		{
-			Provider.Update(Objects);
+			return Provider.Update(Objects);
 		}
 
 		/// <summary>
 		/// Deletes an object in the database.
 		/// </summary>
 		/// <param name="Object">Object to insert.</param>
-		public static void Delete(object Object)
+		public static Task Delete(object Object)
 		{
-			Provider.Delete(Object);
+			return Provider.Delete(Object);
 		}
 
 		/// <summary>
 		/// Deletes a collection of objects in the database.
 		/// </summary>
 		/// <param name="Objects">Objects to insert.</param>
-		public static void Delete(params object[] Objects)
+		public static Task Delete(params object[] Objects)
 		{
-			Provider.Delete(Objects);
+			if (Objects.Length == 1)
+				return Provider.Delete(Objects[0]);
+			else
+				return Provider.Delete(Objects);
 		}
 
 		/// <summary>
 		/// Deletes a collection of objects in the database.
 		/// </summary>
 		/// <param name="Objects">Objects to insert.</param>
-		public static void Delete(IEnumerable<object> Objects)
+		public static Task Delete(IEnumerable<object> Objects)
 		{
-			Provider.Delete(Objects);
+			return Provider.Delete(Objects);
+		}
+
+		/// <summary>
+		/// Loads an object given its Object ID <paramref name="ObjectId"/> and its base type <typeparamref name="T"/>.
+		/// </summary>
+		/// <typeparam name="T">Base type.</typeparam>
+		/// <param name="ObjectId">Object ID</param>
+		/// <returns>Loaded object.</returns>
+		public static Task<T> LoadObject<T>(object ObjectId)
+		{
+			return Provider.LoadObject<T>(ObjectId);
+		}
+
+		/// <summary>
+		/// Performs an export of the entire database.
+		/// </summary>
+		/// <param name="Output">Database will be output to this interface.</param>
+		/// <returns>Task object for synchronization purposes.</returns>
+		public static Task Export(IDatabaseExport Output)
+		{
+			return Provider.Export(Output);
+		}
+
+		/// <summary>
+		/// Clears a collection of all objects.
+		/// </summary>
+		/// <param name="CollectionName">Name of collection to clear.</param>
+		/// <returns>Task object for synchronization purposes.</returns>
+		public static Task Clear(string CollectionName)
+		{
+			return Provider.Clear(CollectionName);
+		}
+
+
+		/// <summary>
+		/// Analyzes the database and exports findings to XML.
+		/// </summary>
+		/// <param name="Output">XML Output.</param>
+		/// <param name="XsltPath">Optional XSLT to use to view the output.</param>
+		/// <param name="ProgramDataFolder">Program data folder. Can be removed from filenames used, when referencing them in the report.</param>
+		/// <param name="ExportData">If data in database is to be exported in output.</param>
+		public static void Analyze(XmlWriter Output, string XsltPath, string ProgramDataFolder, bool ExportData)
+		{
+			Provider.Analyze(Output, XsltPath, ProgramDataFolder, ExportData);
 		}
 
 	}

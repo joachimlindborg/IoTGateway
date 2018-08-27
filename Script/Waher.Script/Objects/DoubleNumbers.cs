@@ -21,6 +21,11 @@ namespace Waher.Script.Objects
 		}
 
 		/// <summary>
+		/// Instance of the set of complex numbers.
+		/// </summary>
+		public static readonly DoubleNumbers Instance = new DoubleNumbers();
+
+		/// <summary>
 		/// Returns the identity element of the commutative ring with identity.
 		/// </summary>
 		public override ICommutativeRingWithIdentityElement One
@@ -47,7 +52,7 @@ namespace Waher.Script.Objects
 		}
 
 		/// <summary>
-		/// <see cref="Object.Equals"/>
+		/// <see cref="Object.Equals(object)"/>
 		/// </summary>
 		public override bool Equals(object obj)
 		{
@@ -55,7 +60,7 @@ namespace Waher.Script.Objects
 		}
 
 		/// <summary>
-		/// <see cref="Object.GetHashCode"/>
+		/// <see cref="Object.GetHashCode()"/>
 		/// </summary>
 		public override int GetHashCode()
 		{
@@ -75,5 +80,6 @@ namespace Waher.Script.Objects
 
 			return d1.Value.CompareTo(d2.Value);
 		}
+
 	}
 }

@@ -11,11 +11,11 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Waher.Content;
-using Waher.Script;
 using Waher.Networking.XMPP;
 using Waher.Networking.XMPP.DataForms;
 using Waher.Networking.XMPP.DataForms.FieldTypes;
 using Waher.Networking.XMPP.DataForms.Layout;
+using Waher.Runtime.Inventory;
 
 namespace Waher.Client.WPF.Dialogs
 {
@@ -25,6 +25,7 @@ namespace Waher.Client.WPF.Dialogs
 	public partial class ParameterDialog : Window
 	{
 		private DataForm form;
+		private FrameworkElement makeVisible = null;
 
 		/// <summary>
 		/// Interaction logic for ParameterDialog.xaml
@@ -41,6 +42,8 @@ namespace Waher.Client.WPF.Dialogs
 			TabItem TabItem;
 			StackPanel StackPanel;
 			ScrollViewer ScrollViewer;
+			Control First = null;
+			Control Control;
 
 			if (Form.HasPages)
 			{
@@ -50,13 +53,19 @@ namespace Waher.Client.WPF.Dialogs
 			}
 			else
 			{
-				ScrollViewer = new ScrollViewer();
-				ScrollViewer.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+				ScrollViewer = new ScrollViewer()
+				{
+					VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+				};
+
 				this.DialogPanel.Children.Add(ScrollViewer);
 				DockPanel.SetDock(ScrollViewer, Dock.Top);
 
-				StackPanel = new StackPanel();
-				StackPanel.Margin = new Thickness(10, 10, 10, 10);
+				StackPanel = new StackPanel()
+				{
+					Margin = new Thickness(10, 10, 10, 10),
+				};
+
 				ScrollViewer.Content = StackPanel;
 				Container = StackPanel;
 			}
@@ -65,45 +74,78 @@ namespace Waher.Client.WPF.Dialogs
 			{
 				if (TabControl != null)
 				{
-					TabItem = new TabItem();
-					TabItem.Header = Page.Label;
+					TabItem = new TabItem()
+					{
+						Header = Page.Label
+					};
+
 					TabControl.Items.Add(TabItem);
 
-					ScrollViewer = new ScrollViewer();
-					ScrollViewer.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+					ScrollViewer = new ScrollViewer()
+					{
+						VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+					};
+
 					TabItem.Content = ScrollViewer;
 
-					StackPanel = new StackPanel();
-					StackPanel.Margin = new Thickness(10, 10, 10, 10);
+					StackPanel = new StackPanel()
+					{
+						Margin = new Thickness(10, 10, 10, 10)
+					};
+
 					ScrollViewer.Content = StackPanel;
 					Container = StackPanel;
 				}
 				else
 					TabItem = null;
 
+				if (Form.Instructions != null && Form.Instructions.Length > 0)
+				{
+					foreach (string Row in Form.Instructions)
+					{
+						TextBlock TextBlock = new TextBlock()
+						{
+							TextWrapping = TextWrapping.Wrap,
+							Margin = new Thickness(0, 5, 0, 5),
+							Text = Row
+						};
+
+						Container.Children.Add(TextBlock);
+					}
+				}
+
 				foreach (LayoutElement Element in Page.Elements)
-					this.Layout(Container, Element, Form);
+				{
+					Control = this.Layout(Container, Element, Form);
+					if (First == null)
+						First = Control;
+				}
 
 				if (TabControl != null && TabControl.Items.Count == 1)
 					TabItem.Focus();
 			}
 
+			if (First != null)
+				First.Focus();
+
 			this.CheckOkButtonEnabled();
 		}
 
-		private void Layout(Panel Container, LayoutElement Element, DataForm Form)
+		private Control Layout(Panel Container, LayoutElement Element, DataForm Form)
 		{
 			if (Element is FieldReference)
-				this.Layout(Container, (FieldReference)Element, Form);
+				return this.Layout(Container, (FieldReference)Element, Form);
 			else if (Element is Networking.XMPP.DataForms.Layout.TextElement)
 				this.Layout(Container, (Networking.XMPP.DataForms.Layout.TextElement)Element, Form);
 			else if (Element is Networking.XMPP.DataForms.Layout.Section)
-				this.Layout(Container, (Networking.XMPP.DataForms.Layout.Section)Element, Form);
+				return this.Layout(Container, (Networking.XMPP.DataForms.Layout.Section)Element, Form);
 			else if (Element is ReportedReference)
 				this.Layout(Container, (ReportedReference)Element, Form);
+
+			return null;
 		}
 
-		private void Layout(Panel Container, Networking.XMPP.DataForms.Layout.Section Section, DataForm Form)
+		private Control Layout(Panel Container, Networking.XMPP.DataForms.Layout.Section Section, DataForm Form)
 		{
 			GroupBox GroupBox = new GroupBox();
 			Container.Children.Add(GroupBox);
@@ -114,57 +156,81 @@ namespace Waher.Client.WPF.Dialogs
 			GroupBox.Content = StackPanel;
 			StackPanel.Margin = new Thickness(5, 5, 5, 5);
 
+			Control First = null;
+			Control Control;
+
 			foreach (LayoutElement Element in Section.Elements)
-				this.Layout(StackPanel, Element, Form);
+			{
+				Control = this.Layout(StackPanel, Element, Form);
+				if (First == null)
+					First = Control;
+			}
+
+			return First;
 		}
 
 		private void Layout(Panel Container, Networking.XMPP.DataForms.Layout.TextElement TextElement, DataForm Form)
 		{
-			TextBlock TextBlock = new TextBlock();
-			TextBlock.TextWrapping = TextWrapping.Wrap;
-			TextBlock.Margin = new Thickness(0, 0, 0, 5);
+			TextBlock TextBlock = new TextBlock()
+			{
+				TextWrapping = TextWrapping.Wrap,
+				Margin = new Thickness(0, 0, 0, 5),
+				Text = TextElement.Text
+			};
 
-			TextBlock.Text = TextElement.Text;
 			Container.Children.Add(TextBlock);
 		}
 
-		private void Layout(Panel Container, FieldReference FieldReference, DataForm Form)
+		private Control Layout(Panel Container, FieldReference FieldReference, DataForm Form)
 		{
 			Field Field = Form[FieldReference.Var];
 			if (Field == null)
-				return;
+				return null;
 
-			Field.Validate(Field.ValueStrings);
+			Control Result = null;
+			bool MakeVisible = false;
+
+			if (Field.HasError)
+				MakeVisible = true;
+			else
+				Field.Validate(Field.ValueStrings);
 
 			if (Field is TextSingleField)
-				this.Layout(Container, (TextSingleField)Field, Form);
+				Result = this.Layout(Container, (TextSingleField)Field, Form);
 			else if (Field is TextMultiField)
-				this.Layout(Container, (TextMultiField)Field, Form);
+				Result = this.Layout(Container, (TextMultiField)Field, Form);
 			else if (Field is TextPrivateField)
-				this.Layout(Container, (TextPrivateField)Field, Form);
+				Result = this.Layout(Container, (TextPrivateField)Field, Form);
 			else if (Field is BooleanField)
-				this.Layout(Container, (BooleanField)Field, Form);
+				Result = this.Layout(Container, (BooleanField)Field, Form);
 			else if (Field is ListSingleField)
-				this.Layout(Container, (ListSingleField)Field, Form);
+				Result = this.Layout(Container, (ListSingleField)Field, Form);
 			else if (Field is ListMultiField)
-				this.Layout(Container, (ListMultiField)Field, Form);
+				Result = this.Layout(Container, (ListMultiField)Field, Form);
 			else if (Field is FixedField)
 				this.Layout(Container, (FixedField)Field, Form);
 			else if (Field is HiddenField)
 				this.Layout(Container, (HiddenField)Field, Form);
 			else if (Field is JidMultiField)
-				this.Layout(Container, (JidMultiField)Field, Form);
+				Result = this.Layout(Container, (JidMultiField)Field, Form);
 			else if (Field is JidSingleField)
-				this.Layout(Container, (JidSingleField)Field, Form);
+				Result = this.Layout(Container, (JidSingleField)Field, Form);
 			else if (Field is MediaField)
 				this.Layout(Container, (MediaField)Field, Form);
+
+			if (MakeVisible && this.makeVisible == null)
+				this.makeVisible = Result;
+
+			return Result;
 		}
 
-		private void Layout(Panel Container, BooleanField Field, DataForm Form)
+		private Control Layout(Panel Container, BooleanField Field, DataForm Form)
 		{
-			TextBlock TextBlock = new TextBlock();
-			TextBlock.TextWrapping = TextWrapping.Wrap;
-			TextBlock.Text = Field.Label;
+			TextBlock TextBlock = new TextBlock()
+			{
+				TextWrapping = TextWrapping.Wrap,
+				Text = Field.Label
+			};
 
 			if (Field.Required)
 			{
@@ -174,16 +240,17 @@ namespace Waher.Client.WPF.Dialogs
 			}
 
 			CheckBox CheckBox;
-			bool IsChecked;
 
-			CheckBox = new CheckBox();
-			CheckBox.Name = "Form_" + Field.Var;
-			CheckBox.Content = TextBlock;
-			CheckBox.Margin = new Thickness(0, 3, 0, 3);
-			CheckBox.IsEnabled = !Field.ReadOnly;
-			CheckBox.ToolTip = Field.Description;
+			CheckBox = new CheckBox()
+			{
+				Name = VarToName(Field.Var),
+				Content = TextBlock,
+				Margin = new Thickness(0, 3, 0, 3),
+				IsEnabled = !Field.ReadOnly,
+				ToolTip = Field.Description
+			};
 
-			if (!CommonTypes.TryParse(Field.ValueString, out IsChecked))
+			if (!CommonTypes.TryParse(Field.ValueString, out bool IsChecked))
 				CheckBox.IsChecked = null;
 			else
 				CheckBox.IsChecked = IsChecked;
@@ -196,15 +263,16 @@ namespace Waher.Client.WPF.Dialogs
 			CheckBox.Click += new RoutedEventHandler(CheckBox_Click);
 
 			Container.Children.Add(CheckBox);
+
+			return CheckBox;
 		}
 
 		private void CheckBox_Click(object sender, RoutedEventArgs e)
 		{
-			CheckBox CheckBox = sender as CheckBox;
-			if (CheckBox == null)
+			if (!(sender is CheckBox CheckBox))
 				return;
 
-			string Var = CheckBox.Name.Substring(5);
+			string Var = NameToVar(CheckBox.Name);
 			Field Field = this.form[Var];
 			if (Field == null)
 				return;
@@ -244,11 +312,13 @@ namespace Waher.Client.WPF.Dialogs
 
 		private void Layout(Panel Container, FixedField Field, DataForm Form)
 		{
-			TextBlock TextBlock = new TextBlock();
-			TextBlock.TextWrapping = TextWrapping.Wrap;
-			TextBlock.Margin = new Thickness(0, 5, 0, 5);
+			TextBlock TextBlock = new TextBlock()
+			{
+				TextWrapping = TextWrapping.Wrap,
+				Margin = new Thickness(0, 5, 0, 5),
+				Text = Field.ValueString
+			};
 
-			TextBlock.Text = Field.ValueString;
 			Container.Children.Add(TextBlock);
 		}
 
@@ -257,26 +327,32 @@ namespace Waher.Client.WPF.Dialogs
 			// Do nothing
 		}
 
-		private void Layout(Panel Container, JidMultiField Field, DataForm Form)
+		private Control Layout(Panel Container, JidMultiField Field, DataForm Form)
 		{
 			TextBox TextBox = this.LayoutTextBox(Container, Field);
 			TextBox.TextChanged += new TextChangedEventHandler(TextBox_TextChanged);
 			TextBox.AcceptsReturn = true;
 			TextBox.AcceptsTab = true;
 			TextBox.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+
+			return TextBox;
 		}
 
-		private void Layout(Panel Container, JidSingleField Field, DataForm Form)
+		private Control Layout(Panel Container, JidSingleField Field, DataForm Form)
 		{
 			TextBox TextBox = this.LayoutTextBox(Container, Field);
 			TextBox.TextChanged += new TextChangedEventHandler(TextBox_TextChanged);
+
+			return TextBox;
 		}
 
-		private void Layout(Panel Container, ListMultiField Field, DataForm Form)
+		private Control Layout(Panel Container, ListMultiField Field, DataForm Form)
 		{
-			TextBlock TextBlock = new TextBlock();
-			TextBlock.TextWrapping = TextWrapping.Wrap;
-			TextBlock.Text = Field.Label;
+			TextBlock TextBlock = new TextBlock()
+			{
+				TextWrapping = TextWrapping.Wrap,
+				Text = Field.Label
+			};
 
 			if (Field.Required)
 			{
@@ -287,7 +363,7 @@ namespace Waher.Client.WPF.Dialogs
 
 			GroupBox GroupBox = new GroupBox();
 			Container.Children.Add(GroupBox);
-			GroupBox.Name = "Form_" + Field.Var;
+			GroupBox.Name = VarToName(Field.Var);
 			GroupBox.Header = TextBlock;
 			GroupBox.ToolTip = Field.Description;
 			GroupBox.Margin = new Thickness(5, 5, 5, 5);
@@ -301,13 +377,14 @@ namespace Waher.Client.WPF.Dialogs
 
 			foreach (KeyValuePair<string, string> Option in Field.Options)
 			{
-				CheckBox = new CheckBox();
-				CheckBox.Content = Option.Key;
-				CheckBox.Tag = Option.Value;
-				CheckBox.Margin = new Thickness(0, 3, 0, 3);
-				CheckBox.IsEnabled = !Field.ReadOnly;
-
-				CheckBox.IsChecked = Array.IndexOf<string>(Values, Option.Value) >= 0;
+				CheckBox = new CheckBox()
+				{
+					Content = Option.Key,
+					Tag = Option.Value,
+					Margin = new Thickness(0, 3, 0, 3),
+					IsEnabled = !Field.ReadOnly,
+					IsChecked = Array.IndexOf<string>(Values, Option.Value) >= 0
+				};
 
 				if (Field.HasError)
 					CheckBox.Background = new SolidColorBrush(Colors.PeachPuff);
@@ -320,23 +397,22 @@ namespace Waher.Client.WPF.Dialogs
 			}
 
 			GroupBox.Tag = this.LayoutErrorLabel(StackPanel, Field);
+
+			return GroupBox;
 		}
 
 		private void MultiListCheckBox_Click(object sender, RoutedEventArgs e)
 		{
-			CheckBox CheckBox = sender as CheckBox;
-			if (CheckBox == null)
+			if (!(sender is CheckBox CheckBox))
 				return;
 
-			StackPanel StackPanel = CheckBox.Parent as StackPanel;
-			if (StackPanel == null)
+			if (!(CheckBox.Parent is StackPanel StackPanel))
 				return;
 
-			GroupBox GroupBox = StackPanel.Parent as GroupBox;
-			if (GroupBox == null)
+			if (!(StackPanel.Parent is GroupBox GroupBox))
 				return;
 
-			string Var = GroupBox.Name.Substring(5);
+			string Var = NameToVar(GroupBox.Name);
 			Field Field = this.form[Var];
 			if (Field == null)
 				return;
@@ -382,15 +458,17 @@ namespace Waher.Client.WPF.Dialogs
 			}
 		}
 
-		private void Layout(Panel Container, ListSingleField Field, DataForm Form)
+		private Control Layout(Panel Container, ListSingleField Field, DataForm Form)
 		{
 			this.LayoutControlLabel(Container, Field);
 
-			ComboBox ComboBox = new ComboBox();
-			ComboBox.Name = "Form_" + Field.Var;
-			ComboBox.IsEnabled = !Field.ReadOnly;
-			ComboBox.ToolTip = Field.Description;
-			ComboBox.Margin = new Thickness(0, 0, 0, 5);
+			ComboBox ComboBox = new ComboBox()
+			{
+				Name = VarToName(Field.Var),
+				IsReadOnly = Field.ReadOnly,
+				ToolTip = Field.Description,
+				Margin = new Thickness(0, 0, 0, 5)
+			};
 
 			if (Field.HasError)
 				ComboBox.Background = new SolidColorBrush(Colors.PeachPuff);
@@ -401,9 +479,11 @@ namespace Waher.Client.WPF.Dialogs
 
 			foreach (KeyValuePair<string, string> P in Field.Options)
 			{
-				Item = new ComboBoxItem();
-				Item.Content = P.Key;
-				Item.Tag = P.Value;
+				Item = new ComboBoxItem()
+				{
+					Content = P.Key,
+					Tag = P.Value
+				};
 
 				ComboBox.Items.Add(Item);
 			}
@@ -426,24 +506,24 @@ namespace Waher.Client.WPF.Dialogs
 
 			Container.Children.Add(ComboBox);
 			ComboBox.Tag = this.LayoutErrorLabel(Container, Field);
+
+			return ComboBox;
 		}
 
 		private void ComboBox_TextChanged(object sender, TextChangedEventArgs e)
 		{
-			ComboBox ComboBox = sender as ComboBox;
-			if (ComboBox == null)
+			if (!(sender is ComboBox ComboBox))
 				return;
 
-			string Var = ComboBox.Name.Substring(5);
+			string Var = NameToVar(ComboBox.Name);
 			Field Field = this.form[Var];
 			if (Field == null)
 				return;
 
 			TextBlock ErrorLabel = (TextBlock)ComboBox.Tag;
 			string s = ComboBox.Text;
-			ComboBoxItem ComboBoxItem = ComboBox.SelectedItem as ComboBoxItem;
 
-			if (ComboBoxItem != null && ((string)ComboBoxItem.Content) == s)
+			if (ComboBox.SelectedItem is ComboBoxItem ComboBoxItem && ((string)ComboBoxItem.Content) == s)
 				s = (string)ComboBoxItem.Tag;
 
 			Field.SetValue(s);
@@ -465,20 +545,18 @@ namespace Waher.Client.WPF.Dialogs
 
 		private void ComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
 		{
-			ComboBox ComboBox = sender as ComboBox;
-			if (ComboBox == null)
+			if (!(sender is ComboBox ComboBox))
 				return;
 
-			string Var = ComboBox.Name.Substring(5);
+			string Var = NameToVar(ComboBox.Name);
 			Field Field = this.form[Var];
 			if (Field == null)
 				return;
 
 			TextBlock ErrorLabel = (TextBlock)ComboBox.Tag;
-			ComboBoxItem Item = ComboBox.SelectedItem as ComboBoxItem;
 			string Value;
 
-			if (Item == null)
+			if (!(ComboBox.SelectedItem is ComboBoxItem Item))
 				Value = string.Empty;
 			else
 				Value = (string)Item.Tag;
@@ -505,7 +583,7 @@ namespace Waher.Client.WPF.Dialogs
 		{
 			MediaElement MediaElement;
 			Uri Uri = null;
-			Grade Best = Script.Grade.NotAtAll;
+			Grade Best = Runtime.Inventory.Grade.NotAtAll;
 			Grade Grade;
 			bool IsImage = false;
 			bool IsVideo = false;
@@ -604,13 +682,26 @@ namespace Waher.Client.WPF.Dialogs
 			{
 				BitmapImage BitmapImage = new System.Windows.Media.Imaging.BitmapImage();
 				BitmapImage.BeginInit();
-				BitmapImage.UriSource = Uri;
-				BitmapImage.EndInit();
+				try
+				{
+					if (Field.Media.Binary != null)
+						BitmapImage.UriSource = new Uri(Waher.Content.Markdown.Model.Multimedia.ImageContent.GetTemporaryFile(Field.Media.Binary));
+					else if (Uri != null)
+						BitmapImage.UriSource = Uri;
+					else if (!string.IsNullOrEmpty(Field.Media.URL))
+						BitmapImage.UriSource = new Uri(Field.Media.URL);
+				}
+				finally
+				{
+					BitmapImage.EndInit();
+				}
 
-				Image Image = new Image();
-				Image.Source = BitmapImage;
-				Image.ToolTip = Field.Description;
-				Image.Margin = new Thickness(0, TopMarginLaidOut ? 0 : 5, 0, 5);
+				Image Image = new Image()
+				{
+					Source = BitmapImage,
+					ToolTip = Field.Description,
+					Margin = new Thickness(0, TopMarginLaidOut ? 0 : 5, 0, 5)
+				};
 
 				if (Field.Media.Width.HasValue)
 					Image.Width = Field.Media.Width.Value;
@@ -622,10 +713,13 @@ namespace Waher.Client.WPF.Dialogs
 			}
 			else if (IsVideo || IsAudio)
 			{
-				MediaElement = new MediaElement();
-				MediaElement.Source = Uri;
-				MediaElement.LoadedBehavior = MediaState.Manual;
-				MediaElement.ToolTip = Field.Description;
+				MediaElement = new MediaElement()
+				{
+					Source = Uri,
+					LoadedBehavior = MediaState.Manual,
+					ToolTip = Field.Description
+				};
+
 				Container.Children.Add(MediaElement);
 
 				if (IsVideo)
@@ -639,54 +733,72 @@ namespace Waher.Client.WPF.Dialogs
 						MediaElement.Height = Field.Media.Height.Value;
 				}
 
-				DockPanel ControlPanel = new DockPanel();
-				ControlPanel.Width = 290;
+				DockPanel ControlPanel = new DockPanel()
+				{
+					Width = 290
+				};
+
 				Container.Children.Add(ControlPanel);
 
-				Button Button = new Button();
-				Button.Width = 50;
-				Button.Height = 23;
-				Button.Margin = new Thickness(0, 0, 5, 0);
-				Button.Content = "<<";
+				Button Button = new Button()
+				{
+					Width = 50,
+					Height = 23,
+					Margin = new Thickness(0, 0, 5, 0),
+					Content = "<<",
+					Tag = MediaElement
+				};
+
 				ControlPanel.Children.Add(Button);
 				Button.Click += new RoutedEventHandler(Rewind_Click);
-				Button.Tag = MediaElement;
 
-				Button = new Button();
-				Button.Width = 50;
-				Button.Height = 23;
-				Button.Margin = new Thickness(5, 0, 5, 0);
-				Button.Content = "Play";
+				Button = new Button()
+				{
+					Width = 50,
+					Height = 23,
+					Margin = new Thickness(5, 0, 5, 0),
+					Content = "Play",
+					Tag = MediaElement
+				};
+
 				ControlPanel.Children.Add(Button);
 				Button.Click += new RoutedEventHandler(Play_Click);
-				Button.Tag = MediaElement;
 
-				Button = new Button();
-				Button.Width = 50;
-				Button.Height = 23;
-				Button.Margin = new Thickness(5, 0, 5, 0);
-				Button.Content = "Pause";
+				Button = new Button()
+				{
+					Width = 50,
+					Height = 23,
+					Margin = new Thickness(5, 0, 5, 0),
+					Content = "Pause",
+					Tag = MediaElement
+				};
+
 				ControlPanel.Children.Add(Button);
 				Button.Click += new RoutedEventHandler(Pause_Click);
-				Button.Tag = MediaElement;
 
-				Button = new Button();
-				Button.Width = 50;
-				Button.Height = 23;
-				Button.Margin = new Thickness(5, 0, 5, 0);
-				Button.Content = "Stop";
+				Button = new Button()
+				{
+					Width = 50,
+					Height = 23,
+					Margin = new Thickness(5, 0, 5, 0),
+					Content = "Stop",
+					Tag = MediaElement
+				};
+
 				ControlPanel.Children.Add(Button);
 				Button.Click += new RoutedEventHandler(Stop_Click);
-				Button.Tag = MediaElement;
 
-				Button = new Button();
-				Button.Width = 50;
-				Button.Height = 23;
-				Button.Margin = new Thickness(5, 0, 0, 0);
-				Button.Content = ">>";
+				Button = new Button()
+				{
+					Width = 50,
+					Height = 23,
+					Margin = new Thickness(5, 0, 0, 0),
+					Content = ">>",
+					Tag = MediaElement
+				};
+
 				ControlPanel.Children.Add(Button);
 				Button.Click += new RoutedEventHandler(Forward_Click);
-				Button.Tag = MediaElement;
 
 				MediaElement.Play();
 			}
@@ -742,25 +854,30 @@ namespace Waher.Client.WPF.Dialogs
 				MediaElement.SpeedRatio *= 2;
 		}
 
-		private void Layout(Panel Container, TextMultiField Field, DataForm Form)
+		private Control Layout(Panel Container, TextMultiField Field, DataForm Form)
 		{
 			TextBox TextBox = this.LayoutTextBox(Container, Field);
 			TextBox.TextChanged += new TextChangedEventHandler(TextBox_TextChanged);
 			TextBox.AcceptsReturn = true;
 			TextBox.AcceptsTab = true;
 			TextBox.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+			TextBox.TextWrapping = TextWrapping.Wrap;
+
+			return TextBox;
 		}
 
-		private void Layout(Panel Container, TextPrivateField Field, DataForm Form)
+		private Control Layout(Panel Container, TextPrivateField Field, DataForm Form)
 		{
 			this.LayoutControlLabel(Container, Field);
 
-			PasswordBox PasswordBox = new PasswordBox();
-			PasswordBox.Name = "Form_" + Field.Var;
-			PasswordBox.Password = Field.ValueString;
-			PasswordBox.IsEnabled = !Field.ReadOnly;
-			PasswordBox.ToolTip = Field.Description;
-			PasswordBox.Margin = new Thickness(0, 0, 0, 5);
+			PasswordBox PasswordBox = new PasswordBox()
+			{
+				Name = VarToName(Field.Var),
+				Password = Field.ValueString,
+				IsEnabled = !Field.ReadOnly,
+				ToolTip = Field.Description,
+				Margin = new Thickness(0, 0, 0, 5)
+			};
 
 			if (Field.HasError)
 				PasswordBox.Background = new SolidColorBrush(Colors.PeachPuff);
@@ -771,15 +888,16 @@ namespace Waher.Client.WPF.Dialogs
 
 			Container.Children.Add(PasswordBox);
 			PasswordBox.Tag = this.LayoutErrorLabel(Container, Field);
+
+			return PasswordBox;
 		}
 
 		private void PasswordBox_PasswordChanged(object sender, RoutedEventArgs e)
 		{
-			PasswordBox PasswordBox = sender as PasswordBox;
-			if (PasswordBox == null)
+			if (!(sender is PasswordBox PasswordBox))
 				return;
 
-			string Var = PasswordBox.Name.Substring(5);
+			string Var = NameToVar(PasswordBox.Name);
 			Field Field = this.form[Var];
 			if (Field == null)
 				return;
@@ -803,22 +921,26 @@ namespace Waher.Client.WPF.Dialogs
 			}
 		}
 
-		private void Layout(Panel Container, TextSingleField Field, DataForm Form)
+		private Control Layout(Panel Container, TextSingleField Field, DataForm Form)
 		{
 			TextBox TextBox = this.LayoutTextBox(Container, Field);
 			TextBox.TextChanged += new TextChangedEventHandler(TextBox_TextChanged);
+
+			return TextBox;
 		}
 
 		private TextBox LayoutTextBox(Panel Container, Field Field)
 		{
 			this.LayoutControlLabel(Container, Field);
 
-			TextBox TextBox = new TextBox();
-			TextBox.Name = "Form_" + Field.Var;
-			TextBox.Text = Field.ValueString;
-			TextBox.IsEnabled = !Field.ReadOnly;
-			TextBox.ToolTip = Field.Description;
-			TextBox.Margin = new Thickness(0, 0, 0, 5);
+			TextBox TextBox = new TextBox()
+			{
+				Name = VarToName(Field.Var),
+				Text = Field.ValueString,
+				IsReadOnly = Field.ReadOnly,
+				ToolTip = Field.Description,
+				Margin = new Thickness(0, 0, 0, 5)
+			};
 
 			if (Field.HasError)
 				TextBox.Background = new SolidColorBrush(Colors.PeachPuff);
@@ -833,13 +955,16 @@ namespace Waher.Client.WPF.Dialogs
 
 		private TextBlock LayoutErrorLabel(Panel Container, Field Field)
 		{
-			TextBlock ErrorLabel = new TextBlock();
-			ErrorLabel.TextWrapping = TextWrapping.Wrap;
-			ErrorLabel.Margin = new Thickness(0, 0, 0, 5);
-			ErrorLabel.Text = Field.Error;
-			ErrorLabel.Foreground = new SolidColorBrush(Colors.Red);
-			ErrorLabel.FontWeight = FontWeights.Bold;
-			ErrorLabel.Visibility = Field.HasError ? Visibility.Visible : Visibility.Collapsed;
+			TextBlock ErrorLabel = new TextBlock()
+			{
+				TextWrapping = TextWrapping.Wrap,
+				Margin = new Thickness(0, 0, 0, 5),
+				Text = Field.Error,
+				Foreground = new SolidColorBrush(Colors.Red),
+				FontWeight = FontWeights.Bold,
+				Visibility = Field.HasError ? Visibility.Visible : Visibility.Collapsed
+			};
+
 			Container.Children.Add(ErrorLabel);
 
 			return ErrorLabel;
@@ -851,10 +976,13 @@ namespace Waher.Client.WPF.Dialogs
 				return false;
 			else
 			{
-				TextBlock TextBlock = new TextBlock();
-				TextBlock.TextWrapping = TextWrapping.Wrap;
-				TextBlock.Text = Field.Label;
-				TextBlock.Margin = new Thickness(0, 5, 0, 0);
+				TextBlock TextBlock = new TextBlock()
+				{
+					TextWrapping = TextWrapping.Wrap,
+					Text = Field.Label,
+					Margin = new Thickness(0, 5, 0, 0)
+				};
+
 				Container.Children.Add(TextBlock);
 
 				if (Field.Required)
@@ -870,11 +998,10 @@ namespace Waher.Client.WPF.Dialogs
 
 		private void TextBox_TextChanged(object sender, TextChangedEventArgs e)
 		{
-			TextBox TextBox = sender as TextBox;
-			if (TextBox == null)
+			if (!(sender is TextBox TextBox))
 				return;
 
-			string Var = TextBox.Name.Substring(5);
+			string Var = NameToVar(TextBox.Name);
 			Field Field = this.form[Var];
 			if (Field == null)
 				return;
@@ -919,21 +1046,30 @@ namespace Waher.Client.WPF.Dialogs
 			i = 0;
 			foreach (Field Field in Form.Header)
 			{
-				ColumnDefinition = new System.Windows.Controls.ColumnDefinition();
-				ColumnDefinition.Width = GridLength.Auto;
+				ColumnDefinition = new ColumnDefinition()
+				{
+					Width = GridLength.Auto
+				};
+
 				Grid.ColumnDefinitions.Add(ColumnDefinition);
 
 				VarIndex[Field.Var] = i++;
 			}
 
-			RowDefinition = new System.Windows.Controls.RowDefinition();
-			RowDefinition.Height = GridLength.Auto;
+			RowDefinition = new System.Windows.Controls.RowDefinition()
+			{
+				Height = GridLength.Auto
+			};
+
 			Grid.RowDefinitions.Add(RowDefinition);
 
 			foreach (Field[] Row in Form.Records)
 			{
-				RowDefinition = new System.Windows.Controls.RowDefinition();
-				RowDefinition.Height = GridLength.Auto;
+				RowDefinition = new RowDefinition()
+				{
+					Height = GridLength.Auto
+				};
+
 				Grid.RowDefinitions.Add(RowDefinition);
 			}
 
@@ -953,9 +1089,12 @@ namespace Waher.Client.WPF.Dialogs
 				Border.Padding = new Thickness(5, 1, 5, 1);
 				Border.Background = Bg1;
 
-				TextBlock = new TextBlock();
-				TextBlock.FontWeight = FontWeights.Bold;
-				TextBlock.Text = Field.Label;
+				TextBlock = new TextBlock()
+				{
+					FontWeight = FontWeights.Bold,
+					Text = Field.Label
+				};
+
 				Border.Child = TextBlock;
 			}
 
@@ -984,8 +1123,11 @@ namespace Waher.Client.WPF.Dialogs
 					else
 						Border.Background = Bg1;
 
-					TextBlock = new TextBlock();
-					TextBlock.Text = Field.ValueString;
+					TextBlock = new TextBlock()
+					{
+						Text = Field.ValueString
+					};
+
 					Border.Child = TextBlock;
 				}
 			}
@@ -1001,6 +1143,40 @@ namespace Waher.Client.WPF.Dialogs
 		private void CancelButton_Click(object sender, RoutedEventArgs e)
 		{
 			this.form.Cancel();
+
+			this.DialogResult = false;
+		}
+
+		private void Window_Activated(object sender, EventArgs e)
+		{
+			if (this.makeVisible != null)
+			{
+				LinkedList<FrameworkElement> List = new LinkedList<FrameworkElement>();
+
+				while (this.makeVisible != null)
+				{
+					List.AddFirst(this.makeVisible);
+					this.makeVisible = this.makeVisible.Parent as FrameworkElement;
+				}
+
+				foreach (FrameworkElement E in List)
+				{
+					if (E.Focusable)
+						E.Focus();
+					else
+						E.BringIntoView();
+				}
+			}
+		}
+
+		private static string VarToName(string Var)
+		{
+			return "Form_" + Var.Replace("#", "__GATO__");
+		}
+
+		private static string NameToVar(string Name)
+		{
+			return Name.Substring(5).Replace("__GATO__", "#");
 		}
 
 		// TODO: Color picker.

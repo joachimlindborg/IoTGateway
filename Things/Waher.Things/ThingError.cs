@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-#if WINDOWS_UWP
 using Waher.Events;
-#endif
 
 namespace Waher.Things
 {
@@ -18,11 +16,46 @@ namespace Waher.Things
 		/// <summary>
 		/// Contains information about an error on a thing
 		/// </summary>
+		/// <param name="Thing">Thing reference.</param>
+		/// <param name="ErrorMessage">Error message.</param>
+		public ThingError(IThingReference Thing, string ErrorMessage)
+			: this(Thing.NodeId, Thing.SourceId, Thing.Partition, DateTime.Now, ErrorMessage)
+		{
+		}
+
+		/// <summary>
+		/// Contains information about an error on a thing
+		/// </summary>
 		/// <param name="NodeId">ID of node.</param>
 		/// <param name="SourceId">Optional ID of source containing node.</param>
-		/// <param name="CacheType">Optional Type of cache in which the Node ID is unique.</param>
-		public ThingError(string NodeId, string SourceId, string CacheType, DateTime Timestamp, string ErrorMessage)
-			: base(NodeId, SourceId, CacheType)
+		/// <param name="Partition">Optional partition in which the Node ID is unique.</param>
+		/// <param name="ErrorMessage">Error message.</param>
+		public ThingError(string NodeId, string SourceId, string Partition, string ErrorMessage)
+			: this(NodeId, SourceId, Partition, DateTime.Now, ErrorMessage)
+		{
+		}
+
+		/// <summary>
+		/// Contains information about an error on a thing
+		/// </summary>
+		/// <param name="Thing">Thing reference.</param>
+		/// <param name="Timestamp">Timestamp.</param>
+		/// <param name="ErrorMessage">Error message.</param>
+		public ThingError(IThingReference Thing, DateTime Timestamp, string ErrorMessage)
+			: this(Thing.NodeId, Thing.SourceId, Thing.Partition, Timestamp, ErrorMessage)
+		{
+		}
+
+		/// <summary>
+		/// Contains information about an error on a thing
+		/// </summary>
+		/// <param name="NodeId">ID of node.</param>
+		/// <param name="SourceId">Optional ID of source containing node.</param>
+		/// <param name="Partition">Optional partition in which the Node ID is unique.</param>
+		/// <param name="Timestamp">Timestamp.</param>
+		/// <param name="ErrorMessage">Error message.</param>
+		public ThingError(string NodeId, string SourceId, string Partition, DateTime Timestamp, string ErrorMessage)
+			: base(NodeId, SourceId, Partition)
 		{
 			this.timestamp = Timestamp;
 			this.errorMessage = ErrorMessage;
@@ -45,9 +78,9 @@ namespace Waher.Things
 		{
 			StringBuilder Output = new StringBuilder();
 
-			Output.Append(this.timestamp.ToShortDateString());
+			Output.Append(this.timestamp.ToString("d"));
 			Output.Append(", ");
-			Output.Append(this.timestamp.ToLongTimeString());
+			Output.Append(this.timestamp.ToString("T"));
 
 			if (!string.IsNullOrEmpty(this.NodeId))
 			{
@@ -59,10 +92,10 @@ namespace Waher.Things
 					Output.Append(", ");
 					Output.Append(this.SourceId);
 
-					if (!string.IsNullOrEmpty(this.CacheType))
+					if (!string.IsNullOrEmpty(this.Partition))
 					{
 						Output.Append(", ");
-						Output.Append(this.CacheType);
+						Output.Append(this.Partition);
 					}
 				}
 			}

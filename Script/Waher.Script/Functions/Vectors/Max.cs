@@ -19,6 +19,7 @@ namespace Waher.Script.Functions.Vectors
         /// <param name="Argument">Argument.</param>
         /// <param name="Start">Start position in script expression.</param>
         /// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
         public Max(ScriptNode Argument, int Start, int Length, Expression Expression)
             : base(Argument, Start, Length, Expression)
         {
@@ -100,7 +101,10 @@ namespace Waher.Script.Functions.Vectors
 
             foreach (IElement E in Values.ChildElements)
             {
-                if (Result == null || S.Compare(Result, E) < 0)
+				if (E.AssociatedObjectValue == null)
+					continue;
+
+				if (Result == null || S.Compare(Result, E) < 0)
                 {
                     Result = E;
                     S = Result.AssociatedSet as IOrderedSet;

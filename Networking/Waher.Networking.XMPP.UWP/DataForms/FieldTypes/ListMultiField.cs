@@ -35,6 +35,29 @@ namespace Waher.Networking.XMPP.DataForms.FieldTypes
 		}
 
 		/// <summary>
+		/// ListMulti form field.
+		/// </summary>
+		/// <param name="Var">Variable name</param>
+		/// <param name="Values">Values for the field (string representations).</param>
+		public ListMultiField(string Var, string[] Values)
+			: base(null, Var, string.Empty, false, Values, null, string.Empty, null, null,
+				  string.Empty, false, false, false)
+		{
+		}
+
+		/// <summary>
+		/// ListMulti form field.
+		/// </summary>
+		/// <param name="Var">Variable name</param>
+		/// <param name="Label"></param>
+		/// <param name="Values">Values for the field (string representations).</param>
+		public ListMultiField(string Var, string Label, string[] Values)
+			: base(null, Var, Label, false, Values, null, string.Empty, null, null,
+				  string.Empty, false, false, false)
+		{
+		}
+
+		/// <summary>
 		/// <see cref="Field.TypeName"/>
 		/// </summary>
 		public override string TypeName

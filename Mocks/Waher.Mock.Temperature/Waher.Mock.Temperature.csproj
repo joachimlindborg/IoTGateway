@@ -10,10 +10,11 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Waher.Mock.Temperature</RootNamespace>
     <AssemblyName>Waher.Mock.Temperature</AssemblyName>
-    <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>
     <TargetFrameworkProfile>
     </TargetFrameworkProfile>
     <FileAlignment>512</FileAlignment>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
     <PlatformTarget>x86</PlatformTarget>
@@ -48,51 +49,55 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Events\Waher.Events.Console\Waher.Events.Console.csproj">
-      <Project>{2598AAA5-67A3-4952-B104-AB96BD0D5C0D}</Project>
+      <Project>{549bb008-3bb9-4882-b5dc-782b58d2d7b4}</Project>
       <Name>Waher.Events.Console</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\Events\Waher.Events.XMPP\Waher.Events.XMPP.csproj">
-      <Project>{F648F504-2515-4700-8B2F-64C3931ED954}</Project>
+      <Project>{f3789e37-22a3-4103-9281-0e0ce193690e}</Project>
       <Name>Waher.Events.XMPP</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\Events\Waher.Events\Waher.Events.csproj">
-      <Project>{A8EB7717-F5DE-419A-BB10-D213BC6FA654}</Project>
+      <Project>{8ae9d52d-28cd-4f83-98de-b6a016f5c7ba}</Project>
       <Name>Waher.Events</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\Networking\Waher.Networking.XMPP.Chat\Waher.Networking.XMPP.Chat.csproj">
-      <Project>{DA829B91-7E2D-4A3F-9960-2C6FA83B035D}</Project>
+      <Project>{570e55d2-8182-4bd3-bc12-b346a210611a}</Project>
       <Name>Waher.Networking.XMPP.Chat</Name>
     </ProjectReference>
+    <ProjectReference Include="..\..\Networking\Waher.Networking.XMPP.Concentrator\Waher.Networking.XMPP.Concentrator.csproj">
+      <Project>{adf456c6-dc01-460f-9270-dfa4385b92e0}</Project>
+      <Name>Waher.Networking.XMPP.Concentrator</Name>
+    </ProjectReference>
     <ProjectReference Include="..\..\Networking\Waher.Networking.XMPP.Control\Waher.Networking.XMPP.Control.csproj">
-      <Project>{1ebcc0d6-a725-4468-8625-19443a34a449}</Project>
+      <Project>{c5151b99-69e3-4ba1-9328-fba82facf159}</Project>
       <Name>Waher.Networking.XMPP.Control</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\Networking\Waher.Networking.XMPP.Interoperability\Waher.Networking.XMPP.Interoperability.csproj">
-      <Project>{82CDAB8E-15B0-4EB4-A454-261D210559C4}</Project>
+      <Project>{9578f172-9272-4a71-b016-630afbbce1d4}</Project>
       <Name>Waher.Networking.XMPP.Interoperability</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\Networking\Waher.Networking.XMPP.Provisioning\Waher.Networking.XMPP.Provisioning.csproj">
-      <Project>{1747b647-98c1-448d-a5da-96dd3082359f}</Project>
+      <Project>{3cd1a7c7-7cd1-418d-a6cd-ba057b04ea42}</Project>
       <Name>Waher.Networking.XMPP.Provisioning</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\Networking\Waher.Networking.XMPP.Sensor\Waher.Networking.XMPP.Sensor.csproj">
-      <Project>{666B77A2-5BF1-419C-BFF2-C5F6B5CB95F6}</Project>
+      <Project>{ac5aff6e-1d81-4142-95c5-472f615f3167}</Project>
       <Name>Waher.Networking.XMPP.Sensor</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\Networking\Waher.Networking.XMPP\Waher.Networking.XMPP.csproj">
-      <Project>{40F992BF-DE42-43C4-A1FE-C2B84A6BA4BB}</Project>
+      <Project>{4d96e9bc-6fc0-4866-9e6b-3f5a30de1011}</Project>
       <Name>Waher.Networking.XMPP</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\Networking\Waher.Networking\Waher.Networking.csproj">
-      <Project>{297F40EF-37FA-4208-8DB4-C2971AF2B313}</Project>
+      <Project>{9f60a3e1-ee96-4648-8970-76e67b086a63}</Project>
       <Name>Waher.Networking</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\Things\Waher.Things\Waher.Things.csproj">
-      <Project>{714B8894-F2F0-47D8-9B28-CD3B1E8D427A}</Project>
+      <Project>{1659833d-9a9a-4147-9237-2ba8d96086bc}</Project>
       <Name>Waher.Things</Name>
     </ProjectReference>
     <ProjectReference Include="..\Waher.Mock\Waher.Mock.csproj">
-      <Project>{19F826FF-DBA3-4490-AE04-2D08959EFBA4}</Project>
+      <Project>{3e5ef375-1080-44f9-9084-c32a0e9cbcf0}</Project>
       <Name>Waher.Mock</Name>
     </ProjectReference>
   </ItemGroup>

@@ -39,7 +39,7 @@ namespace Waher.Script.Objects
 		/// </summary>
 		public override string ToString()
         {
-            return "\"" + this.value.Replace("\\", "\\\\").Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t").Replace("\b", "\\b").Replace("\"", "\\\"") + "\"";
+			return Expression.ToString(this.value);
         }
 
         /// <summary>
@@ -113,7 +113,7 @@ namespace Waher.Script.Objects
         }
 
         /// <summary>
-        /// <see cref="Object.Equals"/>
+        /// <see cref="Object.Equals(object)"/>
         /// </summary>
         public override bool Equals(object obj)
         {
@@ -125,7 +125,7 @@ namespace Waher.Script.Objects
         }
 
         /// <summary>
-        /// <see cref="Object.GetHashCode"/>
+        /// <see cref="Object.GetHashCode()"/>
         /// </summary>
         public override int GetHashCode()
         {
@@ -158,7 +158,12 @@ namespace Waher.Script.Objects
                     return false;
                 }
             }
-            else if (DesiredType.IsAssignableFrom(typeof(StringValue)))
+			else if (DesiredType.GetTypeInfo().IsAssignableFrom(typeof(string).GetTypeInfo()))
+			{
+				Value = this.value;
+				return true;
+			}
+			else if (DesiredType.GetTypeInfo().IsAssignableFrom(typeof(StringValue).GetTypeInfo()))
             {
                 Value = this;
                 return true;

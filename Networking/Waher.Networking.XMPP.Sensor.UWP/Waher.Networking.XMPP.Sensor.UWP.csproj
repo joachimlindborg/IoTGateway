@@ -35,6 +35,7 @@
     <DefineConstants>TRACE;NETFX_CORE;WINDOWS_UWP</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <DocumentationFile>bin\Release\Waher.Networking.XMPP.Sensor.UWP.XML</DocumentationFile>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
     <PlatformTarget>x86</PlatformTarget>
@@ -46,6 +47,7 @@
     <PlatformTarget>x86</PlatformTarget>
     <UseVSHostingProcess>false</UseVSHostingProcess>
     <ErrorReport>prompt</ErrorReport>
+    <DocumentationFile>bin\x86\Debug\Waher.Networking.XMPP.Sensor.UWP.XML</DocumentationFile>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
     <PlatformTarget>x86</PlatformTarget>
@@ -57,6 +59,7 @@
     <PlatformTarget>x86</PlatformTarget>
     <UseVSHostingProcess>false</UseVSHostingProcess>
     <ErrorReport>prompt</ErrorReport>
+    <DocumentationFile>bin\x86\Release\Waher.Networking.XMPP.Sensor.UWP.XML</DocumentationFile>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|ARM'">
     <PlatformTarget>ARM</PlatformTarget>
@@ -104,9 +107,13 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- A reference to the entire .Net Framework and Windows SDK are automatically included -->
+    <None Include="Package.nuspec">
+      <SubType>Designer</SubType>
+    </None>
     <None Include="project.json" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CustomSensorDataClientRequest.cs" />
     <Compile Include="FieldSubscriptionRule.cs" />
     <Compile Include="InternalReadoutErrorsEventArgs.cs" />
     <Compile Include="InternalReadoutEventArgs.cs" />
@@ -114,6 +121,7 @@
     <Compile Include="InternalReadoutRequest.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SensorClient.cs" />
+    <Compile Include="SensorData.cs" />
     <Compile Include="SensorDataClientRequest.cs" />
     <Compile Include="SensorDataReadoutState.cs" />
     <Compile Include="SensorDataRequest.cs" />
@@ -124,33 +132,45 @@
     <EmbeddedResource Include="Properties\Waher.Networking.XMPP.Sensor.UWP.rd.xml" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\Content\Waher.Content.UWP\Waher.Content.UWP.csproj">
-      <Project>{0bde451b-569c-47d5-96fd-025ded09e814}</Project>
-      <Name>Waher.Content.UWP</Name>
+    <ProjectReference Include="..\..\Content\Waher.Content.Xml\Waher.Content.Xml.csproj">
+      <Project>{8aeeb562-a2d3-4061-8384-a9c04920e110}</Project>
+      <Name>Waher.Content.Xml</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\Events\Waher.Events.UWP\Waher.Events.UWP.csproj">
-      <Project>{e978928a-f65c-4e38-a489-6e93d03eb8d6}</Project>
-      <Name>Waher.Events.UWP</Name>
+    <ProjectReference Include="..\..\Content\Waher.Content\Waher.Content.csproj">
+      <Project>{03f3b861-5ef2-4d02-9ec2-aaa7374f5e58}</Project>
+      <Name>Waher.Content</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\Runtime\Waher.Runtime.Timing.UWP\Waher.Runtime.Timing.UWP.csproj">
-      <Project>{3cba3d77-4458-4ce2-a917-2853154f4415}</Project>
-      <Name>Waher.Runtime.Timing.UWP</Name>
+    <ProjectReference Include="..\..\Events\Waher.Events\Waher.Events.csproj">
+      <Project>{8ae9d52d-28cd-4f83-98de-b6a016f5c7ba}</Project>
+      <Name>Waher.Events</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\Things\Waher.Things.UWP\Waher.Things.UWP.csproj">
-      <Project>{37f816e0-bf9b-4918-8f78-bb7269e0ffa5}</Project>
-      <Name>Waher.Things.UWP</Name>
+    <ProjectReference Include="..\..\Runtime\Waher.Runtime.Timing\Waher.Runtime.Timing.csproj">
+      <Project>{e98a01a1-66e5-4159-9935-11a8e76f870a}</Project>
+      <Name>Waher.Runtime.Timing</Name>
     </ProjectReference>
-    <ProjectReference Include="..\Waher.Networking.UWP\Waher.Networking.UWP.csproj">
-      <Project>{0ef97fbe-80c0-42ff-943b-77978af8c867}</Project>
-      <Name>Waher.Networking.UWP</Name>
+    <ProjectReference Include="..\..\Things\Waher.Things\Waher.Things.csproj">
+      <Project>{1659833d-9a9a-4147-9237-2ba8d96086bc}</Project>
+      <Name>Waher.Things</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Waher.Networking.XMPP.PEP.UWP\Waher.Networking.XMPP.PEP.UWP.csproj">
+      <Project>{e8115045-7cfb-4fb1-ac25-2ba4ee00485e}</Project>
+      <Name>Waher.Networking.XMPP.PEP.UWP</Name>
     </ProjectReference>
     <ProjectReference Include="..\Waher.Networking.XMPP.Provisioning.UWP\Waher.Networking.XMPP.Provisioning.UWP.csproj">
       <Project>{e2232343-ab24-4c1d-9642-889f184210af}</Project>
       <Name>Waher.Networking.XMPP.Provisioning.UWP</Name>
     </ProjectReference>
+    <ProjectReference Include="..\Waher.Networking.XMPP.PubSub.UWP\Waher.Networking.XMPP.PubSub.UWP.csproj">
+      <Project>{47395fb6-ad33-4c2c-95b3-8fbbbc3b183d}</Project>
+      <Name>Waher.Networking.XMPP.PubSub.UWP</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Waher.Networking.XMPP.UWP\Waher.Networking.XMPP.UWP.csproj">
       <Project>{a41b6f92-8556-443b-bcd9-86e81e99e961}</Project>
       <Name>Waher.Networking.XMPP.UWP</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Waher.Networking\Waher.Networking.csproj">
+      <Project>{9f60a3e1-ee96-4648-8970-76e67b086a63}</Project>
+      <Name>Waher.Networking</Name>
     </ProjectReference>
   </ItemGroup>
   <PropertyGroup Condition=" '$(VisualStudioVersion)' == '' or '$(VisualStudioVersion)' &lt; '14.0' ">
@@ -160,6 +180,10 @@
   <PropertyGroup>
     <PreBuildEvent>xcopy "$(SolutionDir)Networking\Waher.Networking.XMPP.Sensor\*.cs" "$(ProjectDir)" /Y
 </PreBuildEvent>
+  </PropertyGroup>
+  <PropertyGroup>
+    <PostBuildEvent>cd "$(ProjectDir)bin"
+"$(SolutionDir)..\nuget" pack ..\Package.nuspec</PostBuildEvent>
   </PropertyGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

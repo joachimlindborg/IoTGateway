@@ -3,15 +3,18 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using Waher.Content;
-using Waher.Script;
+using Waher.Runtime.Inventory;
 
-namespace Waher.Networking.HTTP.Multipart
+namespace Waher.Content.Multipart
 {
 	/// <summary>
 	/// Decoder of URL encoded web forms.
 	/// </summary>
 	public class WwwFormDecoder : IContentDecoder
 	{
+		/// <summary>
+		/// application/x-www-form-urlencoded
+		/// </summary>
 		public const string ContentType = "application/x-www-form-urlencoded";
 
 		/// <summary>
@@ -76,9 +79,10 @@ namespace Waher.Networking.HTTP.Multipart
 		/// <param name="Data">Encoded object.</param>
 		/// <param name="Encoding">Any encoding specified. Can be null if no encoding specified.</param>
 		/// <param name="Fields">Any content-type related fields and their corresponding values.</param>
+		///	<param name="BaseUri">Base URI, if any. If not available, value is null.</param>
 		/// <returns>Decoded object.</returns>
 		/// <exception cref="ArgumentException">If the object cannot be decoded.</exception>
-		public object Decode(string ContentType, byte[] Data, Encoding Encoding, KeyValuePair<string, string>[] Fields)
+		public object Decode(string ContentType, byte[] Data, Encoding Encoding, KeyValuePair<string, string>[] Fields, Uri BaseUri)
 		{
 			Dictionary<string, string> Form = new Dictionary<string, string>();
 			string s = Encoding.GetString(Data);

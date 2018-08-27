@@ -14,10 +14,10 @@ namespace Waher.Networking.XMPP.Sensor
 	public abstract class SensorDataRequest
 	{
 		private Dictionary<string, bool> fieldsByName = null;
-		private int seqNr;
+		private string id;
 		private string remoteJid;
 		private string actor;
-		private ThingReference[] nodes;
+		private IThingReference[] nodes;
 		private FieldType types;
 		private string[] fieldsNames;
 		private DateTime from;
@@ -27,11 +27,12 @@ namespace Waher.Networking.XMPP.Sensor
 		private string deviceToken;
 		private string userToken;
 		private object tag = null;
+		private int nodesLeft;
 
 		/// <summary>
 		/// Base class for sensor data requests.
 		/// </summary>
-		/// <param name="SeqNr">Sequence number assigned to the request.</param>
+		/// <param name="Id">Request identity.</param>
 		/// <param name="RemoteJID">JID of the other side of the conversation in the sensor data readout.</param>
 		/// <param name="Actor">Actor causing the request to be made.</param>
 		/// <param name="Nodes">Array of nodes to read. Can be null or empty, if reading a sensor that is not a concentrator.</param>
@@ -40,16 +41,17 @@ namespace Waher.Networking.XMPP.Sensor
 		/// <param name="From">From what time readout is to be made. Use <see cref="DateTime.MinValue"/> to specify no lower limit.</param>
 		/// <param name="To">To what time readout is to be made. Use <see cref="DateTime.MaxValue"/> to specify no upper limit.</param>
 		/// <param name="When">When the readout is to be made. Use <see cref="DateTime.MinValue"/> to start the readout immediately.</param>
-		/// <param name="ServiceToken">Optional service token, as defined in XEP-0324.</param>
-		/// <param name="DeviceToken">Optional device token, as defined in XEP-0324.</param>
-		/// <param name="UserToken">Optional user token, as defined in XEP-0324.</param>
-		internal SensorDataRequest(int SeqNr, string RemoteJID, string Actor, ThingReference[] Nodes, FieldType Types, string[] FieldNames, 
+		/// <param name="ServiceToken">Optional service token.</param>
+		/// <param name="DeviceToken">Optional device token.</param>
+		/// <param name="UserToken">Optional user token.</param>
+		internal SensorDataRequest(string Id, string RemoteJID, string Actor, IThingReference[] Nodes, FieldType Types, string[] FieldNames, 
 			DateTime From, DateTime To, DateTime When, string ServiceToken, string DeviceToken, string UserToken)
 		{
-			this.seqNr = SeqNr;
+			this.id = Id;
 			this.remoteJid = RemoteJID;
 			this.actor = Actor;
 			this.nodes = Nodes;
+			this.nodesLeft = Nodes == null ? 0 : Nodes.Length;
 			this.types = Types;
 			this.fieldsNames = FieldNames;
 			this.from = From;
@@ -61,9 +63,9 @@ namespace Waher.Networking.XMPP.Sensor
 		}
 
 		/// <summary>
-		/// Sequence number assigned to the request.
+		/// Requesst identity.
 		/// </summary>
-		public int SeqNr { get { return this.seqNr; } }
+		public string Id { get { return this.id; } }
 
 		/// <summary>
 		/// JID of the other side of the conversation in the sensor data readout.
@@ -76,9 +78,29 @@ namespace Waher.Networking.XMPP.Sensor
 		public string Actor { get { return this.actor; } }
 
 		/// <summary>
+		/// Nodes left before readout is complete.
+		/// </summary>
+		public int NodesLeft
+		{
+			get { return this.nodesLeft; }
+		}
+
+		/// <summary>
+		/// Decreases the number of nodes left.
+		/// </summary>
+		/// <returns>If all nodes have been processed.</returns>
+		protected bool DecNodesLeft()
+		{
+			if (this.nodesLeft > 0)
+				this.nodesLeft--;
+
+			return this.nodesLeft == 0;
+		}
+
+		/// <summary>
 		/// Array of nodes to read. Can be null or empty, if reading a sensor that is not a concentrator.
 		/// </summary>
-		public ThingReference[] Nodes
+		public IThingReference[] Nodes
 		{
 			get { return this.nodes; }
 			internal set { this.nodes = value; }
@@ -122,17 +144,17 @@ namespace Waher.Networking.XMPP.Sensor
 		}
 
 		/// <summary>
-		/// Optional service token, as defined in XEP-0324.
+		/// Optional service token.
 		/// </summary>
 		public string ServiceToken { get { return this.serviceToken; } }
 
 		/// <summary>
-		/// Optional device token, as defined in XEP-0324.
+		/// Optional device token.
 		/// </summary>
 		public string DeviceToken { get { return this.deviceToken; } }
 
 		/// <summary>
-		/// Optional user token, as defined in XEP-0324.
+		/// Optional user token.
 		/// </summary>
 		public string UserToken { get { return this.userToken; } }
 

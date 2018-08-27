@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Xml;
-using Waher.Content;
+using Waher.Content.Xml;
 using Waher.Events;
 using Waher.Things;
 using Waher.Things.SensorData;
@@ -27,7 +27,7 @@ namespace Waher.Networking.XMPP.Sensor
 	/// Delegate for events triggered when readout fields have been received.
 	/// </summary>
 	/// <param name="Sender">Sender of event.</param>
-	/// <param name="NewErrors">New fields received. For a list of all fields received, see <see cref="SensorDataClientRequest.ReadFields"/>.</param>
+	/// <param name="NewFields">New fields received. For a list of all fields received, see <see cref="SensorDataClientRequest.ReadFields"/>.</param>
 	public delegate void SensorDataReadoutFieldsReportedEventHandler(object Sender, IEnumerable<Field> NewFields);
 
 	/// <summary>
@@ -35,7 +35,11 @@ namespace Waher.Networking.XMPP.Sensor
 	/// </summary>
 	public class SensorDataClientRequest : SensorDataRequest
 	{
+		/// <summary>
+		/// Reference to sensor client object.
+		/// </summary>
 		protected SensorClient sensorClient;
+
 		private List<Field> readFields = null;
 		private List<ThingError> errors = null;
 		private SensorDataReadoutState state = SensorDataReadoutState.Requested;
@@ -45,7 +49,7 @@ namespace Waher.Networking.XMPP.Sensor
 		/// <summary>
 		/// Manages a sensor data client request.
 		/// </summary>
-		/// <param name="SeqNr">Sequence number assigned to the request.</param>
+		/// <param name="Id">Request identity.</param>
 		/// <param name="SensorClient">Sensor client object.</param>
 		/// <param name="RemoteJID">JID of the other side of the conversation in the sensor data readout.</param>
 		/// <param name="Actor">Actor causing the request to be made.</param>
@@ -55,12 +59,12 @@ namespace Waher.Networking.XMPP.Sensor
 		/// <param name="From">From what time readout is to be made. Use <see cref="DateTime.MinValue"/> to specify no lower limit.</param>
 		/// <param name="To">To what time readout is to be made. Use <see cref="DateTime.MaxValue"/> to specify no upper limit.</param>
 		/// <param name="When">When the readout is to be made. Use <see cref="DateTime.MinValue"/> to start the readout immediately.</param>
-		/// <param name="ServiceToken">Optional service token, as defined in XEP-0324.</param>
-		/// <param name="DeviceToken">Optional device token, as defined in XEP-0324.</param>
-		/// <param name="UserToken">Optional user token, as defined in XEP-0324.</param>
-		internal SensorDataClientRequest(int SeqNr, SensorClient SensorClient, string RemoteJID, string Actor, ThingReference[] Nodes, FieldType Types,
+		/// <param name="ServiceToken">Optional service token.</param>
+		/// <param name="DeviceToken">Optional device token.</param>
+		/// <param name="UserToken">Optional user token.</param>
+		internal SensorDataClientRequest(string Id, SensorClient SensorClient, string RemoteJID, string Actor, IThingReference[] Nodes, FieldType Types,
 			string[] FieldNames, DateTime From, DateTime To, DateTime When, string ServiceToken, string DeviceToken, string UserToken)
-			: base(SeqNr, RemoteJID, Actor, Nodes, Types, FieldNames, From, To, When, ServiceToken, DeviceToken, UserToken)
+			: base(Id, RemoteJID, Actor, Nodes, Types, FieldNames, From, To, When, ServiceToken, DeviceToken, UserToken)
 		{
 			this.sensorClient = SensorClient;
 		}
@@ -117,18 +121,11 @@ namespace Waher.Networking.XMPP.Sensor
 
 		internal void Fail(string Reason)
 		{
-			lock (this.synchObject)
-			{
-				if (this.errors == null)
-					this.errors = new List<ThingError>();
-
-				this.errors.Add(new ThingError(string.Empty, string.Empty, string.Empty, DateTime.Now, Reason));
-			}
-
+			this.LogErrors(new ThingError[] { new ThingError(string.Empty, string.Empty, string.Empty, DateTime.Now, Reason) });
 			this.State = SensorDataReadoutState.Failure;
 		}
 
-		internal void LogErrors(IEnumerable<ThingError> Errors)
+		internal virtual void LogErrors(IEnumerable<ThingError> Errors)
 		{
 			lock (this.synchObject)
 			{
@@ -152,7 +149,7 @@ namespace Waher.Networking.XMPP.Sensor
 			}
 		}
 
-		internal void LogFields(IEnumerable<Field> Fields)
+		internal virtual void LogFields(IEnumerable<Field> Fields)
 		{
 			lock (this.synchObject)
 			{
@@ -249,41 +246,23 @@ namespace Waher.Networking.XMPP.Sensor
 		/// <summary>
 		/// Cancels the readout.
 		/// </summary>
-		public void Cancel()
+		public virtual void Cancel()
 		{
 			StringBuilder Xml = new StringBuilder();
 
 			Xml.Append("<cancel xmlns='");
 			Xml.Append(SensorClient.NamespaceSensorData);
-			Xml.Append("' seqnr='");
-			Xml.Append(this.SeqNr.ToString());
+			Xml.Append("' id='");
+			Xml.Append(XML.Encode(this.Id));
 			Xml.Append("'/>");
 
-			this.sensorClient.Client.SendIqGet(this.RemoteJID, Xml.ToString(), this.CancelResponse, null);
+			this.sensorClient?.Client.SendIqGet(this.RemoteJID, Xml.ToString(), this.CancelResponse, null);
 		}
 
 		private void CancelResponse(object Sender, IqResultEventArgs e)
 		{
 			if (e.Ok)
-			{
-				foreach (XmlNode N in e.Response.ChildNodes)
-				{
-					if (N.LocalName == "cancelled")
-					{
-						XmlElement E = (XmlElement)N;
-						int SeqNr = XML.Attribute(E, "seqnr", 0);
-
-						if (SeqNr == this.SeqNr)
-							this.Cancelled();
-						else
-							this.Fail("Unable to cancel. Sequence number mismatch.");
-
-						return;
-					}
-				}
-
-				this.Fail("Invalid response to cancellation request.");
-			}
+				this.Cancelled();
 			else
 				this.Fail(e.ErrorText);
 		}

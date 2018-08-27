@@ -13,9 +13,9 @@ namespace Waher.Script.Operators.Membership
 	/// </summary>
 	public class NamedMethodCall : UnaryOperator
 	{
-		private string name;
-		private ScriptNode[] parameters;
-		private int nrParameters;
+		private readonly string name;
+		private readonly ScriptNode[] parameters;
+		private readonly int nrParameters;
 
 		/// <summary>
 		/// Named method call operator.
@@ -25,6 +25,7 @@ namespace Waher.Script.Operators.Membership
 		/// <param name="Parameters">Method arguments.</param>
 		/// <param name="Start">Start position in script expression.</param>
 		/// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
 		public NamedMethodCall(ScriptNode Operand, string Name, ScriptNode[] Parameters, int Start, int Length, Expression Expression)
 			: base(Operand, Start, Length, Expression)
 		{
@@ -345,8 +346,9 @@ namespace Waher.Script.Operators.Membership
 		{
 			List<KeyValuePair<MethodInfo, ParameterInfo[]>> Result = new List<KeyValuePair<MethodInfo, ParameterInfo[]>>();
 			ParameterInfo[] ParameterInfo;
+			IEnumerable<MethodInfo> Methods = Type.GetRuntimeMethods();
 
-			foreach (MethodInfo MI in Type.GetMethods())
+			foreach (MethodInfo MI in Methods)
 			{
 				if (MI.Name != this.name)
 					continue;
@@ -355,7 +357,7 @@ namespace Waher.Script.Operators.Membership
 				if (ParameterInfo.Length != this.nrParameters)
 					continue;
 
-				Result.Add(new KeyValuePair<MethodInfo, System.Reflection.ParameterInfo[]>(MI, ParameterInfo));
+				Result.Add(new KeyValuePair<MethodInfo, ParameterInfo[]>(MI, ParameterInfo));
 			}
 
 			return Result.ToArray();
@@ -368,6 +370,6 @@ namespace Waher.Script.Operators.Membership
 		private KeyValuePair<string, int>[] byReference = null;
 		private object[] methodArguments = null;
 		private bool[] methodArgumentExtensions = null;
-		private object synchObject = new object();
+		private readonly object synchObject = new object();
 	}
 }

@@ -1,18 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
-#if !WINDOWS_UWP
-using System.Drawing;
-using System.Drawing.Imaging;
-#endif
 using System.IO;
 using System.Text;
 using System.Xml;
+using SkiaSharp;
+using Waher.Content.Xml;
+using Waher.Events;
 using Waher.Script;
-using Waher.Script.Exceptions;
-#if !WINDOWS_UWP
 using Waher.Script.Graphs;
-#endif
-using Waher.Script.Objects;
 
 namespace Waher.Content.Markdown.Model.SpanElements
 {
@@ -21,8 +16,8 @@ namespace Waher.Content.Markdown.Model.SpanElements
 	/// </summary>
 	public class InlineScript : MarkdownElement
 	{
-        private Expression expression;
-        private Variables variables;
+		private Expression expression;
+		private Variables variables;
 		private bool aloneInParagraph;
 
 		/// <summary>
@@ -31,11 +26,12 @@ namespace Waher.Content.Markdown.Model.SpanElements
 		/// <param name="Document">Markdown document.</param>
 		/// <param name="Expression">Expression.</param>
 		/// <param name="Variables">Collection of variables to use when executing the script.</param>
+		/// <param name="AloneInParagraph">If construct stands alone in a paragraph.</param>
 		public InlineScript(MarkdownDocument Document, Expression Expression, Variables Variables, bool AloneInParagraph)
 			: base(Document)
 		{
-            this.expression = Expression;
-            this.variables = Variables;
+			this.expression = Expression;
+			this.variables = Variables;
 			this.aloneInParagraph = AloneInParagraph;
 		}
 
@@ -55,74 +51,91 @@ namespace Waher.Content.Markdown.Model.SpanElements
 			get { return this.aloneInParagraph; }
 		}
 
+		private object EvaluateExpression()
+		{
+			try
+			{
+				return this.expression.Evaluate(this.variables);
+			}
+			catch (Exception ex)
+			{
+				ex = Log.UnnestException(ex);
+				this.Document.CheckException(ex);
+
+				return ex;
+			}
+		}
+
 		/// <summary>
 		/// Generates HTML for the markdown element.
 		/// </summary>
 		/// <param name="Output">HTML will be output here.</param>
 		public override void GenerateHTML(StringBuilder Output)
 		{
-            object Result = this.expression.Evaluate(this.variables);
-            if (Result == null)
-                return;
+			object Result = this.EvaluateExpression();
+			if (Result == null)
+				return;
 
+			SKImage Img;
 			string s;
 
-#if !WINDOWS_UWP
-			Graph G = Result as Graph;
-			Image Img;
-
-			if (G != null)
+			if (Result is Graph G)
 			{
-				GraphSettings GraphSettings = new GraphSettings();
-				Variable v;
-				object Obj;
-				double d;
-
-				if (this.variables.TryGetVariable("GraphWidth", out v) && (Obj = v.ValueObject) is double && (d = (double)Obj) >= 1)
+				using (SKImage Bmp = G.CreateBitmap(this.variables, out GraphSettings GraphSettings))
 				{
-					GraphSettings.Width = (int)Math.Round(d);
-					GraphSettings.MarginLeft = (int)Math.Round(15 * d / 640);
-					GraphSettings.MarginRight = GraphSettings.MarginLeft;
+					SKData Data = Bmp.Encode(SKEncodedImageFormat.Png, 100);
+					byte[] Bin = Data.ToArray();
+
+					s = System.Convert.ToBase64String(Bin, 0, Bin.Length);
+					s = "<img border=\"2\" width=\"" + GraphSettings.Width.ToString() + "\" height=\"" + GraphSettings.Height.ToString() +
+						"\" src=\"data:image/png;base64," + s + "\" />";
+
+					if (this.aloneInParagraph)
+						s = "<figure>" + s + "</figure>";
+
+					Data.Dispose();
 				}
-				else if (!this.variables.ContainsVariable("GraphWidth"))
-					this.variables["GraphWidth"] = (double)GraphSettings.Width;
-
-
-				if (this.variables.TryGetVariable("GraphHeight", out v) && (Obj = v.ValueObject) is double && (d = (double)Obj) >= 1)
-				{
-					GraphSettings.Height = (int)Math.Round(d);
-					GraphSettings.MarginTop = (int)Math.Round(15 * d / 480);
-					GraphSettings.MarginBottom = GraphSettings.MarginTop;
-					GraphSettings.LabelFontSize = 12 * d / 480;
-				}
-				else if (!this.variables.ContainsVariable("GraphHeight"))
-					this.variables["GraphHeight"] = (double)GraphSettings.Height;
-
-				Bitmap Bmp = G.CreateBitmap(GraphSettings);
-				MemoryStream ms = new MemoryStream();
-				Bmp.Save(ms, ImageFormat.Png);
-				byte[] Data = ms.GetBuffer();
-				s = System.Convert.ToBase64String(Data, 0, (int)ms.Position, Base64FormattingOptions.None);
-				s = "<img border=\"2\" width=\"" + GraphSettings.Width.ToString() + "\" height=\"" + GraphSettings.Height.ToString() +
-					"\" src=\"data:image/png;base64," + s + "\" />";
-
-				if (this.aloneInParagraph)
-					s = "<figure>" + s + "</figure>";
 			}
-			else if ((Img = Result as Image) != null)
+			else if ((Img = Result as SKImage) != null)
 			{
-				string ContentType;
-				byte[] Data = InternetContent.Encode(Img, Encoding.UTF8, out ContentType);
+				using (SKData Data = Img.Encode(SKEncodedImageFormat.Png, 100))
+				{
+					byte[] Bin = Data.ToArray();
 
-				s = System.Convert.ToBase64String(Data, 0, Data.Length, Base64FormattingOptions.None);
-				s = "<img border=\"2\" width=\"" + Img.Width.ToString() + "\" height=\"" + Img.Height.ToString() +
-					"\" src=\"data:" + ContentType + ";base64," + s + "\" />";
+					s = System.Convert.ToBase64String(Bin, 0, Bin.Length);
+					s = "<img border=\"2\" width=\"" + Img.Width.ToString() + "\" height=\"" + Img.Height.ToString() +
+						"\" src=\"data:image/png;base64," + s + "\" />";
 
-				if (this.aloneInParagraph)
-					s = "<figure>" + s + "</figure>";
+					if (this.aloneInParagraph)
+						s = "<figure>" + s + "</figure>";
+				}
+			}
+			else if (Result is Exception ex)
+			{
+				ex = Log.UnnestException(ex);
+
+				if (ex is AggregateException ex2)
+				{
+					StringBuilder sb = new StringBuilder();
+
+					foreach (Exception ex3 in ex2.InnerExceptions)
+					{
+						sb.Append("<p><font style=\"color:red\">");
+						sb.Append(XML.HtmlValueEncode(ex3.Message));
+						sb.AppendLine("</font></p>");
+					}
+
+					s = sb.ToString();
+				}
+				else
+				{
+					s = "<font style=\"color:red\">" + XML.HtmlValueEncode(ex.Message) + "</font>";
+
+					if (this.aloneInParagraph)
+						s = "<p>" + s + "</p>";
+				}
 			}
 			else
-#endif
 			{
 				s = XML.HtmlValueEncode(Result.ToString());
 
@@ -134,19 +147,19 @@ namespace Waher.Content.Markdown.Model.SpanElements
 
 			if (this.aloneInParagraph)
 				Output.AppendLine();
-        }
+		}
 
-        /// <summary>
-        /// Generates plain text for the markdown element.
-        /// </summary>
-        /// <param name="Output">Plain text will be output here.</param>
-        public override void GeneratePlainText(StringBuilder Output)
+		/// <summary>
+		/// Generates plain text for the markdown element.
+		/// </summary>
+		/// <param name="Output">Plain text will be output here.</param>
+		public override void GeneratePlainText(StringBuilder Output)
 		{
-            object Result = this.expression.Evaluate(this.variables);
-            if (Result == null)
-                return;
+			object Result = this.EvaluateExpression();
+			if (Result == null)
+				return;
 
-            Output.Append(Result.ToString());
+			Output.Append(Result.ToString());
 
 			if (this.aloneInParagraph)
 			{
@@ -163,55 +176,21 @@ namespace Waher.Content.Markdown.Model.SpanElements
 		/// <param name="TextAlignment">Alignment of text in element.</param>
 		public override void GenerateXAML(XmlWriter Output, XamlSettings Settings, TextAlignment TextAlignment)
 		{
-			object Result = this.expression.Evaluate(this.variables);
+			object Result = this.EvaluateExpression();
 			if (Result == null)
 				return;
 
-#if !WINDOWS_UWP
-			Graph G = Result as Graph;
-			Image Img;
+			SKImage Img;
 			string s;
 
-			if (G != null)
+			if (Result is Graph G)
 			{
-				GraphSettings GraphSettings = new GraphSettings();
-				Variable v;
-				object Obj;
-				double d;
+				using (SKImage Bmp = G.CreateBitmap(this.variables))
+				{
+					SKData Data = Bmp.Encode(SKEncodedImageFormat.Png, 100);
+					byte[] Bin = Data.ToArray();
 
-				if (this.variables.TryGetVariable("GraphWidth", out v) && (Obj = v.ValueObject) is double && (d = (double)Obj) >= 1)
-				{
-					GraphSettings.Width = (int)Math.Round(d);
-					GraphSettings.MarginLeft = (int)Math.Round(15 * d / 640);
-					GraphSettings.MarginRight = GraphSettings.MarginLeft;
-				}
-				else if (!this.variables.ContainsVariable("GraphWidth"))
-				{
-					this.variables["GraphWidth"] = (double)Settings.DefaultGraphWidth;
-					GraphSettings.MarginLeft = (int)Math.Round(15.0 * Settings.DefaultGraphWidth / 640);
-					GraphSettings.MarginRight = GraphSettings.MarginLeft;
-				}
-
-				if (this.variables.TryGetVariable("GraphHeight", out v) && (Obj = v.ValueObject) is double && (d = (double)Obj) >= 1)
-				{
-					GraphSettings.Height = (int)Math.Round(d);
-					GraphSettings.MarginTop = (int)Math.Round(15 * d / 480);
-					GraphSettings.MarginBottom = GraphSettings.MarginTop;
-					GraphSettings.LabelFontSize = 12 * d / 480;
-				}
-				else if (!this.variables.ContainsVariable("GraphHeight"))
-				{
-					this.variables["GraphHeight"] = (double)Settings.DefaultGraphHeight;
-					GraphSettings.MarginTop = (int)Math.Round(15.0 * Settings.DefaultGraphHeight / 480);
-					GraphSettings.MarginBottom = GraphSettings.MarginTop;
-				}
-
-				using (Bitmap Bmp = G.CreateBitmap(GraphSettings))
-				{
-					MemoryStream ms = new MemoryStream();
-					Bmp.Save(ms, ImageFormat.Png);
-					byte[] Data = ms.GetBuffer();
-					s = "data:image/png;base64," + System.Convert.ToBase64String(Data, 0, (int)ms.Position, Base64FormattingOptions.None);
+					s = "data:image/png;base64," + System.Convert.ToBase64String(Bin, 0, Bin.Length);
 
 					// TODO: WPF does not support data URI scheme. Change to local temporary file.
 
@@ -220,25 +199,66 @@ namespace Waher.Content.Markdown.Model.SpanElements
 					Output.WriteAttributeString("Width", Bmp.Width.ToString());
 					Output.WriteAttributeString("Height", Bmp.Height.ToString());
 					Output.WriteEndElement();
+
+					Data.Dispose();
 				}
 			}
-			else if ((Img = Result as Image) != null)
+			else if ((Img = Result as SKImage) != null)
 			{
-				string ContentType;
-				byte[] Data = InternetContent.Encode(Img, Encoding.UTF8, out ContentType);
+				using (SKData Data = Img.Encode(SKEncodedImageFormat.Png, 100))
+				{
+					byte[] Bin = Data.ToArray();
 
-				s = "data:" + ContentType + ";base64," + System.Convert.ToBase64String(Data, 0, Data.Length, Base64FormattingOptions.None);
+					s = "data:image/png;base64," + System.Convert.ToBase64String(Bin, 0, Bin.Length);
 
-				// TODO: WPF does not support data URI scheme. Change to local temporary file.
+					// TODO: WPF does not support data URI scheme. Change to local temporary file.
 
-				Output.WriteStartElement("Image");
-				Output.WriteAttributeString("Source", s);
-				Output.WriteAttributeString("Width", Img.Width.ToString());
-				Output.WriteAttributeString("Height", Img.Height.ToString());
-				Output.WriteEndElement();
+					Output.WriteStartElement("Image");
+					Output.WriteAttributeString("Source", s);
+					Output.WriteAttributeString("Width", Img.Width.ToString());
+					Output.WriteAttributeString("Height", Img.Height.ToString());
+					Output.WriteEndElement();
+				}
+			}
+			else if (Result is Exception ex)
+			{
+				ex = Log.UnnestException(ex);
+
+				if (ex is AggregateException ex2)
+				{
+					foreach (Exception ex3 in ex2.InnerExceptions)
+					{
+						Output.WriteStartElement("TextBlock");
+						Output.WriteAttributeString("TextWrapping", "Wrap");
+						Output.WriteAttributeString("Margin", Settings.ParagraphMargins);
+
+						if (TextAlignment != TextAlignment.Left)
+							Output.WriteAttributeString("TextAlignment", TextAlignment.ToString());
+
+						Output.WriteAttributeString("Foreground", "Red");
+						Output.WriteValue(ex.Message);
+						Output.WriteEndElement();
+					}
+				}
+				else
+				{
+					if (this.aloneInParagraph)
+					{
+						Output.WriteStartElement("TextBlock");
+						Output.WriteAttributeString("TextWrapping", "Wrap");
+						Output.WriteAttributeString("Margin", Settings.ParagraphMargins);
+						if (TextAlignment != TextAlignment.Left)
+							Output.WriteAttributeString("TextAlignment", TextAlignment.ToString());
+					}
+					else
+						Output.WriteStartElement("Run");
+
+					Output.WriteAttributeString("Foreground", "Red");
+					Output.WriteValue(ex.Message);
+					Output.WriteEndElement();
+				}
 			}
 			else
-#endif
 			{
 				if (this.aloneInParagraph)
 				{
@@ -256,10 +276,10 @@ namespace Waher.Content.Markdown.Model.SpanElements
 			}
 		}
 
-        /// <summary>
-        /// If the element is an inline span element.
-        /// </summary>
-        internal override bool InlineSpanElement
+		/// <summary>
+		/// If the element is an inline span element.
+		/// </summary>
+		internal override bool InlineSpanElement
 		{
 			get { return true; }
 		}
@@ -284,6 +304,18 @@ namespace Waher.Content.Markdown.Model.SpanElements
 			{
 				return "Baseline";
 			}
+		}
+
+		/// <summary>
+		/// Exports the element to XML.
+		/// </summary>
+		/// <param name="Output">XML Output.</param>
+		public override void Export(XmlWriter Output)
+		{
+			Output.WriteStartElement("Script");
+			Output.WriteAttributeString("expression", this.expression.Script);
+			Output.WriteAttributeString("aloneInParagraph", CommonTypes.Encode(this.aloneInParagraph));
+			Output.WriteEndElement();
 		}
 
 	}

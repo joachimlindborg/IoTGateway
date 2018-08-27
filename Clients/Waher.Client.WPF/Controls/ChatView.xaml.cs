@@ -2,7 +2,7 @@
 using System.IO;
 using System.Threading;
 using System.Collections.Generic;
-using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Xml;
 using System.Xml.Schema;
@@ -17,11 +17,13 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using Microsoft.Win32;
+using Waher.Content.Emoji.Emoji1;
+using Waher.Content.Markdown;
+using Waher.Content.Xml;
+using Waher.Content.Xsl;
+using Waher.Events;
 using Waher.Client.WPF.Controls.Chat;
 using Waher.Client.WPF.Model;
-using Waher.Content;
-using Waher.Content.Markdown;
-using Waher.Content.Emoji.Emoji1;
 
 namespace Waher.Client.WPF.Controls
 {
@@ -30,9 +32,7 @@ namespace Waher.Client.WPF.Controls
 	/// </summary>
 	public partial class ChatView : UserControl, ITabView
 	{
-		internal static readonly Emoji1LocalFiles Emoji1_24x24 = new Emoji1LocalFiles(Emoji1SourceFileType.Png64, 24, 24, 
-			"pack://siteoforigin:,,,/Graphics/Emoji1/png/64x64/%FILENAME%", File.Exists, File.ReadAllBytes);
-
+		private static Emoji1LocalFiles emoji1_24x24 = null;
 		private TreeNode node;
 
 		public ChatView(TreeNode Node)
@@ -40,6 +40,26 @@ namespace Waher.Client.WPF.Controls
 			this.node = Node;
 
 			InitializeComponent();
+		}
+
+		internal static void InitEmojis()
+		{
+			if (emoji1_24x24 == null)
+			{
+				string Folder = Assembly.GetExecutingAssembly().Location;
+				if (string.IsNullOrEmpty(Folder))
+					Folder = AppDomain.CurrentDomain.BaseDirectory;
+
+				emoji1_24x24 = new Emoji1LocalFiles(Emoji1SourceFileType.Png64, 24, 24,
+					System.IO.Path.Combine(MainWindow.AppDataFolder, "Graphics", "Emoji1", "png", "64x64", "%FILENAME%"),
+					System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Folder), "Graphics", "Emoji1.zip"),
+					System.IO.Path.Combine(MainWindow.AppDataFolder, "Graphics"));
+			}
+		}
+
+		public static Emoji1LocalFiles Emoji1_24x24
+		{
+			get { return emoji1_24x24; }
 		}
 
 		public void Dispose()
@@ -53,14 +73,13 @@ namespace Waher.Client.WPF.Controls
 
 		private void UserControl_SizeChanged(object sender, SizeChangedEventArgs e)
 		{
-			GridView GridView = this.ChatListView.View as GridView;
-			if (GridView != null)
+			if (this.ChatListView.View is GridView GridView)
 			{
-				GridView.Columns[1].Width = this.ActualWidth - GridView.Columns[0].ActualWidth - GridView.Columns[2].ActualWidth -
-					SystemParameters.VerticalScrollBarWidth - 8;
+				GridView.Columns[1].Width = Math.Max(this.ActualWidth - GridView.Columns[0].ActualWidth - GridView.Columns[2].ActualWidth -
+					SystemParameters.VerticalScrollBarWidth - 8, 10);
 			}
 
-			this.Input.Width = this.ActualWidth - EnterTextLabel.ActualWidth - this.SendButton.ActualWidth - 5;
+			this.Input.Width = Math.Max(this.ActualWidth - this.SendButton.ActualWidth - 16, 10);
 		}
 
 		private void Send_Click(object sender, RoutedEventArgs e)
@@ -111,13 +130,20 @@ namespace Waher.Client.WPF.Controls
 			}
 
 			Item = new ChatItem(ChatItemType.Transmitted, Msg, Markdown, Colors.Black, Colors.Honeydew);
-			this.ChatListView.Items.Add(Item);
-			this.ChatListView.ScrollIntoView(Item);
+			ListViewItem ListViewItem = new ListViewItem()
+			{
+				Content = Item,
+				Foreground = new SolidColorBrush(Colors.Black),
+				Background = new SolidColorBrush(Colors.Honeydew),
+				Margin = new Thickness(0)
+			};
+			this.ChatListView.Items.Add(ListViewItem);
+			this.ChatListView.ScrollIntoView(ListViewItem);
 
 			this.node.SendChatMessage(Msg, Markdown);
 		}
 
-		public void ChatMessageReceived(string Message, bool IsMarkdown)
+		public void ChatMessageReceived(string Message, bool IsMarkdown, MainWindow MainWindow)
 		{
 			MarkdownDocument Markdown;
 			ChatItem Item;
@@ -126,31 +152,16 @@ namespace Waher.Client.WPF.Controls
 			{
 				if (Message.IndexOf('|') >= 0)
 				{
-					string s;
 					int c = this.ChatListView.Items.Count;
 
 					if (c > 0 &&
 						(Item = this.ChatListView.Items[c - 1] as ChatItem) != null &&
 						Item.Type == ChatItemType.Received &&
 						(DateTime.Now - Item.LastUpdated).TotalSeconds < 10 &&
-						(s = Item.Message).IndexOf('|') >= 0)
+						Item.LastIsTable)
 					{
-						try
-						{
-							if (!s.EndsWith("\n"))
-								s += Environment.NewLine;
-
-							s += Message;
-							Markdown = new MarkdownDocument(s, new MarkdownSettings(Emoji1_24x24, false));
-							Item.Update(s, Markdown);
-							this.ChatListView.Items.Refresh();
-							this.ChatListView.ScrollIntoView(Item);
-							return;
-						}
-						catch (Exception)
-						{
-							// Ignore.
-						}
+						Item.Append(Message, this.ChatListView, MainWindow);
+						return;
 					}
 				}
 
@@ -167,8 +178,15 @@ namespace Waher.Client.WPF.Controls
 				Markdown = null;
 
 			Item = new ChatItem(ChatItemType.Received, Message, Markdown, Colors.Black, Colors.AliceBlue);
-			this.ChatListView.Items.Add(Item);
-			this.ChatListView.ScrollIntoView(Item);
+			ListViewItem ListViewItem = new ListViewItem()
+			{
+				Content = Item,
+				Foreground = new SolidColorBrush(Colors.Black),
+				Background = new SolidColorBrush(Colors.AliceBlue),
+				Margin = new Thickness(0)
+			};
+			this.ChatListView.Items.Add(ListViewItem);
+			this.ChatListView.ScrollIntoView(ListViewItem);
 		}
 
 		private void UserControl_GotFocus(object sender, RoutedEventArgs e)
@@ -188,13 +206,15 @@ namespace Waher.Client.WPF.Controls
 
 		public void SaveAsButton_Click(object sender, RoutedEventArgs e)
 		{
-			SaveFileDialog Dialog = new SaveFileDialog();
-			Dialog.AddExtension = true;
-			Dialog.CheckPathExists = true;
-			Dialog.CreatePrompt = false;
-			Dialog.DefaultExt = "html";
-			Dialog.Filter = "XML Files (*.xml)|*.xml|HTML Files (*.html;*.htm)|*.html;*.htm|All Files (*.*)|*.*";
-			Dialog.Title = "Save chat session";
+			SaveFileDialog Dialog = new SaveFileDialog()
+			{
+				AddExtension = true,
+				CheckPathExists = true,
+				CreatePrompt = false,
+				DefaultExt = "html",
+				Filter = "XML Files (*.xml)|*.xml|HTML Files (*.html,*.htm)|*.html,*.htm|All Files (*.*)|*.*",
+				Title = "Save chat session"
+			};
 
 			bool? Result = Dialog.ShowDialog(MainWindow.FindWindow(this));
 
@@ -210,7 +230,7 @@ namespace Waher.Client.WPF.Controls
 							this.SaveAsXml(w);
 						}
 
-						string Html = XML.Transform(Xml.ToString(), chatToHtml);
+						string Html = XSL.Transform(Xml.ToString(), chatToHtml);
 
 						File.WriteAllText(Dialog.FileName, Html, System.Text.Encoding.UTF8);
 					}
@@ -232,9 +252,9 @@ namespace Waher.Client.WPF.Controls
 			}
 		}
 
-		private static readonly XslCompiledTransform chatToHtml = Waher.Content.Resources.LoadTransform("Waher.Client.WPF.Transforms.ChatToHTML.xslt");
-		private static readonly XmlSchema schema = Waher.Content.Resources.LoadSchema("Waher.Client.WPF.Schema.Chat.xsd");
-		private const string chatNamespace = "http://waher.se/Chat.xsd";
+		private static readonly XslCompiledTransform chatToHtml = XSL.LoadTransform("Waher.Client.WPF.Transforms.ChatToHTML.xslt");
+		private static readonly XmlSchema schema = XSL.LoadSchema("Waher.Client.WPF.Schema.Chat.xsd");
+		private const string chatNamespace = "http://waher.se/Schema/Chat.xsd";
 		private const string chatRoot = "Chat";
 
 		private void SaveAsXml(XmlWriter w)
@@ -257,15 +277,17 @@ namespace Waher.Client.WPF.Controls
 		{
 			try
 			{
-				OpenFileDialog Dialog = new OpenFileDialog();
-				Dialog.AddExtension = true;
-				Dialog.CheckFileExists = true;
-				Dialog.CheckPathExists = true;
-				Dialog.DefaultExt = "xml";
-				Dialog.Filter = "XML Files (*.xml)|*.xml|All Files (*.*)|*.*";
-				Dialog.Multiselect = false;
-				Dialog.ShowReadOnly = true;
-				Dialog.Title = "Open chat session";
+				OpenFileDialog Dialog = new OpenFileDialog()
+				{
+					AddExtension = true,
+					CheckFileExists = true,
+					CheckPathExists = true,
+					DefaultExt = "xml",
+					Filter = "XML Files (*.xml)|*.xml|All Files (*.*)|*.*",
+					Multiselect = false,
+					ShowReadOnly = true,
+					Title = "Open chat session"
+				};
 
 				bool? Result = Dialog.ShowDialog(MainWindow.FindWindow(this));
 
@@ -279,6 +301,7 @@ namespace Waher.Client.WPF.Controls
 			}
 			catch (Exception ex)
 			{
+				ex = Log.UnnestException(ex);
 				MessageBox.Show(ex.Message, "Unable to load file.", MessageBoxButton.OK, MessageBoxImage.Error);
 			}
 		}
@@ -288,11 +311,10 @@ namespace Waher.Client.WPF.Controls
 			MarkdownDocument Markdown;
 			XmlElement E;
 			DateTime Timestamp;
-			ChatItemType Type;
 			Color ForegroundColor;
 			Color BackgroundColor;
 
-			XML.Validate(FileName, Xml, chatRoot, chatNamespace, schema);
+			XSL.Validate(FileName, Xml, chatRoot, chatNamespace, schema);
 
 			this.ChatListView.Items.Clear();
 
@@ -302,7 +324,7 @@ namespace Waher.Client.WPF.Controls
 				if (E == null)
 					continue;
 
-				if (!Enum.TryParse<ChatItemType>(E.LocalName, out Type))
+				if (!Enum.TryParse<ChatItemType>(E.LocalName, out ChatItemType Type))
 					continue;
 
 				Timestamp = XML.Attribute(E, "timestamp", DateTime.MinValue);
@@ -332,7 +354,16 @@ namespace Waher.Client.WPF.Controls
 					Markdown = null;
 				}
 
-				this.ChatListView.Items.Add(new ChatItem(Type, E.InnerText, Markdown, ForegroundColor, BackgroundColor));
+				ChatItem Item = new ChatItem(Type, E.InnerText, Markdown, ForegroundColor, BackgroundColor);
+				ListViewItem ListViewItem = new ListViewItem()
+				{
+					Content = Item,
+					Foreground = new SolidColorBrush(ForegroundColor),
+					Background = new SolidColorBrush(BackgroundColor),
+					Margin = new Thickness(0)
+				};
+				this.ChatListView.Items.Add(ListViewItem);
+				this.ChatListView.ScrollIntoView(ListViewItem);
 			}
 		}
 
@@ -348,5 +379,30 @@ namespace Waher.Client.WPF.Controls
 			}
 		}
 
+		private void ChatListView_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+		{
+			if (this.ChatListView.SelectedItem is ListViewItem ListViewItem &&
+				ListViewItem.Content is ChatItem Item)
+			{
+				this.Input.Text = Item.Message;
+				e.Handled = true;
+			}
+			else if (e.OriginalSource is System.Windows.Documents.Run Run)
+			{
+				this.Input.Text = Run.Text;
+				e.Handled = true;
+			}
+			else if (e.OriginalSource is System.Windows.Controls.TextBlock TextBlock)
+			{
+				this.Input.Text = TextBlock.Text;
+				e.Handled = true;
+			}
+		}
+
+		private void Hyperlink_Click(object sender, RoutedEventArgs e)
+		{
+			string Uri = ((Hyperlink)sender).NavigateUri.ToString();
+			System.Diagnostics.Process.Start(Uri);
+		}
 	}
 }

@@ -10,8 +10,31 @@ namespace Waher.Networking.XMPP.DataForms.Layout
 	/// </summary>
 	public abstract class LayoutElement
 	{
-		internal LayoutElement()
+		private DataForm form;
+
+		internal LayoutElement(DataForm Form)
 		{
+			this.form = Form;
+		}
+
+		/// <summary>
+		/// Data Form.
+		/// </summary>
+		public DataForm Form
+		{
+			get { return this.form; }
+		}
+
+		internal abstract bool RemoveExcluded();
+
+		internal abstract void Serialize(StringBuilder Output);
+
+		/// <summary>
+		/// Sorts the contents of the layout element.
+		/// </summary>
+		public virtual void Sort()
+		{
+			// Do nothing by default.
 		}
 	}
 }

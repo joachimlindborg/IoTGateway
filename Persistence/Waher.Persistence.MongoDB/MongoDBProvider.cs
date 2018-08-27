@@ -1,15 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+using System.Xml;
 using System.Threading.Tasks;
 using MongoDB.Driver;
 using MongoDB.Bson;
 using MongoDB.Bson.IO;
 using MongoDB.Bson.Serialization;
 using Waher.Persistence.Filters;
+using Waher.Persistence.Serialization;
 using Waher.Persistence.MongoDB.Serialization;
 using Waher.Runtime.Cache;
+using System.Collections;
 
 namespace Waher.Persistence.MongoDB
 {
@@ -45,10 +46,14 @@ namespace Waher.Persistence.MongoDB
 		/// </summary>
 		/// <param name="HostName">Host name of MongoDB server.</param>
 		/// <param name="DatabaseName">Name of database.</param>
+		/// <param name="DefaultCollectionName">Name of default collection.</param>
 		public MongoDBProvider(string HostName, string DatabaseName, string DefaultCollectionName)
 		{
-			MongoClientSettings Settings = new MongoClientSettings();
-			Settings.Server = new MongoServerAddress(HostName);
+			MongoClientSettings Settings = new MongoClientSettings()
+			{
+				Server = new MongoServerAddress(HostName)
+			};
+
 			this.Init(Settings, DatabaseName, DefaultCollectionName);
 		}
 
@@ -58,10 +63,14 @@ namespace Waher.Persistence.MongoDB
 		/// <param name="HostName">Host name of MongoDB server.</param>
 		/// <param name="Port">Port number used to connect to MongoDB server.</param>
 		/// <param name="DatabaseName">Name of database.</param>
+		/// <param name="DefaultCollectionName">Name of default collection.</param>
 		public MongoDBProvider(string HostName, int Port, string DatabaseName, string DefaultCollectionName)
 		{
-			MongoClientSettings Settings = new MongoClientSettings();
-			Settings.Server = new MongoServerAddress(HostName, Port);
+			MongoClientSettings Settings = new MongoClientSettings()
+			{
+				Server = new MongoServerAddress(HostName, Port)
+			};
+
 			this.Init(Settings, DatabaseName, DefaultCollectionName);
 		}
 
@@ -70,6 +79,7 @@ namespace Waher.Persistence.MongoDB
 		/// </summary>
 		/// <param name="Settings">Connection settings.</param>
 		/// <param name="DatabaseName">Name of database.</param>
+		/// <param name="DefaultCollectionName">Name of default collection.</param>
 		public MongoDBProvider(MongoClientSettings Settings, string DatabaseName, string DefaultCollectionName)
 		{
 			this.Init(Settings, DatabaseName, DefaultCollectionName);
@@ -176,7 +186,7 @@ namespace Waher.Persistence.MongoDB
 		/// Inserts an object into the database.
 		/// </summary>
 		/// <param name="Object">Object to insert.</param>
-		public void Insert(object Object)
+		public async Task Insert(object Object)
 		{
 			ObjectSerializer Serializer = this.GetObjectSerializer(Object);
 			string CollectionName = Serializer.CollectionName;
@@ -192,33 +202,32 @@ namespace Waher.Persistence.MongoDB
 				if (Serializer.HasObjectId(Object))
 					throw new Exception("Object already has an Object ID. If updating an object, use the Update method.");
 				else
-					Serializer.GetObjectId(Object, true);
+					await Serializer.GetObjectId(Object, true);
 			}
 			else
 			{
 				BsonDocument Doc = Object.ToBsonDocument(Object.GetType(), Serializer);
-				Collection.InsertOneAsync(Doc);
+				await Collection.InsertOneAsync(Doc);
 			}
 		}
 
 		/// <summary>
 		/// Inserts a collection of objects into the database.
 		/// </summary>
-		/// <param name="Object">Objects to insert.</param>
-		public void Insert(params object[] Objects)
+		/// <param name="Objects">Objects to insert.</param>
+		public Task Insert(params object[] Objects)
 		{
-			this.Insert((IEnumerable<object>)Objects);
+			return this.Insert((IEnumerable<object>)Objects);
 		}
 
 		/// <summary>
 		/// Inserts a collection of objects into the database.
 		/// </summary>
-		/// <param name="Object">Objects to insert.</param>
-		public void Insert(IEnumerable<object> Objects)
+		/// <param name="Objects">Objects to insert.</param>
+		public async Task Insert(IEnumerable<object> Objects)
 		{
-			Dictionary<string, KeyValuePair<IMongoCollection<BsonDocument>, LinkedList<BsonDocument>>> DocumentsPerCollection = 
+			Dictionary<string, KeyValuePair<IMongoCollection<BsonDocument>, LinkedList<BsonDocument>>> DocumentsPerCollection =
 				new Dictionary<string, KeyValuePair<IMongoCollection<BsonDocument>, LinkedList<BsonDocument>>>();
-			KeyValuePair<IMongoCollection<BsonDocument>, LinkedList<BsonDocument>> P;
 			Type Type;
 			Type LastType = null;
 			ObjectSerializer Serializer = null;
@@ -248,7 +257,7 @@ namespace Waher.Persistence.MongoDB
 						if (string.IsNullOrEmpty(CollectionName))
 							CollectionName = this.defaultCollectionName;
 
-						if (DocumentsPerCollection.TryGetValue(CollectionName, out P))
+						if (DocumentsPerCollection.TryGetValue(CollectionName, out KeyValuePair<IMongoCollection<BsonDocument>, LinkedList<BsonDocument>> P))
 							Collection = P.Key;
 						else
 						{
@@ -267,7 +276,7 @@ namespace Waher.Persistence.MongoDB
 			}
 
 			foreach (KeyValuePair<IMongoCollection<BsonDocument>, LinkedList<BsonDocument>> P2 in DocumentsPerCollection.Values)
-				P2.Key.InsertManyAsync(P2.Value);
+				await P2.Key.InsertManyAsync(P2.Value);
 		}
 
 		/// <summary>
@@ -276,7 +285,6 @@ namespace Waher.Persistence.MongoDB
 		/// <typeparam name="T">Class defining how to deserialize objects found.</typeparam>
 		/// <param name="Offset">Result offset.</param>
 		/// <param name="MaxCount">Maximum number of objects to return.</param>
-		/// <param name="SortOrder">Sort order.</param>
 		/// <param name="SortOrder">Sort order. Each string represents a field name. By default, sort order is ascending.
 		/// If descending sort order is desired, prefix the field name by a hyphen (minus) sign.</param>
 		/// <returns>Objects found.</returns>
@@ -295,7 +303,7 @@ namespace Waher.Persistence.MongoDB
 		/// <param name="SortOrder">Sort order. Each string represents a field name. By default, sort order is ascending.
 		/// If descending sort order is desired, prefix the field name by a hyphen (minus) sign.</param>
 		/// <returns>Objects found.</returns>
-		public async Task<IEnumerable<T>> Find<T>(int Offset, int MaxCount, Filter Filter, params string[] SortOrder)
+		public Task<IEnumerable<T>> Find<T>(int Offset, int MaxCount, Filter Filter, params string[] SortOrder)
 		{
 			ObjectSerializer Serializer = this.GetObjectSerializer(typeof(T));
 			string CollectionName = Serializer.CollectionName;
@@ -312,7 +320,7 @@ namespace Waher.Persistence.MongoDB
 			else
 				BsonFilter = this.Convert(Filter, Serializer);
 
-			return await this.Find<T>(Serializer, Collection, Offset, MaxCount, BsonFilter, SortOrder);
+			return this.Find<T>(Serializer, Collection, Offset, MaxCount, BsonFilter, SortOrder);
 		}
 
 		/// <summary>
@@ -325,7 +333,7 @@ namespace Waher.Persistence.MongoDB
 		/// <param name="SortOrder">Sort order. Each string represents a field name. By default, sort order is ascending.
 		/// If descending sort order is desired, prefix the field name by a hyphen (minus) sign.</param>
 		/// <returns>Objects found.</returns>
-		public async Task<IEnumerable<T>> Find<T>(int Offset, int MaxCount, FilterDefinition<BsonDocument> BsonFilter, 
+		public Task<IEnumerable<T>> Find<T>(int Offset, int MaxCount, FilterDefinition<BsonDocument> BsonFilter,
 			params string[] SortOrder)
 		{
 			ObjectSerializer Serializer = this.GetObjectSerializer(typeof(T));
@@ -337,12 +345,12 @@ namespace Waher.Persistence.MongoDB
 			else
 				Collection = this.GetCollection(CollectionName);
 
-			return await this.Find<T>(Serializer, Collection, Offset, MaxCount, BsonFilter, SortOrder);
+			return this.Find<T>(Serializer, Collection, Offset, MaxCount, BsonFilter, SortOrder);
 		}
 
 		private async Task<IEnumerable<T>> Find<T>(ObjectSerializer Serializer, IMongoCollection<BsonDocument> Collection,
 			int Offset, int MaxCount, FilterDefinition<BsonDocument> BsonFilter, params string[] SortOrder)
-		{ 
+		{
 			IFindFluent<BsonDocument, BsonDocument> ResultSet = Collection.Find<BsonDocument>(BsonFilter);
 
 			if (SortOrder.Length > 0)
@@ -378,8 +386,10 @@ namespace Waher.Persistence.MongoDB
 
 			IAsyncCursor<BsonDocument> Cursor = await ResultSet.ToCursorAsync();
 			LinkedList<T> Result = new LinkedList<T>();
-			BsonDeserializationArgs Args = new BsonDeserializationArgs();
-			Args.NominalType = typeof(T);
+			BsonDeserializationArgs Args = new BsonDeserializationArgs()
+			{
+				NominalType = typeof(T)
+			};
 
 			while (await Cursor.MoveNextAsync())
 			{
@@ -398,9 +408,8 @@ namespace Waher.Persistence.MongoDB
 
 		private FilterDefinition<BsonDocument> Convert(Filter Filter, ObjectSerializer Serializer)
 		{
-			if (Filter is FilterChildren)
+			if (Filter is FilterChildren FilterChildren)
 			{
-				FilterChildren FilterChildren = (FilterChildren)Filter;
 				Filter[] ChildFilters = FilterChildren.ChildFilters;
 				int i, c = ChildFilters.Length;
 				FilterDefinition<BsonDocument>[] Children = new FilterDefinition<BsonDocument>[c];
@@ -415,9 +424,8 @@ namespace Waher.Persistence.MongoDB
 				else
 					throw this.UnknownFilterType(Filter);
 			}
-			else if (Filter is FilterChild)
+			else if (Filter is FilterChild FilterChild)
 			{
-				FilterChild FilterChild = (FilterChild)Filter;
 				FilterDefinition<BsonDocument> Child = this.Convert(FilterChild.ChildFilter, Serializer);
 
 				if (Filter is FilterNot)
@@ -425,9 +433,8 @@ namespace Waher.Persistence.MongoDB
 				else
 					throw this.UnknownFilterType(Filter);
 			}
-			else if (Filter is FilterFieldValue)
+			else if (Filter is FilterFieldValue FilterFieldValue)
 			{
-				FilterFieldValue FilterFieldValue = (FilterFieldValue)Filter;
 				object Value = FilterFieldValue.Value;
 				string FieldName = Serializer.ToShortName(FilterFieldValue.FieldName, ref Value);
 				bool IsDefaultValue = Serializer.IsDefaultValue(FilterFieldValue.FieldName, Value);
@@ -565,11 +572,9 @@ namespace Waher.Persistence.MongoDB
 			}
 			else
 			{
-				if (Filter is FilterFieldLikeRegEx)
+				if (Filter is FilterFieldLikeRegEx FilterFieldLikeRegEx)
 				{
-					FilterFieldLikeRegEx FilterFieldLikeRegEx = (FilterFieldLikeRegEx)Filter;
-
-					return Builders<BsonDocument>.Filter.Regex(Serializer.ToShortName(FilterFieldLikeRegEx.FieldName), 
+					return Builders<BsonDocument>.Filter.Regex(Serializer.ToShortName(FilterFieldLikeRegEx.FieldName),
 						FilterFieldLikeRegEx.RegularExpression);
 				}
 				else
@@ -597,6 +602,28 @@ namespace Waher.Persistence.MongoDB
 		}
 
 		/// <summary>
+		/// Loads an object given its Object ID <paramref name="ObjectId"/> and its base type <typeparamref name="T"/>.
+		/// </summary>
+		/// <typeparam name="T">Base type.</typeparam>
+		/// <param name="ObjectId">Object ID</param>
+		/// <returns>Loaded object.</returns>
+		public Task<T> LoadObject<T>(object ObjectId)
+		{
+			ObjectId OID;
+
+			if (ObjectId is ObjectId)
+				OID = (ObjectId)ObjectId;
+			else if (ObjectId is string)
+				OID = new ObjectId((string)ObjectId);
+			else if (ObjectId is byte[])
+				OID = new ObjectId((byte[])ObjectId);
+			else
+				throw new NotSupportedException("Unsupported type for Object ID: " + ObjectId.GetType().FullName);
+
+			return this.LoadObject<T>(OID);
+		}
+
+		/// <summary>
 		/// Loads an object of a given type and Object ID.
 		/// </summary>
 		/// <typeparam name="T">Type of object to load.</typeparam>
@@ -604,10 +631,9 @@ namespace Waher.Persistence.MongoDB
 		/// <returns>Loaded object.</returns>
 		public async Task<T> LoadObject<T>(ObjectId ObjectId)
 		{
-			object Obj;
 			string Key = typeof(T).FullName + " " + ObjectId.ToString();
 
-			if (this.loadCache.TryGetValue(Key, out Obj) && Obj is T)
+			if (this.loadCache.TryGetValue(Key, out object Obj) && Obj is T)
 				return (T)Obj;
 
 			ObjectSerializer S = this.GetObjectSerializer(typeof(T));
@@ -625,7 +651,7 @@ namespace Waher.Persistence.MongoDB
 			if (First == null)
 				throw new Exception("Referenced object of type T not found: " + ObjectId.ToString());
 
-			this.loadCache.Add(Key, First);		// Speeds up readout if reading multiple objects referencing a few common sub-objects.
+			this.loadCache.Add(Key, First);     // Speeds up readout if reading multiple objects referencing a few common sub-objects.
 
 			return First;
 		}
@@ -636,10 +662,10 @@ namespace Waher.Persistence.MongoDB
 		/// Updates an object in the database.
 		/// </summary>
 		/// <param name="Object">Object to insert.</param>
-		public void Update(object Object)
+		public async Task Update(object Object)
 		{
 			ObjectSerializer Serializer = this.GetObjectSerializer(Object);
-			ObjectId ObjectId = Serializer.GetObjectId(Object, false);
+			ObjectId ObjectId = await Serializer.GetObjectId(Object, false);
 			string CollectionName = Serializer.CollectionName;
 			IMongoCollection<BsonDocument> Collection;
 
@@ -649,36 +675,36 @@ namespace Waher.Persistence.MongoDB
 				Collection = this.GetCollection(CollectionName);
 
 			BsonDocument Doc = Object.ToBsonDocument(Object.GetType(), Serializer);
-			Collection.ReplaceOneAsync(Builders<BsonDocument>.Filter.Eq<ObjectId>("_id", ObjectId), Doc);
+			await Collection.ReplaceOneAsync(Builders<BsonDocument>.Filter.Eq<ObjectId>("_id", ObjectId), Doc);
 		}
 
 		/// <summary>
 		/// Updates a collection of objects in the database.
 		/// </summary>
 		/// <param name="Objects">Objects to insert.</param>
-		public void Update(params object[] Objects)
+		public Task Update(params object[] Objects)
 		{
-			this.Update((IEnumerable<object>)Objects);
+			return this.Update((IEnumerable<object>)Objects);
 		}
 
 		/// <summary>
 		/// Updates a collection of objects in the database.
 		/// </summary>
 		/// <param name="Objects">Objects to insert.</param>
-		public void Update(IEnumerable<object> Objects)
+		public async Task Update(IEnumerable<object> Objects)
 		{
 			foreach (object Obj in Objects)
-				this.Update(Obj);
+				await this.Update(Obj);
 		}
 
 		/// <summary>
 		/// Deletes an object in the database.
 		/// </summary>
 		/// <param name="Object">Object to insert.</param>
-		public void Delete(object Object)
+		public async Task Delete(object Object)
 		{
 			ObjectSerializer Serializer = this.GetObjectSerializer(Object);
-			ObjectId ObjectId = Serializer.GetObjectId(Object, false);
+			ObjectId ObjectId = await Serializer.GetObjectId(Object, false);
 			string CollectionName = Serializer.CollectionName;
 			IMongoCollection<BsonDocument> Collection;
 
@@ -687,26 +713,58 @@ namespace Waher.Persistence.MongoDB
 			else
 				Collection = this.GetCollection(CollectionName);
 
-			Collection.DeleteOneAsync(Builders<BsonDocument>.Filter.Eq<ObjectId>("_id", ObjectId));
+			await Collection.DeleteOneAsync(Builders<BsonDocument>.Filter.Eq<ObjectId>("_id", ObjectId));
 		}
 
 		/// <summary>
 		/// Deletes a collection of objects in the database.
 		/// </summary>
 		/// <param name="Objects">Objects to insert.</param>
-		public void Delete(params object[] Objects)
+		public Task Delete(params object[] Objects)
 		{
-			this.Delete((IEnumerable<object>)Objects);
+			return this.Delete((IEnumerable<object>)Objects);
 		}
 
 		/// <summary>
 		/// Deletes a collection of objects in the database.
 		/// </summary>
 		/// <param name="Objects">Objects to insert.</param>
-		public void Delete(IEnumerable<object> Objects)
+		public async Task Delete(IEnumerable<object> Objects)
 		{
 			foreach (object Obj in Objects)
-				this.Delete(Obj);
+				await this.Delete(Obj);
+		}
+
+		/// <summary>
+		/// Performs an export of the entire database.
+		/// </summary>
+		/// <param name="Output">Database will be output to this interface.</param>
+		/// <returns>Task object for synchronization purposes.</returns>
+		public Task Export(IDatabaseExport Output)
+		{
+			throw new NotImplementedException("MongoDB provider does not support the Export method.");	// TODO
+		}
+
+		/// <summary>
+		/// Clears a collection of all objects.
+		/// </summary>
+		/// <param name="CollectionName">Name of collection to clear.</param>
+		/// <returns>Task object for synchronization purposes.</returns>
+		public Task Clear(string CollectionName)
+		{
+			throw new NotImplementedException("MongoDB provider does not support the Clear method.");  // TODO
+		}
+
+		/// <summary>
+		/// Analyzes the database and exports findings to XML.
+		/// </summary>
+		/// <param name="Output">XML Output.</param>
+		/// <param name="XsltPath">Optional XSLT to use to view the output.</param>
+		/// <param name="ProgramDataFolder">Program data folder. Can be removed from filenames used, when referencing them in the report.</param>
+		/// <param name="ExportData">If data in database is to be exported in output.</param>
+		public void Analyze(XmlWriter Output, string XsltPath, string ProgramDataFolder, bool ExportData)
+		{
+			throw new NotImplementedException("MongoDB provider does not support the Analyze method.");  // TODO
 		}
 
 		// TODO:
@@ -721,4 +779,4 @@ namespace Waher.Persistence.MongoDB
 		//	* SortedDictionary<string,T> fields.
 		//	* Aggregates
 	}
-}
+	}

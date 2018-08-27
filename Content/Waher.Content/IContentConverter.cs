@@ -2,6 +2,7 @@
 using System.IO;
 using System.Collections.Generic;
 using System.Text;
+using Waher.Runtime.Inventory;
 using Waher.Script;
 
 namespace Waher.Content
@@ -48,7 +49,8 @@ namespace Waher.Content
 		/// <param name="ToContentType">Content type of the content to convert to.</param>
 		/// <param name="To">Stream pointing to where binary representation of content is to be sent.</param>
 		/// <param name="Session">Session states.</param>
-		void Convert(string FromContentType, Stream From, string FromFileName, string LocalResourceName, string URL, string ToContentType, 
+		/// <returns>If the result is dynamic (true), or only depends on the source (false).</returns>
+		bool Convert(string FromContentType, Stream From, string FromFileName, string LocalResourceName, string URL, string ToContentType, 
             Stream To, Variables Session);
 	}
 }

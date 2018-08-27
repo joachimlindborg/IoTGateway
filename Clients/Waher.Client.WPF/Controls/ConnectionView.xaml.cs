@@ -17,10 +17,13 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using Microsoft.Win32;
+using Waher.Events;
 using Waher.Networking;
 using Waher.Client.WPF.Model;
 using Waher.Client.WPF.Dialogs;
 using Waher.Client.WPF.Controls.Sniffers;
+using Waher.Networking.XMPP;
+using Waher.Things.DisplayableParameters;
 
 namespace Waher.Client.WPF.Controls
 {
@@ -53,6 +56,11 @@ namespace Waher.Client.WPF.Controls
 			get { return MainWindow.FindWindow(this); }
 		}
 
+		public Connections Connections
+		{
+			get { return this.connections; }
+		}
+
 		public string FileName
 		{
 			get { return this.fileName; }
@@ -70,15 +78,57 @@ namespace Waher.Client.WPF.Controls
 		{
 			this.ConnectionListView.Items.Clear();
 
+			GridView GridView;
+
+			if ((GridView = this.ConnectionListView.View as GridView) != null)
+			{
+				while (GridView.Columns.Count > 2)
+					GridView.Columns.RemoveAt(2);
+			}
+
 			this.selectedNode = this.ConnectionTree.SelectedItem as TreeNode;
 			if (this.selectedNode != null)
 			{
 				TreeNode[] Children = this.selectedNode.Children;
+				Dictionary<string, bool> Headers = null;
+				DisplayableParameters Parameters;
 
 				if (Children != null)
 				{
 					foreach (TreeNode Child in this.selectedNode.Children)
+					{
 						this.ConnectionListView.Items.Add(Child);
+
+						if (GridView != null)
+						{
+							Parameters = Child.DisplayableParameters;
+							if (Parameters != null)
+							{
+								foreach (Parameter P in Parameters.Ordered)
+								{
+									if (P.Id == "NodeId" || P.Id == "Type")
+										continue;
+
+									if (Headers == null)
+										Headers = new Dictionary<string, bool>();
+
+									if (!Headers.ContainsKey(P.Id))
+									{
+										Headers[P.Id] = true;
+
+										GridViewColumn Column = new GridViewColumn()
+										{
+											Header = P.Name,
+											Width = double.NaN,
+											DisplayMemberBinding = new Binding("DisplayableParameters[" + P.Id + "]")
+										};
+
+										GridView.Columns.Add(Column);
+									}
+								}
+							}
+						}
+					}
 				}
 			}
 
@@ -87,12 +137,15 @@ namespace Waher.Client.WPF.Controls
 				MainWindow.SelectionChanged();
 		}
 
-		public void SaveFile()
+		public bool SaveFile()
 		{
 			if (string.IsNullOrEmpty(this.fileName))
-				this.SaveNewFile();
+				return this.SaveNewFile();
 			else
+			{
 				this.connections.Save(this.fileName);
+				return true;
+			}
 		}
 
 		public bool CheckSaved()
@@ -103,7 +156,7 @@ namespace Waher.Client.WPF.Controls
 					"Save unsaved changes?", MessageBoxButton.YesNoCancel, MessageBoxImage.Question))
 				{
 					case MessageBoxResult.Yes:
-						if (this.SaveNewFile())
+						if (this.SaveFile())
 							break;
 						else
 							return false;
@@ -121,13 +174,15 @@ namespace Waher.Client.WPF.Controls
 
 		public bool SaveNewFile()
 		{
-			SaveFileDialog Dialog = new SaveFileDialog();
-			Dialog.AddExtension = true;
-			Dialog.CheckPathExists = true;
-			Dialog.CreatePrompt = false;
-			Dialog.DefaultExt = "xml";
-			Dialog.Filter = "XML Files (*.xml)|*.xml|All Files (*.*)|*.*";
-			Dialog.Title = "Save connection file";
+			SaveFileDialog Dialog = new SaveFileDialog()
+			{
+				AddExtension = true,
+				CheckPathExists = true,
+				CreatePrompt = false,
+				DefaultExt = "xml",
+				Filter = "XML Files (*.xml)|*.xml|All Files (*.*)|*.*",
+				Title = "Save connection file"
+			};
 
 			bool? Result = Dialog.ShowDialog(MainWindow.FindWindow(this));
 
@@ -160,12 +215,10 @@ namespace Waher.Client.WPF.Controls
 						break;
 
 					case "Sniff":
-						TabItem TabItem = new TabItem();
+						TabItem TabItem = MainWindow.NewTab(System.IO.Path.GetFileName(FileName));
 						this.MainWindow.Tabs.Items.Add(TabItem);
 
 						SnifferView SnifferView = new SnifferView(null);
-
-						TabItem.Header = System.IO.Path.GetFileName(FileName);
 						TabItem.Content = SnifferView;
 
 						SnifferView.Sniffer = new TabSniffer(TabItem, SnifferView);
@@ -176,14 +229,13 @@ namespace Waher.Client.WPF.Controls
 						break;
 
 					case "Chat":
-						TabItem = new TabItem();
+						TabItem = MainWindow.NewTab(System.IO.Path.GetFileName(FileName));
 						this.MainWindow.Tabs.Items.Add(TabItem);
 
 						ChatView ChatView = new ChatView(null);
 						ChatView.Input.IsEnabled = false;
 						ChatView.SendButton.IsEnabled = false;
 
-						TabItem.Header = System.IO.Path.GetFileName(FileName);
 						TabItem.Content = ChatView;
 
 						this.MainWindow.Tabs.SelectedItem = TabItem;
@@ -192,17 +244,39 @@ namespace Waher.Client.WPF.Controls
 						break;
 
 					case "SensorData":
-						TabItem = new TabItem();
+						TabItem = MainWindow.NewTab(System.IO.Path.GetFileName(FileName));
 						this.MainWindow.Tabs.Items.Add(TabItem);
 
-						SensorDataView SensorDataView = new SensorDataView(null, null);
-
-						TabItem.Header = System.IO.Path.GetFileName(FileName);
+						SensorDataView SensorDataView = new SensorDataView(null, null, false);
 						TabItem.Content = SensorDataView;
 
 						this.MainWindow.Tabs.SelectedItem = TabItem;
 
 						SensorDataView.Load(Xml, FileName);
+						break;
+
+					case "SearchResult":
+						TabItem = MainWindow.NewTab(System.IO.Path.GetFileName(FileName));
+						this.MainWindow.Tabs.Items.Add(TabItem);
+
+						SearchResultView SearchResultView = new SearchResultView();
+						TabItem.Content = SearchResultView;
+
+						this.MainWindow.Tabs.SelectedItem = TabItem;
+
+						SearchResultView.Load(Xml, FileName);
+						break;
+
+					case "Script":
+						TabItem = MainWindow.NewTab(System.IO.Path.GetFileName(FileName));
+						this.MainWindow.Tabs.Items.Add(TabItem);
+
+						ScriptView ScriptView = new ScriptView();
+						TabItem.Content = ScriptView;
+
+						this.MainWindow.Tabs.SelectedItem = TabItem;
+
+						ScriptView.Load(Xml, FileName);
 						break;
 
 					default:
@@ -211,6 +285,7 @@ namespace Waher.Client.WPF.Controls
 			}
 			catch (Exception ex)
 			{
+				ex = Log.UnnestException(ex);
 				MessageBox.Show(ex.Message, ex.Message, MessageBoxButton.OK, MessageBoxImage.Error);
 			}
 		}
@@ -242,15 +317,17 @@ namespace Waher.Client.WPF.Controls
 
 			try
 			{
-				OpenFileDialog Dialog = new OpenFileDialog();
-				Dialog.AddExtension = true;
-				Dialog.CheckFileExists = true;
-				Dialog.CheckPathExists = true;
-				Dialog.DefaultExt = "xml";
-				Dialog.Filter = "XML Files (*.xml)|*.xml|All Files (*.*)|*.*";
-				Dialog.Multiselect = false;
-				Dialog.ShowReadOnly = true;
-				Dialog.Title = "Open connection file";
+				OpenFileDialog Dialog = new OpenFileDialog()
+				{
+					AddExtension = true,
+					CheckFileExists = true,
+					CheckPathExists = true,
+					DefaultExt = "xml",
+					Filter = "XML Files (*.xml)|*.xml|All Files (*.*)|*.*",
+					Multiselect = false,
+					ShowReadOnly = true,
+					Title = "Open connection file"
+				};
 
 				bool? Result = Dialog.ShowDialog(MainWindow.FindWindow(this));
 
@@ -259,26 +336,30 @@ namespace Waher.Client.WPF.Controls
 			}
 			catch (Exception ex)
 			{
+				ex = Log.UnnestException(ex);
 				MessageBox.Show(ex.Message, "Unable to load file.", MessageBoxButton.OK, MessageBoxImage.Error);
 			}
 		}
 
 		public void ConnectTo_Executed(object sender, ExecutedRoutedEventArgs e)
 		{
-			ConnectToForm Dialog = new ConnectToForm();
-			Dialog.Owner = this.MainWindow;
+			ConnectToForm Dialog = new ConnectToForm()
+			{
+				Owner = this.MainWindow
+			};
 			bool? Result = Dialog.ShowDialog();
 
 			if (Result.HasValue && Result.Value)
 			{
-				string Host = Dialog.XmppServer.Text;
-				int Port = int.Parse(Dialog.XmppPort.Text);
-				string Account = Dialog.AccountName.Text;
-				string PasswordHash = Dialog.PasswordHash;
-				string PasswordHashMethod = Dialog.PasswordHashMethod;
-				bool TrustCertificate = Dialog.TrustServerCertificate.IsChecked.HasValue && Dialog.TrustServerCertificate.IsChecked.Value;
+				if (!int.TryParse(Dialog.XmppPort.Text, out int Port))
+					Port = XmppCredentials.DefaultPort;
 
-				XmppAccountNode Node = new XmppAccountNode(this.connections, null, Host, Port, Account, PasswordHash, PasswordHashMethod, TrustCertificate);
+				XmppAccountNode Node = new XmppAccountNode(this.connections, null, Dialog.XmppServer.Text, 
+					(TransportMethod)Dialog.ConnectionMethod.SelectedIndex, Port, Dialog.UrlEndpoint.Text,
+					Dialog.AccountName.Text, Dialog.PasswordHash, Dialog.PasswordHashMethod,
+					Dialog.TrustServerCertificate.IsChecked.HasValue && Dialog.TrustServerCertificate.IsChecked.Value,
+					Dialog.AllowInsecureAuthentication.IsChecked.HasValue && Dialog.AllowInsecureAuthentication.IsChecked.Value);
+
 				this.connections.Add(Node);
 				this.AddNode(Node);
 			}
@@ -307,7 +388,7 @@ namespace Waher.Client.WPF.Controls
 				this.ConnectionTree.Items.Remove(ChildNode);
 			}
 			else
-				Parent.Delete(ChildNode);
+				Parent.RemoveChild(ChildNode);
 
 			this.ConnectionTree.Items.Refresh();
 		}
@@ -325,11 +406,7 @@ namespace Waher.Client.WPF.Controls
 
 		private void ConnectionListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
 		{
-			this.selectedNode = this.ConnectionListView.SelectedItem as TreeNode;
-
-			MainWindow MainWindow = MainWindow.FindWindow(this);
-			if (MainWindow != null)
-				MainWindow.SelectionChanged();
+			this.ConnectionListView_GotFocus(sender, e);
 		}
 
 		public TreeNode SelectedNode
@@ -337,5 +414,42 @@ namespace Waher.Client.WPF.Controls
 			get { return this.selectedNode; }
 		}
 
+		private void TreeContextMenu_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+		{
+			this.PopulateConextMenu(this.TreeContextMenu);
+		}
+
+		private void ListViewContextMenu_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+		{
+			this.PopulateConextMenu(this.ListViewContextMenu);
+		}
+
+		private void PopulateConextMenu(ContextMenu Menu)
+		{
+			string Group = string.Empty;
+
+			Menu.Items.Clear();
+
+			if (this.selectedNode != null)
+				this.selectedNode.AddContexMenuItems(ref Group, Menu);
+		}
+
+		private void ConnectionListView_GotFocus(object sender, RoutedEventArgs e)
+		{
+			this.selectedNode = this.ConnectionListView.SelectedItem as TreeNode;
+
+			MainWindow MainWindow = MainWindow.FindWindow(this);
+			if (MainWindow != null)
+				MainWindow.SelectionChanged();
+		}
+
+		private void ConnectionTree_GotFocus(object sender, RoutedEventArgs e)
+		{
+			this.selectedNode = this.ConnectionTree.SelectedItem as TreeNode;
+
+			MainWindow MainWindow = MainWindow.FindWindow(this);
+			if (MainWindow != null)
+				MainWindow.SelectionChanged();
+		}
 	}
 }

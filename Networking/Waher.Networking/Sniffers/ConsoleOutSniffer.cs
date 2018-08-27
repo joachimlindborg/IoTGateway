@@ -25,39 +25,75 @@ namespace Waher.Networking.Sniffers
 		ByteCount
 	}
 
-#if !WINDOWS_UWP
+	/// <summary>
+	/// Type of line ending.
+	/// </summary>
+	public enum LineEnding
+	{
+		/// <summary>
+		/// Pad with spaces until next rows. Makes sure line is colored properly.
+		/// </summary>
+		PadWithSpaces,
+
+		/// <summary>
+		/// End with new line characters. Is easier to read in a text editor.
+		/// </summary>
+		NewLine
+	}
+
 	/// <summary>
 	/// Outputs sniffed data to <see cref="Console.Out"/>.
 	/// </summary>
 	public class ConsoleOutSniffer : ISniffer
 	{
 		private const int TabWidth = 8;
-		private BinaryPresentationMethod binaryPresentationMethod;
+		private readonly BinaryPresentationMethod binaryPresentationMethod;
+		private readonly LineEnding lineEndingMethod;
+		private bool consoleWidthWorks = true;
 
 		/// <summary>
 		/// Outputs sniffed data to <see cref="Console.Out"/>.
 		/// </summary>
 		/// <param name="BinaryPresentationMethod">How binary data is to be presented.</param>
-		public ConsoleOutSniffer(BinaryPresentationMethod BinaryPresentationMethod)
+		/// <param name="LineEndingMethod">Line ending method.</param>
+		public ConsoleOutSniffer(BinaryPresentationMethod BinaryPresentationMethod,
+			LineEnding LineEndingMethod)
 		{
 			this.binaryPresentationMethod = BinaryPresentationMethod;
+			this.lineEndingMethod = LineEndingMethod;
 		}
 
+		/// <summary>
+		/// Called when text has been transmitted.
+		/// </summary>
+		/// <param name="Text">Text</param>
 		public void TransmitText(string Text)
 		{
 			this.Output(Text, ConsoleColor.Black, ConsoleColor.White);
 		}
 
+		/// <summary>
+		/// Called when text has been received.
+		/// </summary>
+		/// <param name="Text">Text</param>
 		public void ReceiveText(string Text)
 		{
 			this.Output(Text, ConsoleColor.White, ConsoleColor.DarkBlue);
 		}
 
+		/// <summary>
+		/// Called when binary data has been transmitted.
+		/// </summary>
+		/// <param name="Data">Binary Data.</param>
 		public void TransmitBinary(byte[] Data)
 		{
 			this.BinaryOutput(Data, ConsoleColor.Black, ConsoleColor.White);
 		}
 
+		/// <summary>
+		/// Called when binary data has been received.
+		/// </summary>
+		/// <param name="Data">Binary Data.</param>
 		public void ReceiveBinary(byte[] Data)
 		{
 			this.BinaryOutput(Data, ConsoleColor.White, ConsoleColor.DarkBlue);
@@ -100,21 +136,37 @@ namespace Waher.Networking.Sniffers
 			}
 		}
 
+		/// <summary>
+		/// Called to inform the viewer of something.
+		/// </summary>
+		/// <param name="Comment">Comment.</param>
 		public void Information(string Comment)
 		{
 			this.Output(Comment, ConsoleColor.Yellow, ConsoleColor.DarkGreen);
 		}
 
+		/// <summary>
+		/// Called to inform the viewer of a warning state.
+		/// </summary>
+		/// <param name="Warning">Warning.</param>
 		public void Warning(string Warning)
 		{
 			this.Output(Warning, ConsoleColor.Black, ConsoleColor.Yellow);
 		}
 
+		/// <summary>
+		/// Called to inform the viewer of an error state.
+		/// </summary>
+		/// <param name="Error">Error.</param>
 		public void Error(string Error)
 		{
 			this.Output(Error, ConsoleColor.Yellow, ConsoleColor.Red);
 		}
 
+		/// <summary>
+		/// Called to inform the viewer of an exception state.
+		/// </summary>
+		/// <param name="Exception">Exception.</param>
 		public void Exception(string Exception)
 		{
 			this.Output(Exception, ConsoleColor.White, ConsoleColor.DarkRed);
@@ -124,62 +176,72 @@ namespace Waher.Networking.Sniffers
 		{
 			lock (Console.Out)
 			{
-				ConsoleColor FgBak = Console.ForegroundColor;
-				ConsoleColor BgBak = Console.BackgroundColor;
-
-				Console.ForegroundColor = Fg;
-				Console.BackgroundColor = Bg;
-
-				try
+				if (this.lineEndingMethod == LineEnding.PadWithSpaces)
 				{
-					int w = Console.WindowWidth;
-					int i;
+					ConsoleColor FgBak = Console.ForegroundColor;
+					ConsoleColor BgBak = Console.BackgroundColor;
+					int i, w;
 
-					foreach (string Row in s.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n'))
+					Console.ForegroundColor = Fg;
+					Console.BackgroundColor = Bg;
+
+					if (this.consoleWidthWorks)
 					{
-						s = Row;
-
-						if (s.IndexOf('\t') >= 0)
+						try
 						{
-							StringBuilder sb = new StringBuilder();
-							string[] Parts = s.Split('\t');
-							bool First = true;
+							w = Console.WindowWidth;
 
-							foreach (string Part in Parts)
+							foreach (string Row in s.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n'))
 							{
-								if (First)
-									First = false;
-								else
+								s = Row;
+
+								if (s.IndexOf('\t') >= 0)
 								{
-									i = Console.CursorLeft % TabWidth;
-									sb.Append(new string(' ', TabWidth - i));
+									StringBuilder sb = new StringBuilder();
+									string[] Parts = s.Split('\t');
+									bool First = true;
+
+									foreach (string Part in Parts)
+									{
+										if (First)
+											First = false;
+										else
+										{
+											i = Console.CursorLeft % TabWidth;
+											sb.Append(new string(' ', TabWidth - i));
+										}
+
+										sb.Append(Part);
+									}
+
+									s = sb.ToString();
 								}
 
-								sb.Append(Part);
+								i = s.Length % w;
+
+								if (i > 0)
+									s += new string(' ', w - i);
+
+								Console.Out.Write(s);
 							}
-
-							s = sb.ToString();
 						}
-
-						i = s.Length % w;
-
-						if (i > 0)
-							s += new string(' ', w - i);
-
-						Console.Out.Write(s);
+						catch (Exception)
+						{
+							this.consoleWidthWorks = false;
+							Console.Out.WriteLine(s);
+						}
 					}
-				}
-				catch (Exception)
-				{
-					Console.Out.WriteLine(s);
-				}
+					else
+						Console.Out.WriteLine(s);
 
-				Console.ForegroundColor = Fg;
-				Console.BackgroundColor = Bg;
+					Console.ForegroundColor = Fg;
+					Console.BackgroundColor = Bg;
+				}
+				else
+					Console.Out.WriteLine(s);
 			}
 		}
 
 		internal static readonly char[] CRLF = new char[] { '\r', '\n' };
 	}
-#endif
 }

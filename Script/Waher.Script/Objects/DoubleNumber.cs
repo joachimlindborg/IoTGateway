@@ -22,7 +22,15 @@ namespace Waher.Script.Objects
 		/// </summary>
 		public static readonly DoubleNumber OneElement = new DoubleNumber(1);
 
-		private static readonly DoubleNumbers associatedField = new DoubleNumbers();
+		/// <summary>
+		/// 2
+		/// </summary>
+		public static readonly DoubleNumber TwoElement = new DoubleNumber(2);
+
+		/// <summary>
+		/// 3
+		/// </summary>
+		public static readonly DoubleNumber ThreeElement = new DoubleNumber(3);
 
 		private double value;
 
@@ -57,7 +65,7 @@ namespace Waher.Script.Objects
 		/// </summary>
 		public override IField AssociatedField
 		{
-			get { return associatedField; }
+			get { return DoubleNumbers.Instance; }
 		}
 
 		/// <summary>
@@ -75,8 +83,7 @@ namespace Waher.Script.Objects
 		/// <returns>Result, if understood, null otherwise.</returns>
 		public override ICommutativeRingElement Multiply(ICommutativeRingElement Element)
 		{
-			DoubleNumber E = Element as DoubleNumber;
-			if (E == null)
+			if (!(Element is DoubleNumber E))
 				return null;
 			else
 				return new DoubleNumber(this.value * E.value);
@@ -98,13 +105,13 @@ namespace Waher.Script.Objects
 		/// <returns>Result, if understood, null otherwise.</returns>
 		public override IAbelianGroupElement Add(IAbelianGroupElement Element)
 		{
-			DoubleNumber E = Element as DoubleNumber;
-			if (E == null)
+			if (!(Element is DoubleNumber E))
 				return null;
 			else
 				return new DoubleNumber(this.value + E.value);
 		}
 
+		/// <summary>
 		/// Negates the element.
 		/// </summary>
 		/// <returns>Negation of current element.</returns>
@@ -114,19 +121,18 @@ namespace Waher.Script.Objects
 		}
 
 		/// <summary>
-		/// <see cref="Object.Equals"/>
+		/// <see cref="Object.Equals(object)"/>
 		/// </summary>
 		public override bool Equals(object obj)
 		{
-			DoubleNumber E = obj as DoubleNumber;
-			if (E == null)
+			if (!(obj is DoubleNumber E))
 				return false;
 			else
 				return this.value == E.value;
 		}
 
 		/// <summary>
-		/// <see cref="Object.GetHashCode"/>
+		/// <see cref="Object.GetHashCode()"/>
 		/// </summary>
 		public override int GetHashCode()
 		{
@@ -157,7 +163,6 @@ namespace Waher.Script.Objects
 		/// <returns>If conversion was possible.</returns>
 		public override bool TryConvertTo(Type DesiredType, out object Value)
 		{
-#if WINDOWS_UWP
 			if (DesiredType == typeof(byte))
 			{
 				if (this.value >= byte.MinValue && this.value <= byte.MaxValue)
@@ -237,107 +242,17 @@ namespace Waher.Script.Objects
 					return true;
 				}
 			}
+			else if (DesiredType.GetTypeInfo().IsAssignableFrom(typeof(double).GetTypeInfo()))
+			{
+				Value = this.value;
+				return true;
+			}
 			else if (DesiredType == typeof(DoubleNumber))
 			{
 				Value = this;
 				return true;
 			}
-#else
-			switch (Type.GetTypeCode(DesiredType))
-            {
-                case TypeCode.Byte:
-                    if (this.value >= byte.MinValue && this.value <= byte.MaxValue)
-                    {
-                        Value = (byte)this.value;
-                        return true;
-                    }
-                    else
-                        break;
 
-                case TypeCode.Decimal:
-                    Value = (decimal)this.value;
-                    return true;
-
-                case TypeCode.Double:
-                    Value = (double)this.value;
-                    return true;
-
-                case TypeCode.Int16:
-                    if (this.value >= short.MinValue && this.value <= short.MaxValue)
-                    {
-                        Value = (short)this.value;
-                        return true;
-                    }
-                    else
-                        break;
-
-                case TypeCode.Int32:
-                    if (this.value >= int.MinValue && this.value <= int.MaxValue)
-                    {
-                        Value = (int)this.value;
-                        return true;
-                    }
-                    else
-                        break;
-
-                case TypeCode.Int64:
-                    if (this.value >= long.MinValue && this.value <= long.MaxValue)
-                    {
-                        Value = (long)this.value;
-                        return true;
-                    }
-                    else
-                        break;
-
-                case TypeCode.SByte:
-                    if (this.value >= sbyte.MinValue && this.value <= sbyte.MaxValue)
-                    {
-                        Value = (sbyte)this.value;
-                        return true;
-                    }
-                    else
-                        break;
-
-                case TypeCode.Single:
-                    Value = (float)this.value;
-                    return true;
-
-                case TypeCode.UInt16:
-                    if (this.value >= ushort.MinValue && this.value <= ushort.MaxValue)
-                    {
-                        Value = (ushort)this.value;
-                        return true;
-                    }
-                    else
-                        break;
-
-                case TypeCode.UInt32:
-                    if (this.value >= uint.MinValue && this.value <= uint.MaxValue)
-                    {
-                        Value = (uint)this.value;
-                        return true;
-                    }
-                    else
-                        break;
-
-                case TypeCode.UInt64:
-                    if (this.value >= ulong.MinValue && this.value <= ulong.MaxValue)
-                    {
-                        Value = (ulong)this.value;
-                        return true;
-                    }
-                    else
-                        break;
-
-                case TypeCode.Object:
-                    if (DesiredType.IsAssignableFrom(typeof(DoubleNumber)))
-                    {
-                        Value = this;
-                        return true;
-                    }
-                    break;
-            }
-#endif
 			Value = null;
 			return false;
 		}

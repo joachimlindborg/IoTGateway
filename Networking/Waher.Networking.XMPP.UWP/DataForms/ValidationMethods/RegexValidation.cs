@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
-using Waher.Content;
+using Waher.Content.Xml;
 using Waher.Networking.XMPP.DataForms.DataTypes;
 
 namespace Waher.Networking.XMPP.DataForms.ValidationMethods
@@ -65,6 +65,21 @@ namespace Waher.Networking.XMPP.DataForms.ValidationMethods
 				if (!M.Success || M.Index > 0 || M.Length < s.Length)
 					Field.Error = "Invalid input.";
 			}
+		}
+
+		/// <summary>
+		/// Merges the validation method with a secondary validation method, if possible.
+		/// </summary>
+		/// <param name="SecondaryValidationMethod">Secondary validation method to merge with.</param>
+		/// <param name="DataType">Underlying data type.</param>
+		/// <returns>If merger was possible.</returns>
+		public override bool Merge(ValidationMethod SecondaryValidationMethod, DataType DataType)
+		{
+			RegexValidation V2 = SecondaryValidationMethod as RegexValidation;
+			if (V2 == null)
+				return false;
+
+			return this.regex == V2.regex;
 		}
 
 	}

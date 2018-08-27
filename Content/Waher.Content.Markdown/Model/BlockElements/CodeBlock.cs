@@ -1,7 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Text;
 using System.Xml;
+using Waher.Content.Xml;
+using Waher.Events;
+using Waher.Runtime.Inventory;
 
 namespace Waher.Content.Markdown.Model.BlockElements
 {
@@ -10,12 +14,13 @@ namespace Waher.Content.Markdown.Model.BlockElements
 	/// </summary>
 	public class CodeBlock : MarkdownElement
 	{
+		private ICodeContent handler;
 		private string[] rows;
 		private string indentString;
 		private string language;
 		private int start, end, indent;
 
-		
+
 		/// <summary>
 		/// Represents a code block in a markdown document.
 		/// </summary>
@@ -47,7 +52,95 @@ namespace Waher.Content.Markdown.Model.BlockElements
 			this.indent = Indent;
 			this.indentString = Indent <= 0 ? string.Empty : new string('\t', Indent);
 			this.language = Language;
+			this.handler = GetHandler(this.language);
 		}
+
+		private static ICodeContent[] codeContents = null;
+
+		static CodeBlock()
+		{
+			Init();
+			Types.OnInvalidated += (sender, e) => Init();
+		}
+
+		private static void Init()
+		{
+			List<ICodeContent> CodeContents = new List<ICodeContent>();
+			TypeInfo TI;
+
+			foreach (Type T in Types.GetTypesImplementingInterface(typeof(ICodeContent)))
+			{
+				TI = T.GetTypeInfo();
+				if (TI.IsAbstract || TI.IsGenericTypeDefinition)
+					continue;
+
+				try
+				{
+					ICodeContent CodeContent = (ICodeContent)Activator.CreateInstance(T);
+					CodeContents.Add(CodeContent);
+				}
+				catch (Exception ex)
+				{
+					Log.Critical(ex);
+				}
+			}
+
+			lock (handlers)
+			{
+				codeContents = CodeContents.ToArray();
+				handlers.Clear();
+			}
+		}
+
+		private static ICodeContent GetHandler(string Language)
+		{
+			ICodeContent[] Handlers;
+
+			if (string.IsNullOrEmpty(Language))
+				return null;
+
+			lock (handlers)
+			{
+				if (!handlers.TryGetValue(Language, out Handlers))
+				{
+					List<ICodeContent> List = new List<ICodeContent>();
+
+					foreach (ICodeContent Content in codeContents)
+					{
+						if (Content.Supports(Language) > Grade.NotAtAll)
+							List.Add(Content);
+					}
+
+					if (List.Count > 0)
+						Handlers = List.ToArray();
+					else
+						Handlers = null;
+
+					handlers[Language] = Handlers;
+				}
+			}
+
+			if (Handlers == null)
+				return null;
+
+			ICodeContent Best = null;
+			Grade BestGrade = Grade.NotAtAll;
+			Grade ContentGrade;
+
+			foreach (ICodeContent Content in Handlers)
+			{
+				ContentGrade = Content.Supports(Language);
+				if (ContentGrade > BestGrade)
+				{
+					BestGrade = ContentGrade;
+					Best = Content;
+				}
+			}
+
+			return Best;
+		}
+
+		private static Dictionary<string, ICodeContent[]> handlers = new Dictionary<string, ICodeContent[]>(StringComparer.CurrentCultureIgnoreCase);
 
 		/// <summary>
 		/// Generates HTML for the markdown element.
@@ -55,6 +148,35 @@ namespace Waher.Content.Markdown.Model.BlockElements
 		/// <param name="Output">HTML will be output here.</param>
 		public override void GenerateHTML(StringBuilder Output)
 		{
+			if (this.handler != null && this.handler.HandlesHTML)
+			{
+				try
+				{
+					if (this.handler.GenerateHTML(Output, this.rows, this.language, this.indent, this.Document))
+						return;
+				}
+				catch (Exception ex)
+				{
+					ex = Log.UnnestException(ex);
+
+					if (ex is AggregateException ex2)
+					{
+						foreach (Exception ex3 in ex2.InnerExceptions)
+						{
+							Output.Append("<p><font style=\"color:red\">");
+							Output.Append(XML.HtmlValueEncode(ex3.Message));
+							Output.AppendLine("</font></p>");
+						}
+					}
+					else
+					{
+						Output.Append("<p><font style=\"color:red\">");
+						Output.Append(XML.HtmlValueEncode(ex.Message));
+						Output.Append("</font></p>");
+					}
+				}
+			}
+
 			int i;
 
 			Output.Append("<pre><code class=\"");
@@ -81,6 +203,27 @@ namespace Waher.Content.Markdown.Model.BlockElements
 		/// <param name="Output">Plain text will be output here.</param>
 		public override void GeneratePlainText(StringBuilder Output)
 		{
+			if (this.handler != null && this.handler.HandlesPlainText)
+			{
+				try
+				{
+					if (this.handler.GeneratePlainText(Output, this.rows, this.language, this.indent, this.Document))
+						return;
+				}
+				catch (Exception ex)
+				{
+					ex = Log.UnnestException(ex);
+
+					if (ex is AggregateException ex2)
+					{
+						foreach (Exception ex3 in ex2.InnerExceptions)
+							Output.AppendLine(ex2.Message);
+					}
+					else
+						Output.AppendLine(ex.Message);
+				}
+			}
+
 			int i;
 
 			for (i = this.start; i <= this.end; i++)
@@ -100,6 +243,48 @@ namespace Waher.Content.Markdown.Model.BlockElements
 		/// <param name="TextAlignment">Alignment of text in element.</param>
 		public override void GenerateXAML(XmlWriter Output, XamlSettings Settings, TextAlignment TextAlignment)
 		{
+			if (this.handler != null && this.handler.HandlesXAML)
+			{
+				try
+				{
+					if (this.handler.GenerateXAML(Output, Settings, TextAlignment, this.rows, this.language, this.indent, this.Document))
+						return;
+				}
+				catch (Exception ex)
+				{
+					ex = Log.UnnestException(ex);
+
+					if (ex is AggregateException ex2)
+					{
+						foreach (Exception ex3 in ex2.InnerExceptions)
+						{
+							Output.WriteStartElement("TextBlock");
+							Output.WriteAttributeString("TextWrapping", "Wrap");
+							Output.WriteAttributeString("Margin", Settings.ParagraphMargins);
+
+							if (TextAlignment != TextAlignment.Left)
+								Output.WriteAttributeString("TextAlignment", TextAlignment.ToString());
+
+							Output.WriteAttributeString("Foreground", "Red");
+							Output.WriteValue(ex.Message);
+							Output.WriteEndElement();
+						}
+					}
+					else
+					{
+						Output.WriteStartElement("TextBlock");
+						Output.WriteAttributeString("TextWrapping", "Wrap");
+						Output.WriteAttributeString("Margin", Settings.ParagraphMargins);
+						if (TextAlignment != TextAlignment.Left)
+							Output.WriteAttributeString("TextAlignment", TextAlignment.ToString());
+
+						Output.WriteAttributeString("Foreground", "Red");
+						Output.WriteValue(ex.Message);
+						Output.WriteEndElement();
+					}
+				}
+			}
+
 			bool First = true;
 
 			Output.WriteStartElement("TextBlock");
@@ -137,6 +322,25 @@ namespace Waher.Content.Markdown.Model.BlockElements
 		internal override bool InlineSpanElement
 		{
 			get { return false; }
+		}
+
+		/// <summary>
+		/// Exports the element to XML.
+		/// </summary>
+		/// <param name="Output">XML Output.</param>
+		public override void Export(XmlWriter Output)
+		{
+			Output.WriteStartElement("CodeBlock");
+			Output.WriteAttributeString("language", this.language);
+			Output.WriteAttributeString("start", this.start.ToString());
+			Output.WriteAttributeString("end", this.end.ToString());
+			Output.WriteAttributeString("indent", this.indent.ToString());
+			Output.WriteAttributeString("indentString", this.indentString);
+
+			foreach (string s in this.rows)
+				Output.WriteElementString("Row", s);
+
+			Output.WriteEndElement();
 		}
 	}
 }

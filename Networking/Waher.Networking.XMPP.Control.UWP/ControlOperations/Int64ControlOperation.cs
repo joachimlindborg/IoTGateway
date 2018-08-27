@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
-using Waher.Networking.XMPP.Control.ParameterTypes;
+using Waher.Things.ControlParameters;
 using Waher.Things;
 
 namespace Waher.Networking.XMPP.Control.ControlOperations
@@ -22,7 +22,7 @@ namespace Waher.Networking.XMPP.Control.ControlOperations
 		/// <param name="Parameter">Control parameter.</param>
 		/// <param name="Value">Value to set.</param>
 		/// <param name="request">Original request.</param>
-		public Int64ControlOperation(ThingReference Node, Int64ControlParameter Parameter, long Value, IqEventArgs request)
+		public Int64ControlOperation(IThingReference Node, Int64ControlParameter Parameter, long Value, IqEventArgs request)
 			: base(Node, request, Parameter)
 		{
 			this.parameter = Parameter;

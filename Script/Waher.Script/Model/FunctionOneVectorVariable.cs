@@ -19,6 +19,7 @@ namespace Waher.Script.Model
         /// <param name="Argument">Argument.</param>
         /// <param name="Start">Start position in script expression.</param>
         /// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
         public FunctionOneVectorVariable(ScriptNode Argument, int Start, int Length, Expression Expression)
             : base(Argument, Start, Length, Expression)
         {
@@ -32,27 +33,22 @@ namespace Waher.Script.Model
         /// <returns>Function result.</returns>
         public override IElement Evaluate(IElement Argument, Variables Variables)
         {
-            IVector Vector = Argument as IVector;
-            if (Vector != null)
+            if (Argument is IVector Vector)
             {
-                DoubleVector DoubleVector = Vector as DoubleVector;
-                if (DoubleVector != null)
+                if (Vector is DoubleVector DoubleVector)
                     return this.EvaluateVector(DoubleVector, Variables);
 
-                ComplexVector ComplexVector = Vector as ComplexVector;
-                if (ComplexVector != null)
+                if (Vector is ComplexVector ComplexVector)
                     return this.EvaluateVector(ComplexVector, Variables);
 
-                BooleanVector BooleanVector = Vector as BooleanVector;
-                if (BooleanVector != null)
+                if (Vector is BooleanVector BooleanVector)
                     return this.EvaluateVector(BooleanVector, Variables);
 
                 return this.EvaluateVector(Vector, Variables);
             }
             else
             {
-                IMatrix Matrix = Argument as IMatrix;
-                if (Matrix != null)
+                if (Argument is IMatrix Matrix)
                 {
                     LinkedList<IElement> Elements = new LinkedList<IElement>();
                     int i, c = Matrix.Rows;
@@ -82,8 +78,7 @@ namespace Waher.Script.Model
                 }
                 else
                 {
-                    ISet Set = Argument as ISet;
-                    if (Set != null)
+                    if (Argument is ISet Set)
                     {
                         LinkedList<IElement> Elements = new LinkedList<IElement>();
 

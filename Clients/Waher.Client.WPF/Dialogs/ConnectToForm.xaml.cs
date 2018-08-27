@@ -12,6 +12,8 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Waher.Networking.XMPP;
+using Waher.Networking.XMPP.DataForms;
+using Waher.Client.WPF.Model;
 
 namespace Waher.Client.WPF.Dialogs
 {
@@ -27,17 +29,26 @@ namespace Waher.Client.WPF.Dialogs
 		public ConnectToForm()
 		{
 			InitializeComponent();
+			this.ConnectionMethod_SelectionChanged(this, null);
 		}
 
 		/// <summary>
 		/// Password hash of a successfully authenticated client.
 		/// </summary>
-		public string PasswordHash { get { return this.passwordHash; } }
+		public string PasswordHash
+		{
+			get { return this.passwordHash; }
+			set { this.passwordHash = value; }
+		}
 
 		/// <summary>
 		/// Password hash method of a successfully authenticated client.
 		/// </summary>
-		public string PasswordHashMethod { get { return this.passwordHashMethod; } }
+		public string PasswordHashMethod
+		{
+			get { return this.passwordHashMethod; }
+			set { this.passwordHashMethod = value; }
+		}
 
 		private void CancelButton_Click(object sender, RoutedEventArgs e)
 		{
@@ -46,14 +57,88 @@ namespace Waher.Client.WPF.Dialogs
 
 		private void ConnectButton_Click(object sender, RoutedEventArgs e)
 		{
-			int Port;
-
-			if (!int.TryParse(this.XmppPort.Text, out Port) || Port <= 0 || Port > 65535)
+			XmppCredentials Credentials = new XmppCredentials()
 			{
-				MessageBox.Show(this, "Invalid port number. Valid port numbers are positive integers between 1 and 65535. The default port number is 5222.",
-					"Error", MessageBoxButton.OK, MessageBoxImage.Error);
-				this.XmppPort.Focus();
-				return;
+				Host = this.XmppServer.Text,
+				Account = this.AccountName.Text
+			};
+
+			switch ((TransportMethod)this.ConnectionMethod.SelectedIndex)
+			{
+				case TransportMethod.TraditionalSocket:
+					if (!int.TryParse(this.XmppPort.Text, out int Port) || Port <= 0 || Port > 65535)
+					{
+						MessageBox.Show(this, "Invalid port number. Valid port numbers are positive integers between 1 and 65535. The default port number is " + 
+							XmppCredentials.DefaultPort.ToString() + ".", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+						this.XmppPort.Focus();
+						return;
+					}
+
+					Credentials.Port = Port;
+					break;
+
+				case TransportMethod.WS:
+					Uri Uri;
+					try
+					{
+						Uri = new Uri(this.UrlEndpoint.Text);
+					}
+					catch (Exception)
+					{
+						MessageBox.Show(this, "Invalid URI.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+						this.UrlEndpoint.Focus();
+						return;
+					}
+
+					string Scheme = Uri.Scheme.ToLower();
+
+					if (Scheme != "ws" && Scheme != "wss")
+					{
+						MessageBox.Show(this, "Resource must be an WS or WSS URI.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+						this.UrlEndpoint.Focus();
+						return;
+					}
+
+					if (!Uri.IsAbsoluteUri)
+					{
+						MessageBox.Show(this, "URI must be an absolute URI.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+						this.UrlEndpoint.Focus();
+						return;
+					}
+
+					Credentials.UriEndpoint = this.UrlEndpoint.Text;
+					break;
+
+				case TransportMethod.BOSH:
+					try
+					{
+						Uri = new Uri(this.UrlEndpoint.Text);
+					}
+					catch (Exception)
+					{
+						MessageBox.Show(this, "Invalid URI.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+						this.UrlEndpoint.Focus();
+						return;
+					}
+
+					Scheme = Uri.Scheme.ToLower();
+
+					if (Scheme != "http" && Scheme != "https")
+					{
+						MessageBox.Show(this, "Resource must be an HTTP or HTTPS URI.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+						this.UrlEndpoint.Focus();
+						return;
+					}
+
+					if (!Uri.IsAbsoluteUri)
+					{
+						MessageBox.Show(this, "URI must be an absolute URI.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+						this.UrlEndpoint.Focus();
+						return;
+					}
+
+					Credentials.UriEndpoint = this.UrlEndpoint.Text;
+					break;
 			}
 
 			bool Create = this.CreateAccount.IsChecked.HasValue && this.CreateAccount.IsChecked.Value;
@@ -67,26 +152,60 @@ namespace Waher.Client.WPF.Dialogs
 			this.CloseClient();
 			this.ConnectButton.IsEnabled = false;
 			this.XmppServer.IsEnabled = false;
+			this.ConnectionMethod.IsEnabled = false;
 			this.XmppPort.IsEnabled = false;
+			this.UrlEndpoint.IsEnabled = false;
 			this.AccountName.IsEnabled = false;
 			this.Password.IsEnabled = false;
 			this.RetypePassword.IsEnabled = false;
 			this.TrustServerCertificate.IsEnabled = false;
 			this.CreateAccount.IsEnabled = false;
 
-			this.client = new XmppClient(this.XmppServer.Text, Port, this.AccountName.Text, this.Password.Password, "en");
+			if (this.Password.Password == this.passwordHash && !string.IsNullOrEmpty(this.passwordHash))
+			{
+				Credentials.Password = this.passwordHash;
+				Credentials.PasswordType = this.passwordHashMethod;
+			}
+			else
+				Credentials.Password = this.Password.Password;
 
-			if (Create)
-				this.client.AllowRegistration();
+			if (this.AllowInsecureAuthentication.IsChecked.HasValue && this.AllowInsecureAuthentication.IsChecked.Value)
+			{
+				Credentials.AllowPlain = true;
+				Credentials.AllowCramMD5 = true;
+				Credentials.AllowDigestMD5 = true;
+			}
 
 			if (this.TrustServerCertificate.IsChecked.HasValue && this.TrustServerCertificate.IsChecked.Value)
-				this.client.TrustServer = true;
+				Credentials.TrustServer = true;
 
-			this.client.OnStateChanged += new StateChangedEventHandler(client_OnStateChanged);
-			this.client.OnConnectionError += new XmppExceptionEventHandler(client_OnConnectionError);
+			this.client = new XmppClient(Credentials, "en", typeof(App).Assembly);
+
+			if (Create)
+			{
+				this.client.AllowRegistration();
+				this.client.OnRegistrationForm += Client_OnRegistrationForm;
+			}
+
+			this.client.OnStateChanged += new StateChangedEventHandler(Client_OnStateChanged);
+			this.client.OnConnectionError += new XmppExceptionEventHandler(Client_OnConnectionError);
+			this.client.Connect();
 		}
 
-		private void client_OnStateChanged(object Sender, XmppState NewState)
+		private void Client_OnRegistrationForm(object Sender, DataForm Form)
+		{
+			Field FormType = Form["FORM_TYPE"];
+			if (FormType != null && FormType.ValueString == "urn:xmpp:captcha")
+			{
+				ParameterDialog Dialog = new ParameterDialog(Form);
+
+				MainWindow.currentInstance.Dispatcher.BeginInvoke(new ThreadStart(() => Dialog.ShowDialog()));
+			}
+			else
+				Form.Submit();
+		}
+
+		private void Client_OnStateChanged(object Sender, XmppState NewState)
 		{
 			this.Dispatcher.BeginInvoke(new ParameterizedThreadStart(this.XmppStateChanged), NewState);
 		}
@@ -109,12 +228,20 @@ namespace Waher.Client.WPF.Dialogs
 					this.ConnectionState.Content = "Stream negotiation.";
 					break;
 
+				case XmppState.StreamOpened:
+					this.ConnectionState.Content = "Stream opened.";
+					break;
+
 				case XmppState.StartingEncryption:
 					this.ConnectionState.Content = "Starting encryption.";
 					break;
 
 				case XmppState.Authenticating:
 					this.ConnectionState.Content = "Authenticating user.";
+					break;
+
+				case XmppState.Registering:
+					this.ConnectionState.Content = "Registering account.";
 					break;
 
 				case XmppState.Binding:
@@ -130,8 +257,17 @@ namespace Waher.Client.WPF.Dialogs
 					break;
 
 				case XmppState.Connected:
-					this.passwordHash = this.client.PasswordHash;
-					this.passwordHashMethod = this.client.PasswordHashMethod;
+					if (this.StorePassword.IsChecked.HasValue && this.StorePassword.IsChecked.Value)
+					{
+						this.passwordHash = this.Password.Password;
+						this.passwordHashMethod = string.Empty;
+					}
+					else
+					{
+						this.passwordHash = this.client.PasswordHash;
+						this.passwordHashMethod = this.client.PasswordHashMethod;
+					}
+
 					this.ConnectionState.Content = "Connected.";
 					this.CloseClient();
 					this.DialogResult = true;
@@ -156,7 +292,9 @@ namespace Waher.Client.WPF.Dialogs
 
 			this.ConnectButton.IsEnabled = true;
 			this.XmppServer.IsEnabled = true;
+			this.ConnectionMethod.IsEnabled = true;
 			this.XmppPort.IsEnabled = true;
+			this.UrlEndpoint.IsEnabled = true;
 			this.AccountName.IsEnabled = true;
 			this.Password.IsEnabled = true;
 			this.TrustServerCertificate.IsEnabled = true;
@@ -165,7 +303,7 @@ namespace Waher.Client.WPF.Dialogs
 			this.RetypePassword.IsEnabled = (this.CreateAccount.IsChecked.HasValue && this.CreateAccount.IsChecked.Value);
 		}
 
-		private void client_OnConnectionError(object Sender, Exception Exception)
+		private void Client_OnConnectionError(object Sender, Exception Exception)
 		{
 			this.Dispatcher.BeginInvoke(new ParameterizedThreadStart(this.ShowError), Exception);
 		}
@@ -186,5 +324,28 @@ namespace Waher.Client.WPF.Dialogs
 			this.RetypePassword.IsEnabled = this.CreateAccount.IsChecked.HasValue && this.CreateAccount.IsChecked.Value;
 		}
 
+		private void ConnectionMethod_SelectionChanged(object sender, SelectionChangedEventArgs e)
+		{
+			if (this.PortLabel == null)
+				return;
+
+			switch ((TransportMethod)this.ConnectionMethod.SelectedIndex)
+			{
+				case TransportMethod.TraditionalSocket:
+					this.PortLabel.Visibility = Visibility.Visible;
+					this.XmppPort.Visibility = Visibility.Visible;
+					this.UrlEndpointLabel.Visibility = Visibility.Hidden;
+					this.UrlEndpoint.Visibility = Visibility.Hidden;
+					break;
+
+				case TransportMethod.BOSH:
+				case TransportMethod.WS:
+					this.PortLabel.Visibility = Visibility.Hidden;
+					this.XmppPort.Visibility = Visibility.Hidden;
+					this.UrlEndpointLabel.Visibility = Visibility.Visible;
+					this.UrlEndpoint.Visibility = Visibility.Visible;
+					break;
+			}
+		}
 	}
 }

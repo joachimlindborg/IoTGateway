@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Collections.Generic;
 using System.Text;
 using Waher.Events;
+using Waher.Runtime.Inventory;
 using Waher.Script.Objects;
 
 namespace Waher.Script.Units
@@ -126,7 +127,7 @@ namespace Waher.Script.Units
 		}
 
 		/// <summary>
-		/// <see cref="Object.Equals"/>
+		/// <see cref="Object.Equals(object)"/>
 		/// </summary>
 		public override bool Equals(object obj)
 		{
@@ -165,7 +166,7 @@ namespace Waher.Script.Units
 		}
 
 		/// <summary>
-		/// <see cref="Object.GetHashCode"/>
+		/// <see cref="Object.GetHashCode()"/>
 		/// </summary>
 		public override int GetHashCode()
 		{
@@ -406,8 +407,6 @@ namespace Waher.Script.Units
 				if (HasNonBase)
 				{
 					LinkedList<KeyValuePair<AtomicUnit, int>> BaseFactors = new LinkedList<KeyValuePair<AtomicUnit, int>>();
-					KeyValuePair<AtomicUnit, int>[] Units;
-					PhysicalQuantity Quantity;
 					int Exponent = Prefixes.PrefixToExponent(this.prefix);
 					int FactorExponent;
 					string Name;
@@ -418,7 +417,7 @@ namespace Waher.Script.Units
 
 						if (baseUnits.ContainsKey(Name = Factor.Key.Name))
 							this.Add(BaseFactors, Factor.Key, Factor.Value);
-						else if (derivedUnits.TryGetValue(Name, out Quantity))
+						else if (derivedUnits.TryGetValue(Name, out PhysicalQuantity Quantity))
 						{
 							Magnitude *= Math.Pow(Quantity.Magnitude, FactorExponent);
 							Exponent += Prefixes.PrefixToExponent(Quantity.Unit.prefix) * FactorExponent;
@@ -426,7 +425,7 @@ namespace Waher.Script.Units
 							foreach (KeyValuePair<AtomicUnit, int> Segment in Quantity.Unit.factors)
 								this.Add(BaseFactors, Segment.Key, Segment.Value * FactorExponent);
 						}
-						else if (compoundUnits.TryGetValue(Name, out Units))
+						else if (compoundUnits.TryGetValue(Name, out KeyValuePair<AtomicUnit, int>[] Units))
 						{
 							foreach (KeyValuePair<AtomicUnit, int> Segment in Units)
 								this.Add(BaseFactors, Segment.Key, Segment.Value * FactorExponent);
@@ -494,9 +493,6 @@ namespace Waher.Script.Units
 				if (HasNonReference)
 				{
 					LinkedList<KeyValuePair<AtomicUnit, int>> ReferenceFactors = new LinkedList<KeyValuePair<AtomicUnit, int>>();
-					KeyValuePair<AtomicUnit, int>[] Units;
-					IBaseQuantity BaseQuantity;
-					PhysicalQuantity Quantity;
 					int Exponent = Prefixes.PrefixToExponent(this.prefix);
 					int FactorExponent;
 					string Name;
@@ -507,14 +503,14 @@ namespace Waher.Script.Units
 
 						if (referenceUnits.ContainsKey(Name = Factor.Key.Name))
 							this.Add(ReferenceFactors, Factor.Key, Factor.Value);
-						else if (baseUnits.TryGetValue(Name, out BaseQuantity))
+						else if (baseUnits.TryGetValue(Name, out IBaseQuantity BaseQuantity))
 						{
 							if (BaseQuantity.ToReferenceUnit(ref Magnitude, Name, FactorExponent))
 								this.Add(ReferenceFactors, BaseQuantity.ReferenceUnit, FactorExponent);
 							else
 								this.Add(ReferenceFactors, Factor.Key, Factor.Value);
 						}
-						else if (derivedUnits.TryGetValue(Name, out Quantity))
+						else if (derivedUnits.TryGetValue(Name, out PhysicalQuantity Quantity))
 						{
 							Magnitude *= Math.Pow(Quantity.Magnitude, FactorExponent);
 							Exponent += Prefixes.PrefixToExponent(Quantity.Unit.prefix) * FactorExponent;
@@ -534,7 +530,7 @@ namespace Waher.Script.Units
 									this.Add(ReferenceFactors, Segment.Key, Segment.Value * FactorExponent);
 							}
 						}
-						else if (compoundUnits.TryGetValue(Name, out Units))
+						else if (compoundUnits.TryGetValue(Name, out KeyValuePair<AtomicUnit, int>[] Units))
 						{
 							foreach (KeyValuePair<AtomicUnit, int> Segment in Units)
 							{
@@ -602,9 +598,6 @@ namespace Waher.Script.Units
 				if (HasNonReference)
 				{
 					LinkedList<KeyValuePair<AtomicUnit, int>> ReferenceFactors = new LinkedList<KeyValuePair<AtomicUnit, int>>();
-					KeyValuePair<AtomicUnit, int>[] Units;
-					IBaseQuantity BaseQuantity;
-					PhysicalQuantity Quantity;
 					int Exponent = Prefixes.PrefixToExponent(this.prefix);
 					int FactorExponent;
 					string Name;
@@ -615,14 +608,14 @@ namespace Waher.Script.Units
 
 						if (referenceUnits.ContainsKey(Name = Factor.Key.Name))
 							this.Add(ReferenceFactors, Factor.Key, Factor.Value);
-						else if (baseUnits.TryGetValue(Name, out BaseQuantity))
+						else if (baseUnits.TryGetValue(Name, out IBaseQuantity BaseQuantity))
 						{
 							if (BaseQuantity.FromReferenceUnit(ref Magnitude, Name, FactorExponent))
 								this.Add(ReferenceFactors, BaseQuantity.ReferenceUnit, FactorExponent);
 							else
 								this.Add(ReferenceFactors, Factor.Key, Factor.Value);
 						}
-						else if (derivedUnits.TryGetValue(Name, out Quantity))
+						else if (derivedUnits.TryGetValue(Name, out PhysicalQuantity Quantity))
 						{
 							Magnitude *= Math.Pow(Quantity.Magnitude, FactorExponent);
 							Exponent += Prefixes.PrefixToExponent(Quantity.Unit.prefix) * FactorExponent;
@@ -642,7 +635,7 @@ namespace Waher.Script.Units
 									this.Add(ReferenceFactors, Segment.Key, Segment.Value * FactorExponent);
 							}
 						}
-						else if (compoundUnits.TryGetValue(Name, out Units))
+						else if (compoundUnits.TryGetValue(Name, out KeyValuePair<AtomicUnit, int>[] Units))
 						{
 							foreach (KeyValuePair<AtomicUnit, int> Segment in Units)
 							{
@@ -687,20 +680,15 @@ namespace Waher.Script.Units
 			Dictionary<string, IBaseQuantity> ReferenceUnits = new Dictionary<string, IBaseQuantity>();
 			Dictionary<string, KeyValuePair<AtomicUnit, int>[]> CompoundUnits = new Dictionary<string, KeyValuePair<AtomicUnit, int>[]>();
 			Dictionary<string, PhysicalQuantity> DerivedUnits = new Dictionary<string, PhysicalQuantity>();
-			ConstructorInfo CI;
 			IBaseQuantity BaseQuantity;
 			ICompoundQuantity CompoundQuantity;
 			IDerivedQuantity DerivedQuantity;
 
 			foreach (Type Type in Types.GetTypesImplementingInterface(typeof(IBaseQuantity)))
 			{
-				CI = Type.GetConstructor(Types.NoTypes);
-				if (CI == null)
-					continue;
-
 				try
 				{
-					BaseQuantity = (IBaseQuantity)CI.Invoke(Types.NoParameters);
+					BaseQuantity = (IBaseQuantity)Activator.CreateInstance(Type);
 				}
 				catch (Exception ex)
 				{
@@ -716,13 +704,9 @@ namespace Waher.Script.Units
 
 			foreach (Type Type in Types.GetTypesImplementingInterface(typeof(ICompoundQuantity)))
 			{
-				CI = Type.GetConstructor(Types.NoTypes);
-				if (CI == null)
-					continue;
-
 				try
 				{
-					CompoundQuantity = (ICompoundQuantity)CI.Invoke(Types.NoParameters);
+					CompoundQuantity = (ICompoundQuantity)Activator.CreateInstance(Type);
 				}
 				catch (Exception ex)
 				{
@@ -736,13 +720,9 @@ namespace Waher.Script.Units
 
 			foreach (Type Type in Types.GetTypesImplementingInterface(typeof(IDerivedQuantity)))
 			{
-				CI = Type.GetConstructor(Types.NoTypes);
-				if (CI == null)
-					continue;
-
 				try
 				{
-					DerivedQuantity = (IDerivedQuantity)CI.Invoke(Types.NoParameters);
+					DerivedQuantity = (IDerivedQuantity)Activator.CreateInstance(Type);
 				}
 				catch (Exception ex)
 				{
@@ -835,8 +815,7 @@ namespace Waher.Script.Units
 			To = From;
 			ToUnit = ToUnit.FromReferenceUnits(ref To);
 
-			int Exponent;
-			Unit Div = Unit.Divide(FromUnit, ToUnit, out Exponent);
+			Unit Div = Unit.Divide(FromUnit, ToUnit, out int Exponent);
 			Exponent += Prefixes.PrefixToExponent(Div.prefix);
 			if (Exponent != 0)
 				To *= Math.Pow(10, Exponent);

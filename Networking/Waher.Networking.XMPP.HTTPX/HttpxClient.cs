@@ -3,23 +3,29 @@ using System.IO;
 using System.Collections.Generic;
 using System.Text;
 using System.Xml;
-using System.Threading.Tasks;
 using Waher.Content;
-using Waher.Events;
+using Waher.Content.Xml;
 using Waher.Networking.HTTP;
-using Waher.Runtime.Cache;
 
 namespace Waher.Networking.XMPP.HTTPX
 {
 	/// <summary>
 	/// HTTPX client.
 	/// </summary>
-	public class HttpxClient : IDisposable
+	public class HttpxClient : XmppExtension
 	{
+		/// <summary>
+		/// urn:xmpp:http
+		/// </summary>
 		public const string Namespace = "urn:xmpp:http";
+
+		/// <summary>
+		/// http://jabber.org/protocol/shim
+		/// </summary>
 		public const string NamespaceHeaders = "http://jabber.org/protocol/shim";
 
-		private XmppClient client;
+		private InBandBytestreams.IbbClient ibbClient = null;
+		private P2P.SOCKS5.Socks5Proxy socks5Proxy = null;
 		private IEndToEndEncryption e2e;
 		private int maxChunkSize;
 
@@ -29,8 +35,8 @@ namespace Waher.Networking.XMPP.HTTPX
 		/// <param name="Client">XMPP Client.</param>
 		/// <param name="MaxChunkSize">Max Chunk Size to use.</param>
 		public HttpxClient(XmppClient Client, int MaxChunkSize)
+			: base(Client)
 		{
-			this.client = Client;
 			this.e2e = null;
 			this.maxChunkSize = MaxChunkSize;
 
@@ -44,13 +50,18 @@ namespace Waher.Networking.XMPP.HTTPX
 		/// <param name="E2e">End-to-end encryption interface.</param>
 		/// <param name="MaxChunkSize">Max Chunk Size to use.</param>
 		public HttpxClient(XmppClient Client, IEndToEndEncryption E2e, int MaxChunkSize)
+			: base(Client)
 		{
-			this.client = Client;
 			this.e2e = E2e;
 			this.maxChunkSize = MaxChunkSize;
 
 			HttpxChunks.RegisterChunkReceiver(this.client);
 		}
+
+		/// <summary>
+		/// Implemented extensions.
+		/// </summary>
+		public override string[] Extensions => new string[] { "XEP-0332" };
 
 		/// <summary>
 		/// Optional end-to-end encryption interface to use in requests.
@@ -62,19 +73,54 @@ namespace Waher.Networking.XMPP.HTTPX
 		}
 
 		/// <summary>
+		/// In-band bytestream client, if supported.
+		/// </summary>
+		public InBandBytestreams.IbbClient IbbClient
+		{
+			get { return this.ibbClient; }
+			set
+			{
+				if (this.ibbClient != null)
+					this.ibbClient.OnOpen -= this.IbbClient_OnOpen;
+
+				this.ibbClient = value;
+				this.ibbClient.OnOpen += this.IbbClient_OnOpen;
+			}
+		}
+
+		/// <summary>
+		/// SOCKS5 proxy, if supported.
+		/// </summary>
+		public P2P.SOCKS5.Socks5Proxy Socks5Proxy
+		{
+			get { return this.socks5Proxy; }
+			set
+			{
+				if (this.socks5Proxy != null)
+					this.socks5Proxy.OnOpen -= this.Socks5Proxy_OnOpen;
+
+				this.socks5Proxy = value;
+				this.socks5Proxy.OnOpen += this.Socks5Proxy_OnOpen;
+			}
+		}
+
+		/// <summary>
 		/// <see cref="IDisposable.Dispose"/>
 		/// </summary>
-		public void Dispose()
+		public override void Dispose()
 		{
+			base.Dispose();
+
 			HttpxChunks.UnregisterChunkReceiver(this.client);
 		}
 
 		/// <summary>
-		/// Performs a HTTP GET request.
+		/// Performs an HTTP GET request.
 		/// </summary>
 		/// <param name="To">Full JID of entity to query.</param>
 		/// <param name="Resource">Local HTTP resource to query.</param>
 		/// <param name="Callback">Callback method to call when response is returned.</param>
+		/// <param name="DataCallback">Callback method to call when data is returned.</param>
 		/// <param name="State">State object to pass on to the callback method.</param>
 		/// <param name="Headers">HTTP headers of the request.</param>
 		public void GET(string To, string Resource, HttpxResponseEventHandler Callback,
@@ -86,12 +132,13 @@ namespace Waher.Networking.XMPP.HTTPX
 		// TODO: Add more HTTP methods.
 
 		/// <summary>
-		/// Performs a HTTP request.
+		/// Performs an HTTP request.
 		/// </summary>
 		/// <param name="To">Full JID of entity to query.</param>
 		/// <param name="Method">HTTP Method.</param>
 		/// <param name="LocalResource">Local HTTP resource to query.</param>
 		/// <param name="Callback">Callback method to call when response is returned.</param>
+		/// <param name="DataCallback">Callback method to call when data is returned.</param>
 		/// <param name="State">State object to pass on to the callback method.</param>
 		/// <param name="Headers">HTTP headers of the request.</param>
 		public void Request(string To, string Method, string LocalResource, HttpxResponseEventHandler Callback,
@@ -101,7 +148,7 @@ namespace Waher.Networking.XMPP.HTTPX
 		}
 
 		/// <summary>
-		/// Performs a HTTP request.
+		/// Performs an HTTP request.
 		/// </summary>
 		/// <param name="To">Full JID of entity to query.</param>
 		/// <param name="Method">HTTP Method.</param>
@@ -109,9 +156,8 @@ namespace Waher.Networking.XMPP.HTTPX
 		/// <param name="HttpVersion">HTTP Version.</param>
 		/// <param name="Headers">HTTP headers.</param>
 		/// <param name="DataStream">Data Stream, if any, or null, if no data is sent.</param>
-		/// <param name="DataCallback">Local resource.</param>
-		/// <param name="Request">HTTP Request.</param>
 		/// <param name="Callback">Callback method to call when response is returned.</param>
+		/// <param name="DataCallback">Local resource.</param>
 		/// <param name="State">State object to pass on to the callback method.</param>
 		public void Request(string To, string Method, string LocalResource, double HttpVersion, IEnumerable<HttpField> Headers,
 			Stream DataStream, HttpxResponseEventHandler Callback, HttpxResponseDataEventHandler DataCallback, object State)
@@ -130,7 +176,11 @@ namespace Waher.Networking.XMPP.HTTPX
 			Xml.Append(HttpVersion.ToString("F1").Replace(System.Globalization.NumberFormatInfo.CurrentInfo.NumberDecimalSeparator, "."));
 			Xml.Append("' maxChunkSize='");
 			Xml.Append(this.maxChunkSize.ToString());
-			Xml.Append("' sipub='false' ibb='false' jingle='false'>");
+			Xml.Append("' sipub='false' ibb='");
+			Xml.Append(CommonTypes.Encode(this.ibbClient != null));
+			Xml.Append("' s5='");
+			Xml.Append(CommonTypes.Encode(this.socks5Proxy != null));
+			Xml.Append("' jingle='false'>");
 
 			Xml.Append("<headers xmlns='");
 			Xml.Append(HttpxClient.NamespaceHeaders);
@@ -159,7 +209,7 @@ namespace Waher.Networking.XMPP.HTTPX
 					DataStream.Read(Data, 0, c);
 
 					Xml.Append("<data><base64>");
-					Xml.Append(Convert.ToBase64String(Data, Base64FormattingOptions.None));
+					Xml.Append(Convert.ToBase64String(Data));
 					Xml.Append("</base64></data>");
 				}
 				else
@@ -206,14 +256,14 @@ namespace Waher.Networking.XMPP.HTTPX
 					Xml.Append("' nr='");
 					Xml.Append(Nr.ToString());
 					Xml.Append("'>");
-					Xml.Append(Convert.ToBase64String(Data, 0, i, Base64FormattingOptions.None));
+					Xml.Append(Convert.ToBase64String(Data, 0, i));
 					Xml.Append("</chunk>");
 					Nr++;
 
 					if (this.e2e != null)
 					{
 						this.e2e.SendMessage(this.client, E2ETransmission.NormalIfNotE2E, QoSLevel.Unacknowledged,
-							MessageType.Normal, string.Empty, To, Xml.ToString(), string.Empty, string.Empty, 
+							MessageType.Normal, string.Empty, To, Xml.ToString(), string.Empty, string.Empty,
 							string.Empty, string.Empty, string.Empty, null, null);
 					}
 					else
@@ -236,6 +286,7 @@ namespace Waher.Networking.XMPP.HTTPX
 			HttpxResponseEventHandler Callback = (HttpxResponseEventHandler)P[0];
 			HttpxResponseDataEventHandler DataCallback = (HttpxResponseDataEventHandler)P[1];
 			object State = P[2];
+			byte[] Data = null;
 			bool HasData = false;
 			bool DisposeResponse = true;
 
@@ -273,7 +324,7 @@ namespace Waher.Networking.XMPP.HTTPX
 									case "text":
 										MemoryStream ms = new MemoryStream();
 										Response.SetResponseStream(ms);
-										byte[] Data = Response.Encoding.GetBytes(N2.InnerText);
+										Data = Response.Encoding.GetBytes(N2.InnerText);
 										ms.Write(Data, 0, Data.Length);
 										ms.Position = 0;
 										HasData = true;
@@ -301,18 +352,38 @@ namespace Waher.Networking.XMPP.HTTPX
 										string StreamId = XML.Attribute((XmlElement)N2, "streamId");
 
 										HttpxChunks.chunkedStreams.Add(e.From + " " + StreamId, new ClientChunkRecord(this,
-											new HttpxResponseEventArgs(e, Response, State, Version, StatusCode, StatusMessage, true),
-											Response, DataCallback, State, StreamId));
+											new HttpxResponseEventArgs(e, Response, State, Version, StatusCode, StatusMessage, true, null),
+											Response, DataCallback, State, StreamId, XmppClient.GetBareJID(e.From), false));
 
 										DisposeResponse = false;
+										HasData = true;
+										break;
+
+									case "ibb":
+										StreamId = XML.Attribute((XmlElement)N2, "sid");
+
+										HttpxChunks.chunkedStreams.Add(e.From + " " + StreamId, new ClientChunkRecord(this,
+											new HttpxResponseEventArgs(e, Response, State, Version, StatusCode, StatusMessage, true, null),
+											Response, DataCallback, State, StreamId, XmppClient.GetBareJID(e.From), false));
+
+										DisposeResponse = false;
+										HasData = true;
+										break;
+
+									case "s5":
+										StreamId = XML.Attribute((XmlElement)N2, "sid");
+										bool E2e = XML.Attribute((XmlElement)N2, "e2e", false);
+
+										HttpxChunks.chunkedStreams.Add(e.From + " " + StreamId, new ClientChunkRecord(this,
+											new HttpxResponseEventArgs(e, Response, State, Version, StatusCode, StatusMessage, true, null),
+											Response, DataCallback, State, StreamId, XmppClient.GetBareJID(e.From), E2e));
+
+										DisposeResponse = false;
+										HasData = true;
 										break;
 
 									case "sipub":
 										// TODO: Implement File Transfer support.
-										break;
-
-									case "ibb":
-										// TODO: Implement In-band byte streams support.
 										break;
 
 									case "jingle":
@@ -332,7 +403,7 @@ namespace Waher.Networking.XMPP.HTTPX
 				Response = new HttpResponse();
 			}
 
-			HttpxResponseEventArgs e2 = new HttpxResponseEventArgs(e, Response, State, Version, StatusCode, StatusMessage, HasData);
+			HttpxResponseEventArgs e2 = new HttpxResponseEventArgs(e, Response, State, Version, StatusCode, StatusMessage, HasData, Data);
 
 			try
 			{
@@ -369,11 +440,185 @@ namespace Waher.Networking.XMPP.HTTPX
 			if (this.e2e != null)
 			{
 				this.e2e.SendMessage(this.client, E2ETransmission.NormalIfNotE2E, QoSLevel.Unacknowledged,
-					MessageType.Normal, string.Empty, To, Xml.ToString(), string.Empty, string.Empty, string.Empty, 
+					MessageType.Normal, string.Empty, To, Xml.ToString(), string.Empty, string.Empty, string.Empty,
 					string.Empty, string.Empty, null, null);
 			}
 			else
 				this.client.SendMessage(MessageType.Normal, To, Xml.ToString(), string.Empty, string.Empty, string.Empty, string.Empty, string.Empty);
 		}
+
+		private void IbbClient_OnOpen(object Sender, InBandBytestreams.ValidateStreamEventArgs e)
+		{
+			string Key = e.From + " " + e.StreamId;
+
+			if (HttpxChunks.chunkedStreams.ContainsKey(Key))
+				e.AcceptStream(this.IbbDataReceived, this.IbbStreamClosed, new object[] { Key, -1, null });
+		}
+
+		private void IbbDataReceived(object Sender, InBandBytestreams.DataReceivedEventArgs e)
+		{
+			object[] P = (object[])e.State;
+			string Key = (string)P[0];
+			int Nr = (int)P[1];
+			byte[] PrevData = (byte[])P[2];
+
+			if (HttpxChunks.chunkedStreams.TryGetValue(Key, out ChunkRecord Rec))
+			{
+				if (PrevData != null)
+					Rec.ChunkReceived(Nr, false, PrevData);
+
+				Nr++;
+				P[1] = Nr;
+				P[2] = e.Data;
+			}
+		}
+
+		private void IbbStreamClosed(object Sender, InBandBytestreams.StreamClosedEventArgs e)
+		{
+			object[] P = (object[])e.State;
+			string Key = (string)P[0];
+			int Nr = (int)P[1];
+			byte[] PrevData = (byte[])P[2];
+
+			if (HttpxChunks.chunkedStreams.TryGetValue(Key, out ChunkRecord Rec))
+			{
+				if (e.Reason == InBandBytestreams.CloseReason.Done)
+				{
+					if (PrevData != null)
+						Rec.ChunkReceived(Nr, true, PrevData);
+					else
+						Rec.ChunkReceived(Nr, true, new byte[0]);
+
+					P[2] = null;
+				}
+				else
+					HttpxChunks.chunkedStreams.Remove(Key);
+			}
+		}
+
+		private void Socks5Proxy_OnOpen(object Sender, P2P.SOCKS5.ValidateStreamEventArgs e)
+		{
+			string Key = e.From + " " + e.StreamId;
+			ClientChunkRecord ClientRec;
+
+			if (HttpxChunks.chunkedStreams.TryGetValue(Key, out ChunkRecord Rec))
+			{
+				ClientRec = Rec as ClientChunkRecord;
+
+				if (ClientRec != null)
+				{
+					//this.client.Information("Accepting SOCKS5 stream from " + e.From);
+					e.AcceptStream(this.Socks5DataReceived, this.Socks5StreamClosed, new Socks5Receiver(Key, ClientRec.jid, ClientRec.e2e));
+				}
+			}
+		}
+
+		private class Socks5Receiver
+		{
+			public string Key;
+			public string Jid;
+			public int State = 0;
+			public int BlockSize;
+			public int BlockPos;
+			public int Nr = 0;
+			public byte[] Block;
+			public bool E2e;
+
+			public Socks5Receiver(string Key, string Jid, bool E2e)
+			{
+				this.Key = Key;
+				this.Jid = Jid;
+				this.E2e = E2e;
+			}
+		}
+
+		private void Socks5DataReceived(object Sender, P2P.SOCKS5.DataReceivedEventArgs e)
+		{
+			Socks5Receiver Rx = (Socks5Receiver)e.State;
+
+			if (HttpxChunks.chunkedStreams.TryGetValue(Rx.Key, out ChunkRecord Rec))
+			{
+				//this.client.Information(e.Data.Length.ToString() + " bytes received over SOCKS5 stream " + Rx.Key + ".");
+
+				byte[] Data = e.Data;
+				int i = 0;
+				int c = e.Data.Length;
+				int d;
+
+				while (i < c)
+				{
+					switch (Rx.State)
+					{
+						case 0:
+							Rx.BlockSize = Data[i++];
+							Rx.State++;
+							break;
+
+						case 1:
+							Rx.BlockSize <<= 8;
+							Rx.BlockSize |= Data[i++];
+
+							if (Rx.BlockSize == 0)
+							{
+								Rec.ChunkReceived(Rx.Nr++, true, new byte[0]);
+								e.Stream.Dispose();
+								return;
+							}
+
+							Rx.BlockPos = 0;
+
+							if (Rx.Block == null || Rx.Block.Length != Rx.BlockSize)
+								Rx.Block = new byte[Rx.BlockSize];
+
+							Rx.State++;
+							break;
+
+						case 2:
+							d = c - i;
+							if (d > Rx.BlockSize - Rx.BlockPos)
+								d = Rx.BlockSize - Rx.BlockPos;
+
+							Array.Copy(Data, i, Rx.Block, Rx.BlockPos, d);
+							i += d;
+							Rx.BlockPos += d;
+
+							if (Rx.BlockPos >= Rx.BlockSize)
+							{
+								if (Rx.E2e)
+								{
+									Rx.Block = this.e2e.Decrypt(Rx.Jid, Rx.Block);
+									if (Rx.Block == null)
+									{
+										e.Stream.Dispose();
+										return;
+									}
+								}
+
+								//this.client.Information("Chunk " + Rx.Nr.ToString() + " received and forwarded.");
+
+								Rec.ChunkReceived(Rx.Nr++, false, Rx.Block);
+								Rx.State = 0;
+							}
+							break;
+					}
+				}
+			}
+			else
+			{
+				//this.client.Warning(e.Data.Length.ToString() + " bytes received over SOCKS5 stream " + Rx.Key + " and discarded.");
+
+				e.Stream.Dispose();
+			}
+		}
+
+		private void Socks5StreamClosed(object Sender, P2P.SOCKS5.StreamEventArgs e)
+		{
+			//this.client.Information("SOCKS5 stream closed.");
+
+			Socks5Receiver Rx = (Socks5Receiver)e.State;
+
+			HttpxChunks.chunkedStreams.Remove(Rx.Key);
+		}
+
 	}
 }

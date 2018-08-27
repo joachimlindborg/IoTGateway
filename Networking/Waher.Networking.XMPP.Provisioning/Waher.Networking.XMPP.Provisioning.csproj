@@ -1,117 +1,41 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+<Project Sdk="Microsoft.NET.Sdk" ToolsVersion="15.0">
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{1747B647-98C1-448D-A5DA-96DD3082359F}</ProjectGuid>
-    <OutputType>Library</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Waher.Networking.XMPP.Provisioning</RootNamespace>
-    <AssemblyName>Waher.Networking.XMPP.Provisioning</AssemblyName>
-    <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
-    <FileAlignment>512</FileAlignment>
+    <TargetFramework>netstandard1.3</TargetFramework>
+    <Description>Implements the XMPP IoT provisioning extesion as defined by the IEEE XMPP IoT Interface working group.</Description>
+    <Copyright>Copyright © Waher Data AB 2016-2018. All rights reserved.</Copyright>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <Authors>Peter Waher</Authors>
+    <Company>Waher Data AB</Company>
+    <Product>Waher.IoTGateway</Product>
+    <PackageLicenseUrl>https://github.com/PeterWaher/IoTGateway#license</PackageLicenseUrl>
+    <PackageProjectUrl>https://github.com/PeterWaher/IoTGateway/tree/master/Networking/Waher.Networking.XMPP.Provisioning</PackageProjectUrl>
+    <PackageIconUrl>https://github.com/PeterWaher/IoTGateway/blob/master/Images/Icon.ico?raw=true</PackageIconUrl>
+    <RepositoryUrl>https://github.com/PeterWaher/IoTGateway</RepositoryUrl>
+    <RepositoryType>GitHub</RepositoryType>
+    <PackageTags>networking communication xmpp iot provisioning xep-0324</PackageTags>
+    <NeutralLanguage>English</NeutralLanguage>
+    <AssemblyVersion>1.0.19</AssemblyVersion>
+    <FileVersion>1.0.19</FileVersion>
+    <Version>1.0.19</Version>
+    <FileUpgradeFlags>40</FileUpgradeFlags>
+    <UpgradeBackupLocation>C:\My Projects\IoTGateway\Backup\Networking\Waher.Networking.XMPP.Provisioning\</UpgradeBackupLocation>
+    <OldToolsVersion>2.0</OldToolsVersion>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <DocumentationFile>bin\Debug\netstandard1.3\Waher.Networking.XMPP.Provisioning.xml</DocumentationFile>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <DocumentationFile>bin\Release\netstandard1.3\Waher.Networking.XMPP.Provisioning.xml</DocumentationFile>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Xml.Linq" />
-    <Reference Include="System.Data.DataSetExtensions" />
-    <Reference Include="Microsoft.CSharp" />
-    <Reference Include="System.Data" />
-    <Reference Include="System.Net.Http" />
-    <Reference Include="System.Xml" />
+    <PackageReference Include="System.Security.Cryptography.X509Certificates" Version="4.3.2" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="CanControlEventArgs.cs" />
-    <Compile Include="NodeEventArgs.cs" />
-    <Compile Include="ClaimedEventArgs.cs" />
-    <Compile Include="NodeJidEventArgs.cs" />
-    <Compile Include="NodeResultEventArgs.cs" />
-    <Compile Include="SearchOperators\NumericTagEqualTo.cs" />
-    <Compile Include="SearchOperators\NumericTagGreaterThan.cs" />
-    <Compile Include="SearchOperators\NumericTagGreaterThanOrEqualTo.cs" />
-    <Compile Include="SearchOperators\NumericTagInRange.cs" />
-    <Compile Include="SearchOperators\NumericTagLesserThan.cs" />
-    <Compile Include="SearchOperators\NumericTagLesserThanOrEqualTo.cs" />
-    <Compile Include="SearchOperators\NumericTagNotEqualTo.cs" />
-    <Compile Include="SearchOperators\NumericTagNotInRange.cs" />
-    <Compile Include="SearchOperators\NumericTagRange.cs" />
-    <Compile Include="SearchOperators\SearchOperator.cs" />
-    <Compile Include="SearchOperators\SearchOperatorNumeric.cs" />
-    <Compile Include="SearchOperators\SearchOperatorString.cs" />
-    <Compile Include="SearchOperators\StringTagEqualTo.cs" />
-    <Compile Include="SearchOperators\StringTagGreaterThan.cs" />
-    <Compile Include="SearchOperators\StringTagGreaterThanOrEqualTo.cs" />
-    <Compile Include="SearchOperators\StringTagInRange.cs" />
-    <Compile Include="SearchOperators\StringTagLesserThan.cs" />
-    <Compile Include="SearchOperators\StringTagLesserThanOrEqualTo.cs" />
-    <Compile Include="SearchOperators\StringTagLike.cs" />
-    <Compile Include="SearchOperators\StringTagNotEqualTo.cs" />
-    <Compile Include="SearchOperators\StringTagNotInRange.cs" />
-    <Compile Include="SearchOperators\StringTagRange.cs" />
-    <Compile Include="SearchResultEventArgs.cs" />
-    <Compile Include="SearchResultThing.cs" />
-    <Compile Include="UpdateEventArgs.cs" />
-    <Compile Include="RegistrationEventArgs.cs" />
-    <Compile Include="MetaDataNumericTag.cs" />
-    <Compile Include="MetaDataStringTag.cs" />
-    <Compile Include="MetaDataTag.cs" />
-    <Compile Include="NodesEventArgs.cs" />
-    <Compile Include="CertificateUse.cs" />
-    <Compile Include="CanReadEventArgs.cs" />
-    <Compile Include="JidEventArgs.cs" />
-    <Compile Include="ThingRegistryClient.cs" />
-    <Compile Include="ProvisioningClient.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="IsFriendEventArgs.cs" />
-    <Compile Include="TokenEventArgs.cs" />
+    <ProjectReference Include="..\..\Content\Waher.Content\Waher.Content.csproj" />
+    <ProjectReference Include="..\..\Events\Waher.Events\Waher.Events.csproj" />
+    <ProjectReference Include="..\..\Persistence\Waher.Persistence\Waher.Persistence.csproj" />
+    <ProjectReference Include="..\..\Things\Waher.Things\Waher.Things.csproj" />
+    <ProjectReference Include="..\Waher.Networking.XMPP\Waher.Networking.XMPP.csproj" />
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\Content\Waher.Content\Waher.Content.csproj">
-      <Project>{8e159800-4f4f-4457-a2e9-c30e9ce95338}</Project>
-      <Name>Waher.Content</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Events\Waher.Events\Waher.Events.csproj">
-      <Project>{a8eb7717-f5de-419a-bb10-d213bc6fa654}</Project>
-      <Name>Waher.Events</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Things\Waher.Things\Waher.Things.csproj">
-      <Project>{714b8894-f2f0-47d8-9b28-cd3b1e8d427a}</Project>
-      <Name>Waher.Things</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Waher.Networking.XMPP\Waher.Networking.XMPP.csproj">
-      <Project>{40f992bf-de42-43c4-a1fe-c2b84a6ba4bb}</Project>
-      <Name>Waher.Networking.XMPP</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Waher.Networking\Waher.Networking.csproj">
-      <Project>{297f40ef-37fa-4208-8db4-c2971af2b313}</Project>
-      <Name>Waher.Networking</Name>
-    </ProjectReference>
-  </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
 </Project>

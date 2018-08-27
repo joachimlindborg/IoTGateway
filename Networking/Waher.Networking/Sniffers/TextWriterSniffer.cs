@@ -10,9 +10,14 @@ namespace Waher.Networking.Sniffers
 	/// </summary>
 	public class TextWriterSniffer : ISniffer, IDisposable
 	{
+		/// <summary>
+		/// Text output writer.
+		/// </summary>
 		protected TextWriter output;
+
 		private BinaryPresentationMethod binaryPresentationMethod;
 		private bool disposed = false;
+		private bool includeTimestamp = false;
 
 		/// <summary>
 		/// Outputs sniffed data to a text writer.
@@ -23,6 +28,15 @@ namespace Waher.Networking.Sniffers
 		{
 			this.output = Output;
 			this.binaryPresentationMethod = BinaryPresentationMethod;
+		}
+
+		/// <summary>
+		/// If a timestamp should be included for each record logged.
+		/// </summary>
+		public bool IncludeTimestamp
+		{
+			get { return this.includeTimestamp; }
+			set { this.includeTimestamp = value; }
 		}
 
 		/// <summary>
@@ -47,7 +61,15 @@ namespace Waher.Networking.Sniffers
 		public virtual void ReceiveBinary(byte[] Data)
 		{
 			if (Data.Length > 0)
-				this.HexOutput(Data, "Rx: ");
+				this.HexOutput(Data, this.Prefix("Rx"));
+		}
+
+		private string Prefix(string Type)
+		{
+			if (this.includeTimestamp)
+				return Type + " (" + DateTime.Now.ToString("T") + "): ";
+			else
+				return Type + ": ";
 		}
 
 		private void HexOutput(byte[] Data, string RowPrefix)
@@ -102,7 +124,7 @@ namespace Waher.Networking.Sniffers
 		public virtual void TransmitBinary(byte[] Data)
 		{
 			if (Data.Length > 0)
-				this.HexOutput(Data, "Tx: ");
+				this.HexOutput(Data, this.Prefix("Tx"));
 		}
 
 		/// <summary>
@@ -110,7 +132,7 @@ namespace Waher.Networking.Sniffers
 		/// </summary>
 		public virtual void ReceiveText(string Text)
 		{
-			this.WriteLine("Rx: " + Text);
+			this.WriteLine(this.Prefix("Rx") + Text);
 		}
 
 		private void WriteLine(string s)
@@ -134,7 +156,7 @@ namespace Waher.Networking.Sniffers
 		/// </summary>
 		public virtual void TransmitText(string Text)
 		{
-			this.WriteLine("Tx: " + Text);
+			this.WriteLine(this.Prefix("Tx") + Text);
 		}
 
 		/// <summary>
@@ -142,7 +164,7 @@ namespace Waher.Networking.Sniffers
 		/// </summary>
 		public virtual void Information(string Comment)
 		{
-			this.WriteLine("Info: " + Comment);
+			this.WriteLine(this.Prefix("Info") + Comment);
 		}
 
 		/// <summary>
@@ -150,7 +172,7 @@ namespace Waher.Networking.Sniffers
 		/// </summary>
 		public virtual void Warning(string Warning)
 		{
-			this.WriteLine("Warning: " + Warning);
+			this.WriteLine(this.Prefix("Warning") + Warning);
 		}
 
 		/// <summary>
@@ -158,7 +180,7 @@ namespace Waher.Networking.Sniffers
 		/// </summary>
 		public virtual void Error(string Error)
 		{
-			this.WriteLine("Error: " + Error);
+			this.WriteLine(this.Prefix("Error") + Error);
 		}
 
 		/// <summary>
@@ -166,7 +188,7 @@ namespace Waher.Networking.Sniffers
 		/// </summary>
 		public virtual void Exception(string Exception)
 		{
-			this.WriteLine("Exception: " + Exception);
+			this.WriteLine(this.Prefix("Exception") + Exception);
 		}
 
 		/// <summary>

@@ -19,11 +19,14 @@ namespace Waher.Script.Operators.Conditional
         /// <summary>
         /// FOR operator.
         /// </summary>
+		/// <param name="VariableName">Name of loop variable.</param>
         /// <param name="From">Required From statement.</param>
         /// <param name="To">Required To statement.</param>
         /// <param name="Step">Optional Step statement.</param>
+		/// <param name="Statement">Loop statement to evaluate.</param>
         /// <param name="Start">Start position in script expression.</param>
         /// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
         public For(string VariableName, ScriptNode From, ScriptNode To, ScriptNode Step, ScriptNode Statement, int Start, int Length, Expression Expression)
             : base(From, To, Step, Statement, Start, Length, Expression)
         {

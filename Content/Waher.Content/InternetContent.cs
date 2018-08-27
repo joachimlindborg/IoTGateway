@@ -2,8 +2,7 @@
 using System.Reflection;
 using System.Collections.Generic;
 using System.Text;
-using Waher.Events;
-using Waher.Script;
+using Waher.Runtime.Inventory;
 
 namespace Waher.Content
 {
@@ -28,7 +27,7 @@ namespace Waher.Content
 			new Dictionary<string, KeyValuePair<Grade, IContentDecoder>>(StringComparer.CurrentCultureIgnoreCase);
 		private static Dictionary<string, string> contentTypeByFileExtensions = new Dictionary<string, string>(StringComparer.CurrentCultureIgnoreCase);
 		private static Dictionary<string, IContentConverter> convertersByStep = new Dictionary<string, IContentConverter>(StringComparer.CurrentCultureIgnoreCase);
-		private static Dictionary<string, LinkedList<IContentConverter>> convertersByFrom = new Dictionary<string, LinkedList<IContentConverter>>();
+		private static Dictionary<string, List<IContentConverter>> convertersByFrom = new Dictionary<string, List<IContentConverter>>();
 
 		static InternetContent()
 		{
@@ -128,30 +127,22 @@ namespace Waher.Content
 				if (encoders == null)
 				{
 					List<IContentEncoder> Encoders = new List<IContentEncoder>();
-					ConstructorInfo CI;
 					IContentEncoder Encoder;
 					Type[] EncoderTypes = Types.GetTypesImplementingInterface(typeof(IContentEncoder));
+					TypeInfo TI;
 
 					foreach (Type T in EncoderTypes)
 					{
-#if WINDOWS_UWP
-						if (T.GetTypeInfo().IsAbstract)
-#else
-						if (T.IsAbstract)
-#endif
-							continue;
-
-						CI = T.GetConstructor(Types.NoTypes);
-						if (CI == null)
+						TI = T.GetTypeInfo();
+						if (TI.IsAbstract || TI.IsGenericTypeDefinition)
 							continue;
 
 						try
 						{
-							Encoder = (IContentEncoder)CI.Invoke(Types.NoParameters);
+							Encoder = (IContentEncoder)Activator.CreateInstance(T);
 						}
-						catch (Exception ex)
+						catch (Exception)
 						{
-							Log.Critical(ex);
 							continue;
 						}
 
@@ -174,14 +165,12 @@ namespace Waher.Content
 		/// <returns>If the object can be encoded.</returns>
 		public static bool Encodes(object Object, out Grade Grade, out IContentEncoder Encoder)
 		{
-			Grade Grade2;
-
 			Grade = Grade.NotAtAll;
 			Encoder = null;
 
 			foreach (IContentEncoder Encoder2 in Encoders)
 			{
-				if (Encoder2.Encodes(Object, out Grade2) && Grade2 > Grade)
+				if (Encoder2.Encodes(Object, out Grade Grade2) && Grade2 > Grade)
 				{
 					Grade = Grade2;
 					Encoder = Encoder2;
@@ -201,11 +190,8 @@ namespace Waher.Content
 		/// <exception cref="ArgumentException">If the object cannot be encoded.</exception>
 		public static byte[] Encode(object Object, Encoding Encoding, out string ContentType)
 		{
-			IContentEncoder Encoder;
-			Grade Grade;
-
-			if (!Encodes(Object, out Grade, out Encoder))
-				throw new ArgumentException("No encoder found to encode the object", "Object");
+			if (!Encodes(Object, out Grade Grade, out IContentEncoder Encoder))
+				throw new ArgumentException("No encoder found to encode the object", nameof(Object));
 
 			return Encoder.Encode(Object, Encoding, out ContentType);
 		}
@@ -230,15 +216,36 @@ namespace Waher.Content
 		/// <param name="AcceptedContentTypes">Optional array of accepted content types. If array is empty, all content types are accepted.</param>
 		public static bool IsAccepted(string[] ContentTypes, params string[] AcceptedContentTypes)
 		{
-			if (AcceptedContentTypes.Length == 0)
-				return true;
+			return IsAccepted(ContentTypes, out string ContentType, AcceptedContentTypes);
+		}
 
-			foreach (string ContentType in ContentTypes)
+		/// <summary>
+		/// Checks if at least one content type in a set of content types is acceptable.
+		/// </summary>
+		/// <param name="ContentTypes">Content types.</param>
+		/// <param name="ContentType">Content type selected as the first acceptable content type.</param>
+		/// <param name="AcceptedContentTypes">Optional array of accepted content types. If array is empty, all content types are accepted.</param>
+		public static bool IsAccepted(string[] ContentTypes, out string ContentType, params string[] AcceptedContentTypes)
+		{
+			if (ContentTypes.Length == 0)
+				throw new ArgumentException("Empty list of content types not permitted.", nameof(ContentTypes));
+
+			if (AcceptedContentTypes.Length == 0)
 			{
-				if (IsAccepted(ContentType, AcceptedContentTypes))
-					return true;
+				ContentType = ContentTypes[0];
+				return true;
 			}
 
+			foreach (string ContentType2 in ContentTypes)
+			{
+				if (IsAccepted(ContentType2, AcceptedContentTypes))
+				{
+					ContentType = ContentType2;
+					return true;
+				}
+			}
+
+			ContentType = null;
 			return false;
 		}
 
@@ -310,30 +317,22 @@ namespace Waher.Content
 				if (decoders == null)
 				{
 					List<IContentDecoder> Decoders = new List<IContentDecoder>();
-					ConstructorInfo CI;
 					IContentDecoder Decoder;
 					Type[] DecoderTypes = Types.GetTypesImplementingInterface(typeof(IContentDecoder));
+					TypeInfo TI;
 
 					foreach (Type T in DecoderTypes)
 					{
-#if WINDOWS_UWP
-						if (T.GetTypeInfo().IsAbstract)
-#else
-						if (T.IsAbstract)
-#endif
-							continue;
-
-						CI = T.GetConstructor(Types.NoTypes);
-						if (CI == null)
+						TI = T.GetTypeInfo();
+						if (TI.IsAbstract || TI.IsGenericTypeDefinition)
 							continue;
 
 						try
 						{
-							Decoder = (IContentDecoder)CI.Invoke(Types.NoParameters);
+							Decoder = (IContentDecoder)Activator.CreateInstance(T);
 						}
-						catch (Exception ex)
+						catch (Exception)
 						{
-							Log.Critical(ex);
 							continue;
 						}
 
@@ -358,9 +357,7 @@ namespace Waher.Content
 		{
 			lock (decoderByContentType)
 			{
-				KeyValuePair<Grade, IContentDecoder> P;
-
-				if (decoderByContentType.TryGetValue(ContentType, out P))
+				if (decoderByContentType.TryGetValue(ContentType, out KeyValuePair<Grade, IContentDecoder> P))
 				{
 					Grade = P.Key;
 					Decoder = P.Value;
@@ -369,14 +366,12 @@ namespace Waher.Content
 				}
 			}
 
-			Grade Grade2;
-
 			Grade = Grade.NotAtAll;
 			Decoder = null;
 
 			foreach (IContentDecoder Decoder2 in Decoders)
 			{
-				if (Decoder2.Decodes(ContentType, out Grade2) && Grade2 > Grade)
+				if (Decoder2.Decodes(ContentType, out Grade Grade2) && Grade2 > Grade)
 				{
 					Grade = Grade2;
 					Decoder = Decoder2;
@@ -398,17 +393,15 @@ namespace Waher.Content
 		/// <param name="Data">Encoded object.</param>
 		/// <param name="Encoding">Any encoding specified. Can be null if no encoding specified.</param>
 		/// <param name="Fields">Any content-type related fields and their corresponding values.</param>
+		///	<param name="BaseUri">Base URI, if any. If not available, value is null.</param>
 		/// <returns>Decoded object.</returns>
 		/// <exception cref="ArgumentException">If the object cannot be decoded.</exception>
-		public static object Decode(string ContentType, byte[] Data, Encoding Encoding, KeyValuePair<string, string>[] Fields)
+		public static object Decode(string ContentType, byte[] Data, Encoding Encoding, KeyValuePair<string, string>[] Fields, Uri BaseUri)
 		{
-			IContentDecoder Decoder;
-			Grade Grade;
+			if (!Decodes(ContentType, out Grade Grade, out IContentDecoder Decoder))
+				throw new ArgumentException("No decoder found to decode objects of type " + ContentType + ".", nameof(ContentType));
 
-			if (!Decodes(ContentType, out Grade, out Decoder))
-				throw new ArgumentException("No decoder found to decode objects of type " + ContentType + ".", "ContentType");
-
-			return Decoder.Decode(ContentType, Data, Encoding, Fields);
+			return Decoder.Decode(ContentType, Data, Encoding, Fields, BaseUri);
 		}
 
 		/// <summary>
@@ -416,9 +409,10 @@ namespace Waher.Content
 		/// </summary>
 		/// <param name="ContentType">Internet Content Type.</param>
 		/// <param name="Data">Encoded object.</param>
+		///	<param name="BaseUri">Base URI, if any. If not available, value is null.</param>
 		/// <returns>Decoded object.</returns>
 		/// <exception cref="ArgumentException">If the object cannot be decoded.</exception>
-		public static object Decode(string ContentType, byte[] Data)
+		public static object Decode(string ContentType, byte[] Data, Uri BaseUri)
 		{
 			Encoding Encoding = null;
 			KeyValuePair<string, string>[] Fields;
@@ -427,8 +421,8 @@ namespace Waher.Content
 			i = ContentType.IndexOf(';');
 			if (i > 0)
 			{
-				ContentType = ContentType.Substring(0, i).TrimEnd();
 				Fields = CommonTypes.ParseFieldValues(ContentType.Substring(i + 1).TrimStart());
+				ContentType = ContentType.Substring(0, i).TrimEnd();
 
 				foreach (KeyValuePair<string, string> Field in Fields)
 				{
@@ -475,7 +469,7 @@ namespace Waher.Content
 			else
 				Fields = new KeyValuePair<string, string>[0];
 
-			return Decode(ContentType, Data, Encoding, Fields);
+			return Decode(ContentType, Data, Encoding, Fields, BaseUri);
 		}
 
 		#endregion
@@ -491,9 +485,7 @@ namespace Waher.Content
 		/// <returns>Content type.</returns>
 		public static string GetContentType(string FileExtension)
 		{
-			string ContentType;
-
-			if (TryGetContentType(FileExtension, out ContentType))
+			if (TryGetContentType(FileExtension, out string ContentType))
 				return ContentType;
 			else
 				return "application/octet-stream";
@@ -587,9 +579,7 @@ namespace Waher.Content
 				if (convertersByStep.TryGetValue(PathKey, out Converter))
 					return Converter != null;
 
-				LinkedList<IContentConverter> Converters;
-
-				if (!convertersByFrom.TryGetValue(FromContentType, out Converters))
+				if (!convertersByFrom.TryGetValue(FromContentType, out List<IContentConverter> Converters))
 					return false;
 
 				LinkedList<ConversionStep> Queue = new LinkedList<ConversionStep>();
@@ -597,17 +587,19 @@ namespace Waher.Content
 
 				foreach (IContentConverter C in Converters)
 				{
-					Step = new ConversionStep();
-					Step.From = FromContentType;
-					Step.Converter = C;
-					Step.TotalGrade = C.ConversionGrade;
-					Step.Prev = null;
-					Step.Distance = 1;
+					Step = new ConversionStep()
+					{
+						From = FromContentType,
+						Converter = C,
+						TotalGrade = C.ConversionGrade,
+						Prev = null,
+						Distance = 1
+					};
+
 					Queue.AddLast(Step);
 				}
 
 				Dictionary<string, ConversionStep> Possibilities = new Dictionary<string, ConversionStep>();
-				ConversionStep NextStep;
 				ConversionStep Best = null;
 				Grade BestGrade = Grade.NotAtAll;
 				int BestDistance = int.MaxValue;
@@ -638,7 +630,7 @@ namespace Waher.Content
 						}
 						else
 						{
-							if (Possibilities.TryGetValue(To, out NextStep) && NextStep.TotalGrade >= StepGrade && NextStep.Distance <= StepDistance)
+							if (Possibilities.TryGetValue(To, out ConversionStep NextStep) && NextStep.TotalGrade >= StepGrade && NextStep.Distance <= StepDistance)
 								continue;
 
 							if (!convertersByFrom.TryGetValue(To, out Converters))
@@ -653,12 +645,15 @@ namespace Waher.Content
 									First = false;
 								}
 
-								NextStep = new ConversionStep();
-								NextStep.From = To;
-								NextStep.Converter = C;
-								NextStep.TotalGrade = StepGrade;
-								NextStep.Prev = Step;
-								NextStep.Distance = StepDistance;
+								NextStep = new ConversionStep()
+								{
+									From = To,
+									Converter = C,
+									TotalGrade = StepGrade,
+									Prev = Step,
+									Distance = StepDistance
+								};
+
 								Queue.AddLast(NextStep);
 							}
 						}
@@ -700,10 +695,9 @@ namespace Waher.Content
 		private static void FindConverters()
 		{
 			List<IContentConverter> Converters = new List<IContentConverter>();
-			LinkedList<IContentConverter> List;
-			ConstructorInfo CI;
 			IContentConverter Converter;
 			Type[] ConverterTypes = Types.GetTypesImplementingInterface(typeof(IContentConverter));
+			TypeInfo TI;
 
 			convertersByStep.Clear();
 			convertersByFrom.Clear();
@@ -712,24 +706,16 @@ namespace Waher.Content
 			{
 				foreach (Type T in ConverterTypes)
 				{
-#if WINDOWS_UWP
-					if (T.GetTypeInfo().IsAbstract)
-#else
-					if (T.IsAbstract)
-#endif
-						continue;
-
-					CI = T.GetConstructor(Types.NoTypes);
-					if (CI == null)
+					TI = T.GetTypeInfo();
+					if (TI.IsAbstract || TI.IsGenericTypeDefinition)
 						continue;
 
 					try
 					{
-						Converter = (IContentConverter)CI.Invoke(Types.NoParameters);
+						Converter = (IContentConverter)Activator.CreateInstance(T);
 					}
-					catch (Exception ex)
+					catch (Exception)
 					{
-						Log.Critical(ex);
 						continue;
 					}
 
@@ -737,13 +723,13 @@ namespace Waher.Content
 
 					foreach (string From in Converter.FromContentTypes)
 					{
-						if (!convertersByFrom.TryGetValue(From, out List))
+						if (!convertersByFrom.TryGetValue(From, out List<IContentConverter> List))
 						{
-							List = new LinkedList<IContentConverter>();
+							List = new List<IContentConverter>();
 							convertersByFrom[From] = List;
 						}
 
-						List.AddLast(Converter);
+						List.Add(Converter);
 
 						foreach (string To in Converter.ToContentTypes)
 						{
@@ -754,6 +740,25 @@ namespace Waher.Content
 			}
 
 			converters = Converters.ToArray();
+		}
+
+		/// <summary>
+		/// Gets available converters that can convert content from a given type.
+		/// </summary>
+		/// <param name="FromContentType">From which content type converters have to convert.</param>
+		/// <returns>Available converters, or null if there are none.</returns>
+		public static IContentConverter[] GetConverters(string FromContentType)
+		{
+			lock (convertersByStep)
+			{
+				if (converters == null)
+					FindConverters();
+
+				if (!convertersByFrom.TryGetValue(FromContentType, out List<IContentConverter> Converters))
+					return null;
+
+				return Converters.ToArray();
+			}
 		}
 
 		#endregion

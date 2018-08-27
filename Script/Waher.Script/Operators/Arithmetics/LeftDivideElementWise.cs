@@ -21,6 +21,7 @@ namespace Waher.Script.Operators.Arithmetics
 		/// <param name="Right">Right operand.</param>
 		/// <param name="Start">Start position in script expression.</param>
 		/// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
 		public LeftDivideElementWise(ScriptNode Left, ScriptNode Right, int Start, int Length, Expression Expression)
 			: base(Left, Right, Start, Length, Expression)
 		{
@@ -35,10 +36,9 @@ namespace Waher.Script.Operators.Arithmetics
         /// <returns>Result</returns>
         public override IElement EvaluateScalar(IElement Left, IElement Right, Variables Variables)
 		{
-			DoubleNumber DL = Left as DoubleNumber;
 			DoubleNumber DR = Right as DoubleNumber;
 
-			if (DL != null && DR != null)
+			if (Left is DoubleNumber DL && DR != null)
 				return new DoubleNumber(DR.Value / DL.Value);
 			else
 				return LeftDivide.EvaluateDivision(Left, Right, this);

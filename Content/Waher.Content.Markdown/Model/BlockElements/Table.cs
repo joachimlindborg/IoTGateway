@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Xml;
+using Waher.Content.Xml;
 
 namespace Waher.Content.Markdown.Model.BlockElements
 {
@@ -25,6 +26,8 @@ namespace Waher.Content.Markdown.Model.BlockElements
 		/// <param name="Headers">Header rows.</param>
 		/// <param name="Rows">Data rows.</param>
 		/// <param name="Alignments">Column alignments.</param>
+		/// <param name="Caption">Table caption.</param>
+		/// <param name="Id">Table ID.</param>
 		public Table(MarkdownDocument Document, int Columns, MarkdownElement[][] Headers, MarkdownElement[][] Rows, TextAlignment[] Alignments,
 			string Caption, string Id)
 			: base(Document)
@@ -384,6 +387,65 @@ namespace Waher.Content.Markdown.Model.BlockElements
 			}
 
 			return true;
+		}
+
+		/// <summary>
+		/// Exports the element to XML.
+		/// </summary>
+		/// <param name="Output">XML Output.</param>
+		public override void Export(XmlWriter Output)
+		{
+			Output.WriteStartElement("Table");
+			Output.WriteAttributeString("caption", this.caption);
+			Output.WriteAttributeString("id", this.id);
+			Output.WriteAttributeString("columns", this.columns.ToString());
+
+			foreach (TextAlignment Col in this.alignments)
+			{
+				Output.WriteStartElement("Column");
+				Output.WriteAttributeString("alignment", Col.ToString());
+				Output.WriteEndElement();
+			}
+
+			foreach (MarkdownElement[] Row in this.headers)
+			{
+				Output.WriteStartElement("HeaderRow");
+
+				foreach (MarkdownElement E in Row)
+				{
+					if (E == null)
+						Output.WriteElementString("Continue", string.Empty);
+					else
+					{
+						Output.WriteStartElement("HeaderCell");
+						E.Export(Output);
+						Output.WriteEndElement();
+					}
+				}
+
+				Output.WriteEndElement();
+			}
+
+			foreach (MarkdownElement[] Row in this.rows)
+			{
+				Output.WriteStartElement("Row");
+
+				foreach (MarkdownElement E in Row)
+				{
+					if (E == null)
+						Output.WriteElementString("Continue", string.Empty);
+					else
+					{
+						Output.WriteStartElement("Cell");
+						E.Export(Output);
+						Output.WriteEndElement();
+					}
+				}
+
+				Output.WriteEndElement();
+			}
+
+			Output.WriteEndElement();
 		}
 	}
 }

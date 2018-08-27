@@ -29,9 +29,9 @@ namespace Waher.Networking.XMPP.Sensor
 		/// <param name="OnFieldsReported">Callback method when fields are reported.</param>
 		/// <param name="OnErrorsReported">Callback method when errors are reported.</param>
 		/// <param name="State">State object passed on to callback methods.</param>
-		public InternalReadoutRequest(string Actor, ThingReference[] Nodes, FieldType Types, string[] Fields, DateTime From, DateTime To,
+		public InternalReadoutRequest(string Actor, IThingReference[] Nodes, FieldType Types, string[] Fields, DateTime From, DateTime To,
 			InternalReadoutFieldsEventHandler OnFieldsReported, InternalReadoutErrorsEventHandler OnErrorsReported, object State)
-			: base(0, null, string.Empty, Actor, Nodes, Types, Fields, From, To, DateTime.MinValue, string.Empty, string.Empty, string.Empty)
+			: base(string.Empty, null, string.Empty, Actor, Nodes, Types, Fields, From, To, DateTime.MinValue, string.Empty, string.Empty, string.Empty)
 		{
 			this.onFieldsReported = OnFieldsReported;
 			this.onErrorsReported = OnErrorsReported;
@@ -67,7 +67,7 @@ namespace Waher.Networking.XMPP.Sensor
 		/// Report error states to the client.
 		/// </summary>
 		/// <param name="Done">If the readout is complete (true) or if more data will be reported (false).</param>
-		/// <param name="Fields">Errors that have been detected.</param>
+		/// <param name="Errors">Errors that have been detected.</param>
 		public override void ReportErrors(bool Done, IEnumerable<ThingError> Errors)
 		{
 			try

@@ -1,28 +1,29 @@
 ﻿using System;
-using System.IO;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
 using System.Xml;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
-using System.Windows.Markup;
-using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+using System.Windows.Threading;
 using Microsoft.Win32;
-using Waher.Content;
+using Waher.Content.Xml;
 using Waher.Events;
 using Waher.Networking.XMPP;
 using Waher.Networking.XMPP.Control;
 using Waher.Networking.XMPP.DataForms;
+using Waher.Networking.XMPP.Provisioning;
 using Waher.Networking.XMPP.Sensor;
-using Waher.Things;
-using Waher.Things.SensorData;
+using Waher.Runtime.Inventory;
+using Waher.Persistence;
+using Waher.Persistence.Files;
+using Waher.Persistence.Filters;
 using Waher.Client.WPF.Controls;
+using Waher.Client.WPF.Controls.Questions;
 using Waher.Client.WPF.Controls.Chat;
 using Waher.Client.WPF.Controls.Sniffers;
 using Waher.Client.WPF.Dialogs;
@@ -38,24 +39,83 @@ namespace Waher.Client.WPF
 		public const string WindowTitle = "Simple XMPP IoT Client";
 
 		public static RoutedUICommand Add = new RoutedUICommand("Add", "Add", typeof(MainWindow));
+		public static RoutedUICommand Edit = new RoutedUICommand("Edit", "Edit", typeof(MainWindow));
+		public static RoutedUICommand Delete = new RoutedUICommand("Delete", "Delete", typeof(MainWindow));
 		public static RoutedUICommand ConnectTo = new RoutedUICommand("Connect To", "ConnectTo", typeof(MainWindow));
+		public static RoutedUICommand Refresh = new RoutedUICommand("Refresh", "Refresh", typeof(MainWindow));
 		public static RoutedUICommand Sniff = new RoutedUICommand("Sniff", "Sniff", typeof(MainWindow));
 		public static RoutedUICommand CloseTab = new RoutedUICommand("Close Tab", "CloseTab", typeof(MainWindow));
 		public static RoutedUICommand Chat = new RoutedUICommand("Chat", "Chat", typeof(MainWindow));
 		public static RoutedUICommand ReadMomentary = new RoutedUICommand("Read Momentary", "ReadMomentary", typeof(MainWindow));
 		public static RoutedUICommand ReadDetailed = new RoutedUICommand("Read Detailed", "ReadDetailed", typeof(MainWindow));
+		public static RoutedUICommand SubscribeToMomentary = new RoutedUICommand("Subscribe to Momentary", "SubscribeToMomentary", typeof(MainWindow));
 		public static RoutedUICommand Configure = new RoutedUICommand("Configure", "Configure", typeof(MainWindow));
+		public static RoutedUICommand Search = new RoutedUICommand("Search", "Search", typeof(MainWindow));
+		public static RoutedUICommand Script = new RoutedUICommand("Script", "Script", typeof(MainWindow));
 
 		internal static MainWindow currentInstance = null;
+		private static string appDataFolder = null;
+		private static FilesProvider databaseProvider = null;
 
 		public MainWindow()
 		{
 			if (currentInstance == null)
 				currentInstance = this;
 
+			Types.Initialize(typeof(MainWindow).Assembly,
+				typeof(Content.InternetContent).Assembly,
+				typeof(Content.Images.ImageCodec).Assembly,
+				typeof(Content.Markdown.MarkdownDocument).Assembly,
+				typeof(XML).Assembly,
+				typeof(Content.Xsl.XSL).Assembly,
+				typeof(SensorData).Assembly,
+				typeof(Networking.XMPP.BOSH.HttpBinding).Assembly,
+				typeof(Networking.XMPP.WebSocket.WebSocketBinding).Assembly,
+				typeof(Database).Assembly,
+				typeof(FilesProvider).Assembly,
+				typeof(Script.Expression).Assembly,
+				typeof(Script.Content.Functions.Encoding.Decode).Assembly,
+				typeof(Script.Graphs.Graph).Assembly,
+				typeof(Script.Fractals.FractalGraph).Assembly,
+				typeof(Script.Persistence.Functions.FindObjects).Assembly,
+				typeof(Script.Statistics.Functions.Beta).Assembly);
+
+			appDataFolder = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+			if (!appDataFolder.EndsWith(new string(Path.DirectorySeparatorChar, 1)))
+				appDataFolder += Path.DirectorySeparatorChar;
+
+			appDataFolder += "IoT Client" + Path.DirectorySeparatorChar;
+
+			if (!Directory.Exists(appDataFolder))
+				Directory.CreateDirectory(appDataFolder);
+
+			Task.Run(() =>
+			{
+				try
+				{
+					databaseProvider = new FilesProvider(appDataFolder + "Data", "Default", 8192, 10000, 8192, Encoding.UTF8, 10000);
+					Database.Register(databaseProvider);
+
+					Database.Find<Question>(new FilterAnd(new FilterFieldEqualTo("OwnerJID", string.Empty),
+						new FilterFieldEqualTo("ProvisioningJID", string.Empty)));  // To prepare indices, etc.
+
+					ChatView.InitEmojis();
+				}
+				catch (Exception ex)
+				{
+					ex = Log.UnnestException(ex);
+					ErrorBox(ex.Message);
+				}
+			});
+
 			InitializeComponent();
 
 			this.MainView.Load(this);
+		}
+
+		public static string AppDataFolder
+		{
+			get { return appDataFolder; }
 		}
 
 		internal static readonly string registryKey = Registry.CurrentUser + @"\Software\Waher Data AB\Waher.Client.WPF";
@@ -66,29 +126,34 @@ namespace Waher.Client.WPF
 
 			try
 			{
+				Log.RegisterExceptionToUnnest(typeof(System.Runtime.InteropServices.ExternalException));
+				Log.RegisterExceptionToUnnest(typeof(System.Security.Authentication.AuthenticationException));
+
 				Value = Registry.GetValue(registryKey, "WindowLeft", (int)this.Left);
-				if (Value != null && Value is int)
-					this.Left = (int)Value;
+				if (Value != null && Value is int WindowLeft)
+					this.Left = WindowLeft;
 
 				Value = Registry.GetValue(registryKey, "WindowTop", (int)this.Top);
-				if (Value != null && Value is int)
-					this.Top = (int)Value;
+				if (Value != null && Value is int WindowTop)
+					this.Top = WindowTop;
 
 				Value = Registry.GetValue(registryKey, "WindowWidth", (int)this.Width);
-				if (Value != null && Value is int)
-					this.Width = (int)Value;
+				if (Value != null && Value is int WindowWidth && WindowWidth > 0)
+					this.Width = WindowWidth;
 
 				Value = Registry.GetValue(registryKey, "WindowHeight", (int)this.Height);
-				if (Value != null && Value is int)
-					this.Height = (int)Value;
+				if (Value != null && Value is int WindowHeight && WindowHeight > 0)
+					this.Height = WindowHeight;
 
 				Value = Registry.GetValue(registryKey, "ConnectionTreeWidth", (int)this.MainView.ConnectionTree.Width);
-				if (Value != null && Value is int)
-					this.MainView.ConnectionsGrid.ColumnDefinitions[0].Width = new GridLength((int)Value);
+				if (!(Value is int ConnectionTreeWidth) || ConnectionTreeWidth <= 0)
+					ConnectionTreeWidth = 150;
+
+				this.MainView.ConnectionsGrid.ColumnDefinitions[0].Width = new GridLength(ConnectionTreeWidth);
 
 				Value = Registry.GetValue(registryKey, "WindowState", this.WindowState.ToString());
-				if (Value != null && Value is string)
-					this.WindowState = (WindowState)Enum.Parse(typeof(WindowState), (string)Value);
+				if (Value != null && Value is string s && Enum.TryParse<WindowState>(s, out WindowState WindowState))
+					this.WindowState = WindowState;
 
 				Value = Registry.GetValue(registryKey, "FileName", string.Empty);
 				if (Value != null && Value is string)
@@ -100,7 +165,7 @@ namespace Waher.Client.WPF
 			}
 			catch (Exception ex)
 			{
-				MessageBox.Show(this, ex.Message, "Unable to load values from registry.", MessageBoxButton.OK, MessageBoxImage.Error);
+				System.Windows.MessageBox.Show(this, ex.Message, "Unable to load values from registry.", MessageBoxButton.OK, MessageBoxImage.Error);
 			}
 		}
 
@@ -119,6 +184,8 @@ namespace Waher.Client.WPF
 			Registry.SetValue(registryKey, "ConnectionTreeWidth", (int)this.MainView.ConnectionsGrid.ColumnDefinitions[0].Width.Value, RegistryValueKind.DWord);
 			Registry.SetValue(registryKey, "WindowState", this.WindowState.ToString(), RegistryValueKind.String);
 			Registry.SetValue(registryKey, "FileName", this.MainView.FileName, RegistryValueKind.String);
+
+			Log.Terminate();
 		}
 		private void ConnectTo_Executed(object sender, ExecutedRoutedEventArgs e)
 		{
@@ -129,8 +196,7 @@ namespace Waher.Client.WPF
 		{
 			get
 			{
-				TabItem TabItem = this.Tabs.SelectedItem as TabItem;
-				if (TabItem == null)
+				if (!(this.Tabs.SelectedItem is TabItem TabItem))
 					return null;
 				else
 					return TabItem.Content as ITabView;
@@ -172,22 +238,32 @@ namespace Waher.Client.WPF
 			if (Node == null)
 			{
 				this.AddButton.IsEnabled = false;
+				this.EditButton.IsEnabled = false;
 				this.DeleteButton.IsEnabled = false;
 				this.RefreshButton.IsEnabled = false;
+				this.SniffButton.IsEnabled = false;
 				this.ChatButton.IsEnabled = false;
 				this.ReadMomentaryButton.IsEnabled = false;
 				this.ReadDetailedButton.IsEnabled = false;
+				this.ConfigureButton.IsEnabled = false;
+				this.SubscribeMomentaryButton.IsEnabled = false;
+				this.SearchButton.IsEnabled = false;
 			}
 			else
 			{
+				Node.SelectionChanged();
+
 				this.AddButton.IsEnabled = Node.CanAddChildren;
-				this.DeleteButton.IsEnabled = true;
+				this.EditButton.IsEnabled = Node.CanEdit;
+				this.DeleteButton.IsEnabled = Node.CanDelete;
 				this.RefreshButton.IsEnabled = Node.CanRecycle;
 				this.SniffButton.IsEnabled = Node.IsSniffable;
 				this.ChatButton.IsEnabled = Node.CanChat;
 				this.ReadMomentaryButton.IsEnabled = Node.CanReadSensorData;
 				this.ReadDetailedButton.IsEnabled = Node.CanReadSensorData;
 				this.ConfigureButton.IsEnabled = Node.CanConfigure;
+				this.SubscribeMomentaryButton.IsEnabled = Node.CanSubscribeToSensorData;
+				this.SearchButton.IsEnabled = Node.CanSearch;
 			}
 		}
 
@@ -248,26 +324,48 @@ namespace Waher.Client.WPF
 			if (Node == null || !Node.CanRecycle)
 				return;
 
-			Node.Recycle();
+			Node.Recycle(this);
 		}
 
 		private void Delete_CanExecute(object sender, CanExecuteRoutedEventArgs e)
 		{
 			TreeNode Node = this.SelectedNode;
-			e.CanExecute = (Node != null);
+			e.CanExecute = (Node != null && Node.CanDelete);
 		}
 
 		private void Delete_Executed(object sender, ExecutedRoutedEventArgs e)
 		{
 			TreeNode Node = this.SelectedNode;
-			if (Node == null)
+			if (Node == null || !Node.CanDelete)
 				return;
 
-			if (MessageBox.Show(this, "Are you sure you want to remove " + Node.Header + "?", "Are you sure?", MessageBoxButton.YesNo,
+			if (System.Windows.MessageBox.Show(this, "Are you sure you want to remove " + Node.Header + "?", "Are you sure?", MessageBoxButton.YesNo,
 				MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes)
 			{
-				this.MainView.NodeRemoved(Node.Parent, Node);
+				try
+				{
+					Node.Delete(Node.Parent, (sender2, e2) => this.MainView.NodeRemoved(Node.Parent, Node));
+				}
+				catch (Exception ex)
+				{
+					ErrorBox(ex.Message);
+				}
 			}
+		}
+
+		private void Edit_CanExecute(object sender, CanExecuteRoutedEventArgs e)
+		{
+			TreeNode Node = this.SelectedNode;
+			e.CanExecute = (Node != null && Node.CanEdit);
+		}
+
+		private void Edit_Executed(object sender, ExecutedRoutedEventArgs e)
+		{
+			TreeNode Node = this.SelectedNode;
+			if (Node == null || !Node.CanEdit)
+				return;
+
+			Node.Edit();
 		}
 
 		private void Sniff_CanExecute(object sender, CanExecuteRoutedEventArgs e)
@@ -297,12 +395,10 @@ namespace Waher.Client.WPF
 				}
 			}
 
-			TabItem TabItem = new TabItem();
+			TabItem TabItem = MainWindow.NewTab(Node.Header);
 			this.Tabs.Items.Add(TabItem);
 
 			View = new SnifferView(Node);
-
-			TabItem.Header = Node.Header;
 			TabItem.Content = View;
 
 			View.Sniffer = new TabSniffer(TabItem, View);
@@ -316,17 +412,16 @@ namespace Waher.Client.WPF
 			e.CanExecute = this.Tabs.SelectedIndex > 0;
 		}
 
-		private void CloseTab_Executed(object sender, ExecutedRoutedEventArgs e)
+		internal void CloseTab_Executed(object sender, ExecutedRoutedEventArgs e)
 		{
 			int i = this.Tabs.SelectedIndex;
 			if (i > 0)
 			{
-				TabItem TabItem = this.Tabs.Items[i] as TabItem;
-				if (TabItem != null)
+				if (this.Tabs.Items[i] is TabItem TabItem)
 				{
 					object Content = TabItem.Content;
-					if (Content != null && Content is IDisposable)
-						((IDisposable)Content).Dispose();
+					if (Content != null && Content is IDisposable Disposable)
+						Disposable.Dispose();
 				}
 
 				this.Tabs.Items.RemoveAt(i);
@@ -360,12 +455,10 @@ namespace Waher.Client.WPF
 				}
 			}
 
-			TabItem TabItem = new TabItem();
+			TabItem TabItem = MainWindow.NewTab(Node.Header);
 			this.Tabs.Items.Add(TabItem);
 
 			View = new ChatView(Node);
-
-			TabItem.Header = Node.Header;
 			TabItem.Content = View;
 
 			this.Tabs.SelectedItem = TabItem;
@@ -390,6 +483,96 @@ namespace Waher.Client.WPF
 		{
 			this.Dispatcher.BeginInvoke(new ParameterizedThreadStart(this.ChatMessageReceived), e);
 		}
+
+		public void OnStateChange(object Sender, XmppState State)
+		{
+			this.Dispatcher.BeginInvoke(new ParameterizedThreadStart(this.UpdateStateStatus), State);
+		}
+
+		private void UpdateStateStatus(object State)
+		{
+			try
+			{
+				SortedDictionary<int, int> ByState = new SortedDictionary<int, int>(reverseInt32);
+				int i = 0;
+				int c = 0;
+
+				foreach (TreeNode N in this.MainView.Connections.RootNodes)
+				{
+					if (N is XmppAccountNode Account)
+					{
+						i = (int)Account.Client.State;
+
+						if (ByState.TryGetValue(i, out int j))
+							j++;
+						else
+							j = 1;
+
+						ByState[i] = j;
+						c++;
+					}
+				}
+
+				if (c == 0)
+					this.MainView.ConnectionStatus.Content = string.Empty;
+				else if (c == 1)
+					this.MainView.ConnectionStatus.Content = StateToString((XmppState)i);
+				else
+				{
+					StringBuilder sb = new StringBuilder();
+					bool First = true;
+
+					foreach (KeyValuePair<int, int> P in ByState)
+					{
+						if (First)
+							First = false;
+						else
+							sb.Append(", ");
+
+						sb.Append(P.Value.ToString());
+						sb.Append(' ');
+						sb.Append(StateToString((XmppState)P.Key));
+					}
+
+					this.MainView.ConnectionStatus.Content = sb.ToString();
+				}
+			}
+			catch (Exception ex)
+			{
+				Log.Critical(ex);
+			}
+		}
+
+		private static string StateToString(XmppState State)
+		{
+			switch (State)
+			{
+				case XmppState.Offline: return "Offline";
+				case XmppState.Connecting: return "Connecting";
+				case XmppState.StreamNegotiation: return "Negotiating stream";
+				case XmppState.StreamOpened: return "Opened stream";
+				case XmppState.StartingEncryption: return "Starting encryption";
+				case XmppState.Authenticating: return "Authenticating";
+				case XmppState.Registering: return "Registering";
+				case XmppState.Binding: return "Binding";
+				case XmppState.RequestingSession: return "Requesting session";
+				case XmppState.FetchingRoster: return "Fetching roster";
+				case XmppState.SettingPresence: return "Setting presence";
+				case XmppState.Connected: return "Connected";
+				case XmppState.Error: return "In error";
+				default: return "Unknown";
+			}
+		}
+
+		private class ReverseInt32 : IComparer<int>
+		{
+			public int Compare(int x, int y)
+			{
+				return y - x;
+			}
+		}
+
+		private static readonly ReverseInt32 reverseInt32 = new ReverseInt32();
 
 		private void ChatMessageReceived(object P)
 		{
@@ -423,8 +606,7 @@ namespace Waher.Client.WPF
 				if (ChatView == null)
 					continue;
 
-				XmppContact XmppContact = ChatView.Node as XmppContact;
-				if (XmppContact == null)
+				if (!(ChatView.Node is XmppContact XmppContact))
 					continue;
 
 				if (XmppContact.BareJID != e.FromBareJID)
@@ -437,32 +619,27 @@ namespace Waher.Client.WPF
 				if (XmppAccountNode.BareJID != XmppClient.GetBareJID(e.To))
 					continue;
 
-				ChatView.ChatMessageReceived(Message, IsMarkdown);
+				ChatView.ChatMessageReceived(Message, IsMarkdown, this);
 				return;
 			}
 
 			foreach (TreeNode Node in this.MainView.ConnectionTree.Items)
 			{
-				XmppAccountNode XmppAccountNode = Node as XmppAccountNode;
-				if (XmppAccountNode == null)
+				if (!(Node is XmppAccountNode XmppAccountNode))
 					continue;
 
 				if (XmppAccountNode.BareJID != XmppClient.GetBareJID(e.To))
 					continue;
 
-				TreeNode ContactNode;
-
-				if (XmppAccountNode.TryGetChild(e.FromBareJID, out ContactNode))
+				if (XmppAccountNode.TryGetChild(e.FromBareJID, out TreeNode ContactNode))
 				{
-					TabItem TabItem2 = new TabItem();
+					TabItem TabItem2 = MainWindow.NewTab(e.FromBareJID);
 					this.Tabs.Items.Add(TabItem2);
 
 					ChatView = new ChatView(ContactNode);
-
-					TabItem2.Header = e.FromBareJID;
 					TabItem2.Content = ChatView;
 
-					ChatView.ChatMessageReceived(Message, IsMarkdown);
+					ChatView.ChatMessageReceived(Message, IsMarkdown, this);
 					return;
 				}
 			}
@@ -470,11 +647,9 @@ namespace Waher.Client.WPF
 
 		private void Tabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
 		{
-			TabItem Item = this.Tabs.SelectedItem as TabItem;
-			if (Item != null)
+			if (this.Tabs.SelectedItem is TabItem Item)
 			{
-				ChatView View = Item.Content as ChatView;
-				if (View != null)
+				if (Item.Content is ChatView View)
 				{
 					Thread T = new Thread(this.FocusChatInput);
 					T.Start(View);
@@ -498,12 +673,10 @@ namespace Waher.Client.WPF
 			if (Request == null)
 				return;
 
-			TabItem TabItem = new TabItem();
+			TabItem TabItem = MainWindow.NewTab(Node.Header);
 			this.Tabs.Items.Add(TabItem);
 
-			SensorDataView View = new SensorDataView(Request, Node);
-
-			TabItem.Header = Node.Header;
+			SensorDataView View = new SensorDataView(Request, Node, false);
 			TabItem.Content = View;
 
 			this.Tabs.SelectedItem = TabItem;
@@ -525,12 +698,41 @@ namespace Waher.Client.WPF
 			if (Request == null)
 				return;
 
-			TabItem TabItem = new TabItem();
+			TabItem TabItem = MainWindow.NewTab(Node.Header);
 			this.Tabs.Items.Add(TabItem);
 
-			SensorDataView View = new SensorDataView(Request, Node);
+			SensorDataView View = new SensorDataView(Request, Node, false);
+			TabItem.Content = View;
 
-			TabItem.Header = Node.Header;
+			this.Tabs.SelectedItem = TabItem;
+		}
+
+		private void SubscribeToMomentary_CanExecute(object sender, CanExecuteRoutedEventArgs e)
+		{
+			TreeNode Node = this.SelectedNode;
+			e.CanExecute = (Node != null && Node.CanSubscribeToSensorData);
+		}
+
+		private void SubscribeToMomentary_Executed(object sender, ExecutedRoutedEventArgs e)
+		{
+			TreeNode Node = this.SelectedNode;
+			if (Node == null || !Node.CanSubscribeToSensorData)
+				return;
+
+			SensorDataClientRequest Request;
+
+			if (Node.CanReadSensorData)
+				Request = Node.StartSensorDataMomentaryReadout();
+			else
+				Request = Node.SubscribeSensorDataMomentaryReadout(new FieldSubscriptionRule[0]);
+
+			if (Request == null)
+				return;
+
+			TabItem TabItem = MainWindow.NewTab(Node.Header);
+			this.Tabs.Items.Add(TabItem);
+
+			SensorDataView View = new SensorDataView(Request, Node, true);
 			TabItem.Content = View;
 
 			this.Tabs.SelectedItem = TabItem;
@@ -569,8 +771,11 @@ namespace Waher.Client.WPF
 			Doc.LoadXml(Xml);
 			Form = new DataForm(Form.Client, Doc.DocumentElement, null, null, Form.From, Form.To);*/
 
-			ParameterDialog Dialog = new ParameterDialog(Form);
-			Dialog.Owner = this;
+			ParameterDialog Dialog = new ParameterDialog(Form)
+			{
+				Owner = this
+			};
+
 			Dialog.ShowDialog();
 		}
 
@@ -578,12 +783,213 @@ namespace Waher.Client.WPF
 		{
 			Mouse.OverrideCursor = null;
 
-			IqResultEventArgs e = P as IqResultEventArgs;
-			if (e != null)
-				MessageBox.Show(this, e.ErrorText, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+			if (P is IqResultEventArgs e)
+				System.Windows.MessageBox.Show(this, e.ErrorText, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
 			else
-				MessageBox.Show(this, P.ToString(), "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+				System.Windows.MessageBox.Show(this, P.ToString(), "Error", MessageBoxButton.OK, MessageBoxImage.Error);
 		}
 
+		private void Search_CanExecute(object sender, CanExecuteRoutedEventArgs e)
+		{
+			TreeNode Node = this.SelectedNode;
+			e.CanExecute = (Node != null && Node.CanSearch);
+		}
+
+		private void Search_Executed(object sender, ExecutedRoutedEventArgs e)
+		{
+			TreeNode Node = this.SelectedNode;
+			if (Node == null || !Node.CanSearch)
+				return;
+
+			try
+			{
+				Node.Search();
+			}
+			catch (Exception ex)
+			{
+				System.Windows.MessageBox.Show(this, ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+			}
+		}
+
+		private void Script_CanExecute(object sender, CanExecuteRoutedEventArgs e)
+		{
+			e.CanExecute = true;
+		}
+
+		private void Script_Executed(object sender, ExecutedRoutedEventArgs e)
+		{
+			TabItem TabItem = MainWindow.NewTab("Script");
+			this.Tabs.Items.Add(TabItem);
+
+			ScriptView ScriptView = new ScriptView();
+			TabItem.Content = ScriptView;
+
+			this.Tabs.SelectedItem = TabItem;
+		}
+
+		internal void NewQuestion(XmppAccountNode Owner, ProvisioningClient ProvisioningClient, Question Question)
+		{
+			QuestionView QuestionView = this.FindQuestionTab(Owner, ProvisioningClient);
+
+			if (QuestionView != null && Question != null)
+			{
+				QuestionView.NewQuestion(Question);
+				return;
+			}
+
+			Task.Run(async () =>
+			{
+				try
+				{
+					LinkedList<Question> Questions = new LinkedList<Question>();
+					bool Found = Question == null;
+
+					foreach (Question Question2 in await Database.Find<Question>(new FilterAnd(new FilterFieldEqualTo("OwnerJID", Owner?.BareJID),
+						new FilterFieldEqualTo("ProvisioningJID", ProvisioningClient?.ProvisioningServerAddress)), "Created"))
+					{
+						Questions.AddLast(Question2);
+
+						if (!Found)
+							Found = Question2.ObjectId == Question.ObjectId;
+					}
+
+					if (!Found)
+						Questions.AddLast(Question);
+
+					if (Questions.First != null)
+					{
+						DispatcherOperation Op = MainWindow.currentInstance.Dispatcher.BeginInvoke(new ThreadStart(() =>
+						{
+							if (QuestionView == null)
+								QuestionView = this.CreateQuestionTab(Owner, ProvisioningClient);
+
+							foreach (Question Question2 in Questions)
+								QuestionView.NewQuestion(Question2);
+						}));
+					}
+				}
+				catch (Exception ex)
+				{
+					Log.Critical(ex);
+				}
+			});
+		}
+
+		private QuestionView FindQuestionTab(XmppAccountNode Owner, ProvisioningClient ProvisioningClient)
+		{
+			QuestionView QuestionView = null;
+
+			foreach (TabItem TabItem in this.Tabs.Items)
+			{
+				QuestionView = TabItem.Content as QuestionView;
+				if (QuestionView != null &&
+					QuestionView.Owner == Owner &&
+					QuestionView.ProvisioningJid == ProvisioningClient.ProvisioningServerAddress)
+				{
+					return QuestionView;
+				}
+			}
+
+			return null;
+		}
+
+		private QuestionView CreateQuestionTab(XmppAccountNode Owner, ProvisioningClient ProvisioningClient)
+		{
+			TabItem TabItem = MainWindow.NewTab("Questions (" + Owner.BareJID + ")");
+			this.Tabs.Items.Add(TabItem);
+
+			QuestionView QuestionView = new QuestionView(Owner, ProvisioningClient);
+			TabItem.Content = QuestionView;
+
+			return QuestionView;
+		}
+
+		internal static TabItem NewTab(string HeaderText)
+		{
+			return NewTab(HeaderText, out TextBlock HeaderLabel);
+		}
+
+		internal static TabItem NewTab(string HeaderText, out TextBlock HeaderLabel)
+		{
+			StackPanel Header = new StackPanel()
+			{
+				Orientation = Orientation.Horizontal
+			};
+
+			Image CloseImage = new Image()
+			{
+				Source = new BitmapImage(new Uri("../Graphics/symbol-delete-icon-gray.png", UriKind.Relative)),
+				Width = 16,
+				Height = 16,
+				ToolTip = "Close tab"
+			};
+
+			HeaderLabel = new TextBlock()
+			{
+				Text = HeaderText,
+				Margin = new Thickness(0, 0, 5, 0)
+			};
+
+			Header.Children.Add(HeaderLabel);
+			Header.Children.Add(CloseImage);
+
+			TabItem Result = new TabItem()
+			{
+				Header = Header
+			};
+
+			CloseImage.MouseLeftButtonDown += CloseImage_MouseLeftButtonDown;
+			CloseImage.MouseEnter += CloseImage_MouseEnter;
+			CloseImage.MouseLeave += CloseImage_MouseLeave;
+			CloseImage.Tag = Result;
+
+			return Result;
+		}
+
+		private static void CloseImage_MouseLeave(object sender, MouseEventArgs e)
+		{
+			if (sender is Image Image)
+				Image.Source = new BitmapImage(new Uri("../Graphics/symbol-delete-icon-gray.png", UriKind.Relative));
+		}
+
+		private static void CloseImage_MouseEnter(object sender, MouseEventArgs e)
+		{
+			if (sender is Image Image)
+				Image.Source = new BitmapImage(new Uri("../Graphics/symbol-delete-icon.png", UriKind.Relative));
+		}
+
+		private static void CloseImage_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+		{
+			if ((sender as Image)?.Tag is TabItem Item)
+			{
+				MainWindow.currentInstance?.Tabs?.Items.Remove(Item);
+				if (Item.Content != null && Item.Content is IDisposable Disposable)
+					Disposable.Dispose();
+			}
+		}
+
+		public static void ErrorBox(string ErrorMessage)
+		{
+			MessageBox(ErrorMessage, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+		}
+
+		public static void SuccessBox(string ErrorMessage)
+		{
+			MessageBox(ErrorMessage, "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+		}
+
+		public static void MessageBox(string Text, string Caption, MessageBoxButton Button, MessageBoxImage Icon)
+		{
+			currentInstance.Dispatcher.BeginInvoke(new ThreadStart(() =>
+			{
+				Mouse.OverrideCursor = null;
+				System.Windows.MessageBox.Show(currentInstance, Text, Caption, Button, Icon);
+			}));
+		}
+
+		public static void MouseDefault()
+		{
+			MainWindow.currentInstance.Dispatcher.BeginInvoke(new ThreadStart(() => Mouse.OverrideCursor = null));
+		}
 	}
 }

@@ -36,6 +36,29 @@ namespace Waher.Networking.XMPP.DataForms.FieldTypes
 		}
 
 		/// <summary>
+		/// Boolean form field.
+		/// </summary>
+		/// <param name="Var">Variable name</param>
+		/// <param name="Value">Value for the field.</param>
+		public BooleanField(string Var, bool Value)
+			: base(null, Var, string.Empty, false, new string[] { Value ? "1" : "0" }, null, string.Empty, null, null,
+				  string.Empty, false, false, false)
+		{
+		}
+
+		/// <summary>
+		/// Boolean form field.
+		/// </summary>
+		/// <param name="Var">Variable name</param>
+		/// <param name="Label">Label</param>
+		/// <param name="Value">Value for the field.</param>
+		public BooleanField(string Var, string Label, bool Value)
+			: base(null, Var, Label, false, new string[] { Value ? "1" : "0" }, null, string.Empty, null, null,
+				  string.Empty, false, false, false)
+		{
+		}
+
+		/// <summary>
 		/// <see cref="Field.TypeName"/>
 		/// </summary>
 		public override string TypeName
@@ -44,24 +67,22 @@ namespace Waher.Networking.XMPP.DataForms.FieldTypes
 		}
 
 		/// <summary>
-		/// Validates field input. The <see cref="Error"/> property will reflect any errors found.
+		/// Validates field input. The <see cref="Field.Error"/> property will reflect any errors found.
 		/// </summary>
 		/// <param name="Value">Field Value(s)</param>
 		public override void Validate(params string[] Value)
 		{
 			base.Validate(Value);
 
-			if (!this.HasError)
+			if (!this.HasError && Value != null)
 			{
 				if (Value.Length > 1)
 					this.Error = "Only one value allowed.";
 				else
 				{
-					bool b;
-
 					foreach (string s in Value)
 					{
-						if (!CommonTypes.TryParse(s, out b))
+						if (!CommonTypes.TryParse(s, out bool b))
 						{
 							this.Error = "Invalid boolean value.";
 							break;

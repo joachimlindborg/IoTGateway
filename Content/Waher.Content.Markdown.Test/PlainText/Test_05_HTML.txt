@@ -4,9 +4,9 @@ address@example.com
 
 Foo
 
-This is an examble of bold text.
+This is an example of bold text.
 
-© Waher Data AB 2016.
+© Waher Data AB 2016-2018. All rights reserved.
 
 AT&T
 

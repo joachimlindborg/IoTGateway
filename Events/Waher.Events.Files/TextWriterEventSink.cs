@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text;
+using System.Threading.Tasks;
 
 namespace Waher.Events.Files
 {
@@ -10,7 +10,12 @@ namespace Waher.Events.Files
 	/// </summary>
 	public class TextWriterEventSink : EventSink, IDisposable
 	{
+		/// <summary>
+		/// Text writer object.
+		/// </summary>
 		protected TextWriter output;
+		private object synchObject = new object();
+
 		private bool disposed = false;
 
 		/// <summary>
@@ -50,82 +55,91 @@ namespace Waher.Events.Files
 			base.Dispose();
 		}
 
-		public override void Queue(Event Event)
+		/// <summary>
+		/// Queues an event to be output.
+		/// </summary>
+		/// <param name="Event">Event to queue.</param>
+		public override Task Queue(Event Event)
 		{
 			if (this.disposed)
-				return;
+				return Task.CompletedTask;
 
-			this.BeforeWrite();
-			try
+			lock (this.synchObject)
 			{
-				this.output.Write(Event.Timestamp.ToShortDateString());
-				this.output.Write(", ");
-				this.output.Write(Event.Timestamp.ToLongTimeString());
-				this.output.Write('\t');
-				this.output.Write(Event.Type.ToString());
-				this.output.Write('\t');
-				this.output.Write(Event.Level.ToString());
-
-				if (!string.IsNullOrEmpty(Event.EventId))
+				this.BeforeWrite();
+				try
 				{
+					this.output.Write(Event.Timestamp.ToString("d"));
+					this.output.Write(", ");
+					this.output.Write(Event.Timestamp.ToString("T"));
 					this.output.Write('\t');
-					this.output.Write(Event.EventId);
-				}
-
-				if (!string.IsNullOrEmpty(Event.Object))
-				{
+					this.output.Write(Event.Type.ToString());
 					this.output.Write('\t');
-					this.output.Write(Event.Object);
-				}
+					this.output.Write(Event.Level.ToString());
 
-				if (!string.IsNullOrEmpty(Event.Actor))
-				{
-					this.output.Write('\t');
-					this.output.Write(Event.Actor);
-				}
-
-				this.output.WriteLine("\r\n");
-
-				if (!string.IsNullOrEmpty(Event.Module))
-				{
-					this.output.Write('\t');
-					this.output.Write(Event.Module);
-				}
-
-				if (!string.IsNullOrEmpty(Event.Facility))
-				{
-					this.output.Write('\t');
-					this.output.Write(Event.Facility);
-				}
-
-				if (Event.Tags != null && Event.Tags.Length > 0)
-				{
-					this.output.WriteLine("\r\n");
-
-					foreach (KeyValuePair<string, object> Tag in Event.Tags)
+					if (!string.IsNullOrEmpty(Event.EventId))
 					{
 						this.output.Write('\t');
-						this.output.Write(Tag.Key);
-						this.output.Write('=');
+						this.output.Write(Event.EventId);
+					}
 
-						if (Tag.Value != null)
-							this.output.Write(Tag.Value.ToString());
+					if (!string.IsNullOrEmpty(Event.Object))
+					{
+						this.output.Write('\t');
+						this.output.Write(Event.Object);
+					}
+
+					if (!string.IsNullOrEmpty(Event.Actor))
+					{
+						this.output.Write('\t');
+						this.output.Write(Event.Actor);
+					}
+
+					this.output.WriteLine("\r\n");
+
+					if (!string.IsNullOrEmpty(Event.Module))
+					{
+						this.output.Write('\t');
+						this.output.Write(Event.Module);
+					}
+
+					if (!string.IsNullOrEmpty(Event.Facility))
+					{
+						this.output.Write('\t');
+						this.output.Write(Event.Facility);
+					}
+
+					if (Event.Tags != null && Event.Tags.Length > 0)
+					{
+						this.output.WriteLine("\r\n");
+
+						foreach (KeyValuePair<string, object> Tag in Event.Tags)
+						{
+							this.output.Write('\t');
+							this.output.Write(Tag.Key);
+							this.output.Write('=');
+
+							if (Tag.Value != null)
+								this.output.Write(Tag.Value.ToString());
+						}
+					}
+
+					this.output.WriteLine("\r\n");
+					this.output.WriteLine(Event.Message);
+
+					if (Event.Type >= EventType.Critical && !string.IsNullOrEmpty(Event.StackTrace))
+					{
+						this.output.WriteLine("\r\n");
+						this.output.WriteLine(Event.StackTrace);
 					}
 				}
-
-				this.output.WriteLine("\r\n");
-				this.output.WriteLine(Event.Message);
-
-				if (Event.Type >= EventType.Critical && !string.IsNullOrEmpty(Event.StackTrace))
+				finally
 				{
-					this.output.WriteLine("\r\n");
-					this.output.WriteLine(Event.StackTrace);
+					this.AfterWrite();
 				}
 			}
-			finally
-			{
-				this.AfterWrite();
-			}
+
+			return Task.CompletedTask;
 		}
 	}
 }

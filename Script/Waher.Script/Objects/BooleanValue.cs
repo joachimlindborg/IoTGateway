@@ -39,7 +39,7 @@ namespace Waher.Script.Objects
 		/// </summary>
 		public override string ToString()
         {
-            return this.value ? "⊤" : "⊥";
+			return Expression.ToString(this.value);
         }
 
         /// <summary>
@@ -95,16 +95,17 @@ namespace Waher.Script.Objects
                 return new BooleanValue(this.value ^ E.value);
         }
 
-        /// Negates the element.
-        /// </summary>
-        /// <returns>Negation of current element.</returns>
-        public override IGroupElement Negate()
+		/// <summary>
+		/// Negates the element.
+		/// </summary>
+		/// <returns>Negation of current element.</returns>
+		public override IGroupElement Negate()
         {
             return new BooleanValue(this.value);
         }
 
         /// <summary>
-        /// <see cref="Object.Equals"/>
+        /// <see cref="Object.Equals(object)"/>
         /// </summary>
         public override bool Equals(object obj)
         {
@@ -116,7 +117,7 @@ namespace Waher.Script.Objects
         }
 
         /// <summary>
-        /// <see cref="Object.GetHashCode"/>
+        /// <see cref="Object.GetHashCode()"/>
         /// </summary>
         public override int GetHashCode()
         {
@@ -162,13 +163,13 @@ namespace Waher.Script.Objects
                 Value = this.value;
                 return true;
             }
-			else if (DesiredType.IsAssignableFrom(typeof(BooleanValue)))
+			else if (DesiredType.GetTypeInfo().IsAssignableFrom(typeof(bool).GetTypeInfo()))
 			{
-				Value = this;
-                return true;
-            }
-            else
-            {
+				Value = this.value;
+				return true;
+			}
+			else
+			{
                 Value = null;
                 return false;
             }

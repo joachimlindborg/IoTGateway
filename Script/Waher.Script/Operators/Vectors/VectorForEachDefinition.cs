@@ -17,13 +17,14 @@ namespace Waher.Script.Operators.Vectors
 	{
         private string variableName;
 
-        /// <summary>
-        /// Creates a vector using a FOREACH statement.
-        /// </summary>
-        /// <param name="Rows">Row vectors.</param>
-        /// <param name="Start">Start position in script expression.</param>
-        /// <param name="Length">Length of expression covered by node.</param>
-        public VectorForEachDefinition(ForEach Elements, int Start, int Length, Expression Expression)
+		/// <summary>
+		/// Creates a vector using a FOREACH statement.
+		/// </summary>
+		/// <param name="Elements">Elements.</param>
+		/// <param name="Start">Start position in script expression.</param>
+		/// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
+		public VectorForEachDefinition(ForEach Elements, int Start, int Length, Expression Expression)
 			: base(Elements.LeftOperand, Elements.RightOperand, Start, Length, Expression)
 		{
             this.variableName = Elements.VariableName;
@@ -48,8 +49,7 @@ namespace Waher.Script.Operators.Vectors
             ICollection<IElement> Elements = S as ICollection<IElement>;
             if (Elements == null)
             {
-                IVector Vector = S as IVector;
-                if (Vector != null)
+                if (S is IVector Vector)
                     Elements = Vector.VectorElements;
                 else if (!S.IsScalar)
                     Elements = S.ChildElements;

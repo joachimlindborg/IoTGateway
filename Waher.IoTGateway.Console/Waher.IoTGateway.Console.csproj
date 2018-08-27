@@ -1,90 +1,60 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project Sdk="Microsoft.NET.Sdk" ToolsVersion="15.0">
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
-    <ProductVersion>8.0.30703</ProductVersion>
-    <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>{39238486-5C53-42D1-93DF-3CA9565F8FB3}</ProjectGuid>
     <OutputType>Exe</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Waher.IoTGateway.Console</RootNamespace>
-    <AssemblyName>Waher.IoTGateway.Console</AssemblyName>
-    <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
-    <TargetFrameworkProfile>
-    </TargetFrameworkProfile>
-    <FileAlignment>512</FileAlignment>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <Prefer32Bit>false</Prefer32Bit>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
-    <PlatformTarget>x86</PlatformTarget>
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <Prefer32Bit>false</Prefer32Bit>
-  </PropertyGroup>
-  <PropertyGroup>
-    <ApplicationIcon>ls_3_01_mgU_icon.ico</ApplicationIcon>
+    <TargetFramework>netcoreapp2.0</TargetFramework>
+    <StartupObject>Waher.IoTGateway.Console.Program</StartupObject>
+    <ApplicationIcon>eye.ico</ApplicationIcon>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <Description>Runs the IoT Gateway as a console application.</Description>
+    <Copyright>Copyright © Waher Data AB 2016-2017. All rights reserved.</Copyright>
+    <Authors>Peter Waher</Authors>
+    <Company>Waher Data AB</Company>
+    <Product>Waher.IoTGateway</Product>
+    <PackageLicenseUrl>https://github.com/PeterWaher/IoTGateway#license</PackageLicenseUrl>
+    <PackageProjectUrl>https://github.com/PeterWaher/IoTGateway/tree/master/Waher.IoTGateway.Console</PackageProjectUrl>
+    <PackageIconUrl>https://github.com/PeterWaher/IoTGateway/blob/master/Images/Icon.ico?raw=true</PackageIconUrl>
+    <RepositoryUrl>https://github.com/PeterWaher/IoTGateway</RepositoryUrl>
+    <RepositoryType>GitHub</RepositoryType>
+    <PackageTags>IoT Gateway HTTP CoAP MQTT XMPP LWM2M</PackageTags>
+    <NeutralLanguage>English</NeutralLanguage>
+    <AssemblyVersion>1.0.0</AssemblyVersion>
+    <FileVersion>1.0.0</FileVersion>
+    <RuntimeIdentifiers>win-x86;win-x64;win-arm;win-arm64;linux-x64;osx-x64;android</RuntimeIdentifiers>
+    <FileUpgradeFlags>40</FileUpgradeFlags>
+    <UpgradeBackupLocation>C:\My Projects\IoTGateway\Backup\Waher.IoTGateway.Console\</UpgradeBackupLocation>
+    <OldToolsVersion>2.0</OldToolsVersion>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="System" />
+    <PackageReference Include="SkiaSharp" Version="1.60.1" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Program.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
+    <ProjectReference Include="..\Content\Waher.Content.Emoji.Emoji1\Waher.Content.Emoji.Emoji1.csproj" />
+    <ProjectReference Include="..\Content\Waher.Content.Emoji\Waher.Content.Emoji.csproj" />
+    <ProjectReference Include="..\Content\Waher.Content.Images\Waher.Content.Images.csproj" />
+    <ProjectReference Include="..\Content\Waher.Content.Markdown.Web\Waher.Content.Markdown.Web.csproj" />
+    <ProjectReference Include="..\Content\Waher.Content.Markdown\Waher.Content.Markdown.csproj" />
+    <ProjectReference Include="..\Content\Waher.Content.Xml\Waher.Content.Xml.csproj" />
+    <ProjectReference Include="..\Content\Waher.Content.Xsl\Waher.Content.Xsl.csproj" />
+    <ProjectReference Include="..\Content\Waher.Content\Waher.Content.csproj" />
+    <ProjectReference Include="..\Events\Waher.Events.Console\Waher.Events.Console.csproj" />
+    <ProjectReference Include="..\Events\Waher.Events.Persistence\Waher.Events.Persistence.csproj" />
+    <ProjectReference Include="..\Events\Waher.Events\Waher.Events.csproj" />
+    <ProjectReference Include="..\Persistence\Waher.Persistence.Files\Waher.Persistence.Files.csproj" />
+    <ProjectReference Include="..\Runtime\Waher.Runtime.Inventory\Waher.Runtime.Inventory.csproj" />
+    <ProjectReference Include="..\Runtime\Waher.Runtime.ServiceRegistration\Waher.Runtime.ServiceRegistration.csproj" />
+    <ProjectReference Include="..\Script\Waher.Script.Fractals\Waher.Script.Fractals.csproj" />
+    <ProjectReference Include="..\Script\Waher.Script.Graphs\Waher.Script.Graphs.csproj" />
+    <ProjectReference Include="..\Script\Waher.Script.Persistence\Waher.Script.Persistence.csproj" />
+    <ProjectReference Include="..\Script\Waher.Script.Statistics\Waher.Script.Statistics.csproj" />
+    <ProjectReference Include="..\Script\Waher.Script\Waher.Script.csproj" />
+    <ProjectReference Include="..\Themes\Waher.Theme.CactusRose\Waher.Theme.CactusRose.csproj" />
+    <ProjectReference Include="..\Themes\Waher.Theme.GothicPeacock\Waher.Theme.GothicPeacock.csproj" />
+    <ProjectReference Include="..\Things\Waher.Things.Ip\Waher.Things.Ip.csproj" />
+    <ProjectReference Include="..\Things\Waher.Things.Metering\Waher.Things.Metering.csproj" />
+    <ProjectReference Include="..\Things\Waher.Things\Waher.Things.csproj" />
+    <ProjectReference Include="..\Waher.IoTGateway.Resources\Waher.IoTGateway.Resources.csproj" />
+    <ProjectReference Include="..\Waher.IoTGateway\Waher.IoTGateway.csproj" />
+    <ProjectReference Include="..\WebServices\Waher.WebService.Script\Waher.WebService.Script.csproj" />
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\Content\Waher.Content.Drawing\Waher.Content.Drawing.csproj">
-      <Project>{788cbc30-25e8-434c-8a5b-d3d2c4111327}</Project>
-      <Name>Waher.Content.Drawing</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Content\Waher.Content.Emoji.Emoji1\Waher.Content.Emoji.Emoji1.csproj">
-      <Project>{54dab5c7-f855-4864-a8b5-077a24cc1f8d}</Project>
-      <Name>Waher.Content.Emoji.Emoji1</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Content\Waher.Content.Emoji\Waher.Content.Emoji.csproj">
-      <Project>{918dc0cc-eb29-4e5d-990a-9958b23d5185}</Project>
-      <Name>Waher.Content.Emoji</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Events\Waher.Events.Console\Waher.Events.Console.csproj">
-      <Project>{2598AAA5-67A3-4952-B104-AB96BD0D5C0D}</Project>
-      <Name>Waher.Events.Console</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Events\Waher.Events\Waher.Events.csproj">
-      <Project>{A8EB7717-F5DE-419A-BB10-D213BC6FA654}</Project>
-      <Name>Waher.Events</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Waher.IoTGateway\Waher.IoTGateway.csproj">
-      <Project>{64c10b54-a73e-40ac-8d64-0553373314d5}</Project>
-      <Name>Waher.IoTGateway</Name>
-    </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="app.config" />
-    <None Include="README.md" />
-  </ItemGroup>
-  <ItemGroup>
-    <Content Include="ls_3_01_mgU_icon.ico" />
-  </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
 </Project>

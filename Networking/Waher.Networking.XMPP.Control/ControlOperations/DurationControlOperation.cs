@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
 using Waher.Content;
-using Waher.Networking.XMPP.Control.ParameterTypes;
+using Waher.Things.ControlParameters;
 using Waher.Things;
 
 namespace Waher.Networking.XMPP.Control.ControlOperations
@@ -23,7 +23,7 @@ namespace Waher.Networking.XMPP.Control.ControlOperations
 		/// <param name="Parameter">Control parameter.</param>
 		/// <param name="Value">Value to set.</param>
 		/// <param name="request">Original request.</param>
-		public DurationControlOperation(ThingReference Node, DurationControlParameter Parameter, Duration Value, IqEventArgs request)
+		public DurationControlOperation(IThingReference Node, DurationControlParameter Parameter, Duration Value, IqEventArgs request)
 			: base(Node, request, Parameter)
 		{
 			this.parameter = Parameter;

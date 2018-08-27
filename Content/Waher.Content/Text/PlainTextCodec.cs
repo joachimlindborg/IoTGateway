@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-using Waher.Script;
+using Waher.Runtime.Inventory;
 
 namespace Waher.Content.Text
 {
@@ -24,33 +24,23 @@ namespace Waher.Content.Text
 		{
 			"text/plain",
  			"text/css",
-			"text/csv",
-			"text/html",
-			"application/xhtml+xml",
 			"text/sgml",
 			"text/tab-separated-values",
 			"application/javascript",
-			"application/json",
 			"text/richtext"
 		};
 
 		/// <summary>
-		/// Plain text content types.
+		/// Plain text file extensions.
 		/// </summary>
 		public static readonly string[] PlainTextFileExtensions = new string[] 
 		{ 
 			"txt",
 			"text",
 			"css",
-			"csv",
-			"htm",
-			"html",
-			"xhtml",
-			"xhtm",
 			"sgml",
 			"tsv",
 			"js",
-			"json",
 			"rtx"
 		};
 
@@ -102,9 +92,10 @@ namespace Waher.Content.Text
 		/// <param name="Data">Encoded object.</param>
 		/// <param name="Encoding">Any encoding specified. Can be null if no encoding specified.</param>
 		/// <param name="Fields">Any content-type related fields and their corresponding values.</param>
+		///	<param name="BaseUri">Base URI, if any. If not available, value is null.</param>
 		/// <returns>Decoded object.</returns>
 		/// <exception cref="ArgumentException">If the object cannot be decoded.</exception>
-		public object Decode(string ContentType, byte[] Data, Encoding Encoding, KeyValuePair<string, string>[] Fields)
+		public object Decode(string ContentType, byte[] Data, Encoding Encoding, KeyValuePair<string, string>[] Fields, Uri BaseUri)
 		{
 			if (Encoding == null)
 				return System.Text.Encoding.UTF8.GetString(Data);
@@ -131,20 +122,6 @@ namespace Waher.Content.Text
 					ContentType = "text/css";
 					return true;
 
-				case "csv":
-					ContentType = "text/csv";
-					return true;
-
-				case "htm":
-				case "html":
-					ContentType = "text/html";
-					return true;
-
-				case "xhtml":
-				case "xhtm":
-					ContentType = "application/xhtml+xml";
-					return true;
-
 				case "sgml":
 					ContentType = "text/sgml";
 					return true;
@@ -155,10 +132,6 @@ namespace Waher.Content.Text
 
 				case "js":
 					ContentType = "application/javascript";
-					return true;
-
-				case "json":
-					ContentType = "application/json";
 					return true;
 
 				case "rtx":
@@ -215,9 +188,7 @@ namespace Waher.Content.Text
 		/// <exception cref="ArgumentException">If the object cannot be encoded.</exception>
 		public byte[] Encode(object Object, Encoding Encoding, out string ContentType, params string[] AcceptedContentTypes)
 		{
-			Grade Grade;
-
-			if (this.Encodes(Object, out Grade, AcceptedContentTypes))
+			if (this.Encodes(Object, out Grade Grade, AcceptedContentTypes))
 			{
 				if (Encoding == null)
 				{
@@ -231,7 +202,7 @@ namespace Waher.Content.Text
 				}
 			}
 			else
-				throw new ArgumentException("Unable to encode object, or content type not accepted.", "Object");
+				throw new ArgumentException("Unable to encode object, or content type not accepted.", nameof(Object));
 		}
 	}
 }

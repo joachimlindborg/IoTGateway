@@ -2,7 +2,7 @@
 using System.IO;
 using System.Collections.Generic;
 using System.Text;
-using Waher.Script;
+using Waher.Runtime.Inventory;
 
 namespace Waher.Content.Markdown
 {
@@ -21,7 +21,7 @@ namespace Waher.Content.Markdown
 		/// <summary>
 		/// Image content types.
 		/// </summary>
-		public static readonly string[] ImageContentTypes = new string[] 
+		public static readonly string[] ImageContentTypes = new string[]
 		{
 			"text/markdown"
 		};
@@ -29,10 +29,10 @@ namespace Waher.Content.Markdown
 		/// <summary>
 		/// Image content types.
 		/// </summary>
-		public static readonly string[] ImageFileExtensions = new string[] 
+		public static readonly string[] ImageFileExtensions = new string[]
 		{
-			"md", 
-			"markdown" 
+			"md",
+			"markdown"
 		};
 
 		/// <summary>
@@ -78,9 +78,10 @@ namespace Waher.Content.Markdown
 		/// <param name="Data">Encoded object.</param>
 		/// <param name="Encoding">Any encoding specified. Can be null if no encoding specified.</param>
 		/// <param name="Fields">Any content-type related fields and their corresponding values.</param>
+		///	<param name="BaseUri">Base URI, if any. If not available, value is null.</param>
 		/// <returns>Decoded object.</returns>
 		/// <exception cref="ArgumentException">If the object cannot be decoded.</exception>
-		public object Decode(string ContentType, byte[] Data, Encoding Encoding, KeyValuePair<string, string>[] Fields)
+		public object Decode(string ContentType, byte[] Data, Encoding Encoding, KeyValuePair<string, string>[] Fields, Uri BaseUri)
 		{
 			string s;
 
@@ -89,7 +90,10 @@ namespace Waher.Content.Markdown
 			else
 				s = Encoding.GetString(Data);
 
-			return new MarkdownDocument(s);
+			if (BaseUri == null)
+				return new MarkdownDocument(s);
+			else
+				return new MarkdownDocument(s, new MarkdownSettings(), string.Empty, string.Empty, BaseUri.ToString());
 		}
 
 		/// <summary>
@@ -126,7 +130,7 @@ namespace Waher.Content.Markdown
 		{
 			MarkdownDocument MarkdownDocument = Object as MarkdownDocument;
 			if (MarkdownDocument == null)
-				throw new ArgumentException("Object not a markdown document.", "Object");
+				throw new ArgumentException("Object not a markdown document.", nameof(Object));
 
 			if (Encoding == null)
 			{
@@ -140,6 +144,12 @@ namespace Waher.Content.Markdown
 			}
 		}
 
+		/// <summary>
+		/// Tries to get the content type of an item, given its file extension.
+		/// </summary>
+		/// <param name="FileExtension">File extension.</param>
+		/// <param name="ContentType">Content type.</param>
+		/// <returns>If the extension was recognized.</returns>
 		public bool TryGetContentType(string FileExtension, out string ContentType)
 		{
 			switch (FileExtension.ToLower())

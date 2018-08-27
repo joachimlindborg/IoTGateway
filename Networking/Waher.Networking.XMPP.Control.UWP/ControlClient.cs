@@ -3,9 +3,10 @@ using System.Collections.Generic;
 using System.Text;
 using System.Xml;
 using Waher.Content;
+using Waher.Content.Xml;
 using Waher.Events;
 using Waher.Things;
-using Waher.Networking.XMPP.Control.ParameterTypes;
+using Waher.Things.ControlParameters;
 using Waher.Networking.XMPP.DataForms;
 using Waher.Networking.XMPP.DataForms.FieldTypes;
 using Waher.Networking.XMPP.StanzaErrors;
@@ -22,44 +23,32 @@ namespace Waher.Networking.XMPP.Control
 	/// <summary>
 	/// Implements an XMPP control client interface.
 	/// 
-	/// The interface is defined in XEP-0325:
-	/// http://xmpp.org/extensions/xep-0325.html
+	/// The interface is defined in the IEEE XMPP IoT extensions:
+	/// https://gitlab.com/IEEE-SA/XMPPI/IoT
 	/// </summary>
-	public class ControlClient : IDisposable
+	public class ControlClient : XmppExtension
 	{
 		/// <summary>
-		/// urn:xmpp:iot:control
+		/// urn:ieee:iot:ctr:1.0
 		/// </summary>
-		public const string NamespaceControl = "urn:xmpp:iot:control";
-
-		private XmppClient client;
+		public const string NamespaceControl = "urn:ieee:iot:ctr:1.0";
 
 		/// <summary>
 		/// Implements an XMPP control client interface.
 		/// 
-		/// The interface is defined in XEP-0325:
-		/// http://xmpp.org/extensions/xep-0325.html
+		/// The interface is defined in the IEEE XMPP IoT extensions:
+		/// https://gitlab.com/IEEE-SA/XMPPI/IoT
 		/// </summary>
 		/// <param name="Client">XMPP Client</param>
 		public ControlClient(XmppClient Client)
-		{
-			this.client = Client;
-		}
-
-		/// <summary>
-		/// <see cref="IDisposable.Dispose"/>
-		/// </summary>
-		public void Dispose()
+			: base(Client)
 		{
 		}
 
 		/// <summary>
-		/// XMPP Client
+		/// Implemented extensions.
 		/// </summary>
-		public XmppClient Client
-		{
-			get { return this.client; }
-		}
+		public override string[] Extensions => new string[] { "XEP-0325" };
 
 		/// <summary>
 		/// Sets a control parameter in a remote actuator.
@@ -104,9 +93,9 @@ namespace Waher.Networking.XMPP.Control
 		{
 			StringBuilder Xml = this.SetHeader(ServiceToken, DeviceToken, UserToken, Nodes);
 
-			Xml.Append("<boolean name='");
+			Xml.Append("<b n='");
 			Xml.Append(XML.Encode(ControlParameterName));
-			Xml.Append("' value='");
+			Xml.Append("' v='");
 			Xml.Append(CommonTypes.Encode(Value));
 			Xml.Append("'/></set>");
 
@@ -156,9 +145,9 @@ namespace Waher.Networking.XMPP.Control
 		{
 			StringBuilder Xml = this.SetHeader(ServiceToken, DeviceToken, UserToken, Nodes);
 
-			Xml.Append("<color name='");
+			Xml.Append("<cl n='");
 			Xml.Append(XML.Encode(ControlParameterName));
-			Xml.Append("' value='");
+			Xml.Append("' v='");
 			Xml.Append(Value.ToString());
 			Xml.Append("'/></set>");
 
@@ -212,12 +201,12 @@ namespace Waher.Networking.XMPP.Control
 			StringBuilder Xml = this.SetHeader(ServiceToken, DeviceToken, UserToken, Nodes);
 
 			if (DateOnly)
-				Xml.Append("<date name='");
+				Xml.Append("<d n='");
 			else
-				Xml.Append("<dateTime name='");
+				Xml.Append("<dt n='");
 
 			Xml.Append(XML.Encode(ControlParameterName));
-			Xml.Append("' value='");
+			Xml.Append("' v='");
 			Xml.Append(XML.Encode(Value, DateOnly));
 			Xml.Append("'/></set>");
 
@@ -267,9 +256,9 @@ namespace Waher.Networking.XMPP.Control
 		{
 			StringBuilder Xml = this.SetHeader(ServiceToken, DeviceToken, UserToken, Nodes);
 
-			Xml.Append("<double name='");
+			Xml.Append("<db n='");
 			Xml.Append(XML.Encode(ControlParameterName));
-			Xml.Append("' value='");
+			Xml.Append("' v='");
 			Xml.Append(CommonTypes.Encode(Value));
 			Xml.Append("'/></set>");
 
@@ -319,10 +308,64 @@ namespace Waher.Networking.XMPP.Control
 		{
 			StringBuilder Xml = this.SetHeader(ServiceToken, DeviceToken, UserToken, Nodes);
 
-			Xml.Append("<duration name='");
+			Xml.Append("<dr n='");
 			Xml.Append(XML.Encode(ControlParameterName));
-			Xml.Append("' value='");
+			Xml.Append("' v='");
 			Xml.Append(Value.ToString());
+			Xml.Append("'/></set>");
+
+			this.client.SendIqSet(To, Xml.ToString(), SetResultCallback, new object[] { Callback, State });
+		}
+
+		/// <summary>
+		/// Sets a control parameter in a remote actuator.
+		/// </summary>
+		/// <param name="To">Full JID of remote actuator.</param>
+		/// <param name="ControlParameterName">Control parameter name.</param>
+		/// <param name="Value">Value to set.</param>
+		/// <param name="Nodes">Node(s) to set the parameter on, if residing behind a concentrator.</param>
+		public void Set(string To, string ControlParameterName, Enum Value, params ThingReference[] Nodes)
+		{
+			this.Set(To, ControlParameterName, Value, string.Empty, string.Empty, string.Empty, null, null, Nodes);
+		}
+
+		/// <summary>
+		/// Sets a control parameter in a remote actuator.
+		/// </summary>
+		/// <param name="To">Full JID of remote actuator.</param>
+		/// <param name="ControlParameterName">Control parameter name.</param>
+		/// <param name="Value">Value to set.</param>
+		/// <param name="Callback">Method called when set operation completes or fails.</param>
+		/// <param name="State">State object to pass on to the callback method.</param>
+		/// <param name="Nodes">Node(s) to set the parameter on, if residing behind a concentrator.</param>
+		public void Set(string To, string ControlParameterName, Enum Value, SetResultCallback Callback, object State, params ThingReference[] Nodes)
+		{
+			this.Set(To, ControlParameterName, Value, string.Empty, string.Empty, string.Empty, Callback, State, Nodes);
+		}
+
+		/// <summary>
+		/// Sets a control parameter in a remote actuator.
+		/// </summary>
+		/// <param name="To">Full JID of remote actuator.</param>
+		/// <param name="ControlParameterName">Control parameter name.</param>
+		/// <param name="Value">Value to set.</param>
+		/// <param name="ServiceToken">Service token of original sender, if available.</param>
+		/// <param name="DeviceToken">Device token of original sender, if available.</param>
+		/// <param name="UserToken">User token of original sender, if available.</param>
+		/// <param name="Callback">Method called when set operation completes or fails.</param>
+		/// <param name="State">State object to pass on to the callback method.</param>
+		/// <param name="Nodes">Node(s) to set the parameter on, if residing behind a concentrator.</param>
+		public void Set(string To, string ControlParameterName, Enum Value, string ServiceToken, string DeviceToken, string UserToken,
+			SetResultCallback Callback, object State, params ThingReference[] Nodes)
+		{
+			StringBuilder Xml = this.SetHeader(ServiceToken, DeviceToken, UserToken, Nodes);
+
+			Xml.Append("<e n='");
+			Xml.Append(XML.Encode(ControlParameterName));
+			Xml.Append("' v='");
+			Xml.Append(XML.Encode(Value.ToString()));
+			Xml.Append("' t='");
+			Xml.Append(XML.Encode(Value.GetType().FullName));
 			Xml.Append("'/></set>");
 
 			this.client.SendIqSet(To, Xml.ToString(), SetResultCallback, new object[] { Callback, State });
@@ -371,9 +414,9 @@ namespace Waher.Networking.XMPP.Control
 		{
 			StringBuilder Xml = this.SetHeader(ServiceToken, DeviceToken, UserToken, Nodes);
 
-			Xml.Append("<int name='");
+			Xml.Append("<i n='");
 			Xml.Append(XML.Encode(ControlParameterName));
-			Xml.Append("' value='");
+			Xml.Append("' v='");
 			Xml.Append(Value.ToString());
 			Xml.Append("'/></set>");
 
@@ -423,9 +466,9 @@ namespace Waher.Networking.XMPP.Control
 		{
 			StringBuilder Xml = this.SetHeader(ServiceToken, DeviceToken, UserToken, Nodes);
 
-			Xml.Append("<long name='");
+			Xml.Append("<l n='");
 			Xml.Append(XML.Encode(ControlParameterName));
-			Xml.Append("' value='");
+			Xml.Append("' v='");
 			Xml.Append(Value.ToString());
 			Xml.Append("'/></set>");
 
@@ -475,9 +518,9 @@ namespace Waher.Networking.XMPP.Control
 		{
 			StringBuilder Xml = this.SetHeader(ServiceToken, DeviceToken, UserToken, Nodes);
 
-			Xml.Append("<string name='");
+			Xml.Append("<s n='");
 			Xml.Append(XML.Encode(ControlParameterName));
-			Xml.Append("' value='");
+			Xml.Append("' v='");
 			Xml.Append(XML.Encode(Value));
 			Xml.Append("'/></set>");
 
@@ -527,9 +570,9 @@ namespace Waher.Networking.XMPP.Control
 		{
 			StringBuilder Xml = this.SetHeader(ServiceToken, DeviceToken, UserToken, Nodes);
 
-			Xml.Append("<time name='");
+			Xml.Append("<t n='");
 			Xml.Append(XML.Encode(ControlParameterName));
-			Xml.Append("' value='");
+			Xml.Append("' v='");
 			Xml.Append(Value.ToString());
 			Xml.Append("'/></set>");
 
@@ -548,41 +591,45 @@ namespace Waher.Networking.XMPP.Control
 			XmlElement E2;
 			SetResultEventArgs e2;
 
-			if (e.Ok && E != null && E.LocalName == "setResponse" && E.NamespaceURI == NamespaceControl)
+			if (e.Ok)
 			{
-				List<ThingReference> Nodes = null;
-				List<string> ParameterNames = null;
-
-				foreach (XmlNode N in E.ChildNodes)
+				if (E != null && E.LocalName == "resp" && E.NamespaceURI == NamespaceControl)
 				{
-					E2 = N as XmlElement;
-					if (E2 == null)
-						continue;
+					List<ThingReference> Nodes = null;
+					List<string> ParameterNames = null;
 
-					switch (N.LocalName)
+					foreach (XmlNode N in E.ChildNodes)
 					{
-						case "node":
-							if (Nodes == null)
-								Nodes = new List<ThingReference>();
+						E2 = N as XmlElement;
+						if (E2 == null)
+							continue;
 
-							Nodes.Add(new ThingReference(
-								XML.Attribute(E2, "nodeId"),
-								XML.Attribute(E2, "sourceId"),
-								XML.Attribute(E2, "cacheType")));
+						switch (N.LocalName)
+						{
+							case "nd":
+								if (Nodes == null)
+									Nodes = new List<ThingReference>();
 
-							break;
+								Nodes.Add(new ThingReference(
+									XML.Attribute(E2, "id"),
+									XML.Attribute(E2, "src"),
+									XML.Attribute(E2, "pt")));
 
-						case "parameter":
-							if (ParameterNames == null)
-								ParameterNames = new List<string>();
+								break;
 
-							ParameterNames.Add(XML.Attribute(E2, "name"));
-							break;
+							case "p":
+								if (ParameterNames == null)
+									ParameterNames = new List<string>();
+
+								ParameterNames.Add(XML.Attribute(E2, "n"));
+								break;
+						}
 					}
-				}
 
-				e2 = new SetResultEventArgs(e, true, Nodes == null ? null : Nodes.ToArray(),
-					ParameterNames == null ? null : ParameterNames.ToArray(), State);
+					e2 = new SetResultEventArgs(e, true, Nodes?.ToArray(), ParameterNames?.ToArray(), State);
+				}
+				else
+					e2 = new SetResultEventArgs(e, true, null, null, State);
 			}
 			else
 				e2 = new SetResultEventArgs(e, false, null, null, State);
@@ -613,25 +660,25 @@ namespace Waher.Networking.XMPP.Control
 
 			if (!string.IsNullOrEmpty(ServiceToken))
 			{
-				Xml.Append("' serviceToken='");
+				Xml.Append("' st='");
 				Xml.Append(XML.Encode(ServiceToken));
 			}
 
 			if (!string.IsNullOrEmpty(DeviceToken))
 			{
-				Xml.Append("' deviceToken='");
+				Xml.Append("' dt='");
 				Xml.Append(XML.Encode(DeviceToken));
 			}
 
 			if (!string.IsNullOrEmpty(UserToken))
 			{
-				Xml.Append("' userToken='");
+				Xml.Append("' ut='");
 				Xml.Append(XML.Encode(UserToken));
 			}
 
 			if (!string.IsNullOrEmpty(Language))
 			{
-				Xml.Append("' language='");
+				Xml.Append("' xml:lang='");
 				Xml.Append(XML.Encode(Language));
 			}
 
@@ -642,25 +689,25 @@ namespace Waher.Networking.XMPP.Control
 			return Xml;
 		}
 
-		private void Serialize(StringBuilder Xml, ThingReference[] Nodes)
+		private void Serialize(StringBuilder Xml, IThingReference[] Nodes)
 		{
 			if (Nodes != null)
 			{
-				foreach (ThingReference Node in Nodes)
+				foreach (IThingReference Node in Nodes)
 				{
-					Xml.Append("<node nodeId='");
+					Xml.Append("<nd id='");
 					Xml.Append(XML.Encode(Node.NodeId));
 
 					if (!string.IsNullOrEmpty(Node.SourceId))
 					{
-						Xml.Append("' sourceId='");
+						Xml.Append("' src='");
 						Xml.Append(XML.Encode(Node.SourceId));
 					}
 
-					if (!string.IsNullOrEmpty(Node.CacheType))
+					if (!string.IsNullOrEmpty(Node.Partition))
 					{
-						Xml.Append("' cacheType='");
-						Xml.Append(XML.Encode(Node.CacheType));
+						Xml.Append("' pt='");
+						Xml.Append(XML.Encode(Node.Partition));
 					}
 
 					Xml.Append("'/>");
@@ -673,8 +720,6 @@ namespace Waher.Networking.XMPP.Control
 		/// </summary>
 		/// <param name="To">Full JID of remote actuator.</param>
 		/// <param name="Language">Preferred language.</param>
-		/// <param name="Callback">Method called when form is returned or when operation fails.</param>
-		/// <param name="State">State object to pass on to the callback method.</param>
 		/// <param name="Nodes">Node(s) to get the form from, if residing behind a concentrator.</param>
 		public void GetForm(string To, string Language, params ThingReference[] Nodes)
 		{
@@ -758,7 +803,7 @@ namespace Waher.Networking.XMPP.Control
 		}
 
 		/// <summary>
-		/// Sets control parameters from a data form, previously fetched using <see cref="GetForm"/>.
+		/// Sets control parameters from a data form, previously fetched using any of the GetForm methods.
 		/// </summary>
 		/// <param name="Form">Data form.</param>
 		/// <param name="Callback">Callback method.</param>

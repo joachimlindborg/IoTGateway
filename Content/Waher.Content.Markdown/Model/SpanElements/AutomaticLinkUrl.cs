@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Xml;
+using Waher.Content.Xml;
 
 namespace Waher.Content.Markdown.Model.SpanElements
 {
@@ -37,8 +38,14 @@ namespace Waher.Content.Markdown.Model.SpanElements
 		/// <param name="Output">HTML will be output here.</param>
 		public override void GenerateHTML(StringBuilder Output)
 		{
+			bool IsRelative = this.url.IndexOf(':') < 0;
+
 			Output.Append("<a href=\"");
 			Output.Append(XML.HtmlAttributeEncode(this.Document.CheckURL(this.url, null)));
+
+			if (!IsRelative)
+				Output.Append("\" target=\"_blank");
+
 			Output.Append("\">");
 			Output.Append(XML.HtmlValueEncode(this.url));
 			Output.Append("</a>");
@@ -81,6 +88,17 @@ namespace Waher.Content.Markdown.Model.SpanElements
 		internal override bool InlineSpanElement
 		{
 			get { return true; }
+		}
+
+		/// <summary>
+		/// Exports the element to XML.
+		/// </summary>
+		/// <param name="Output">XML Output.</param>
+		public override void Export(XmlWriter Output)
+		{
+			Output.WriteStartElement("AutomaticLinkUrl");
+			Output.WriteAttributeString("url", this.url);
+			Output.WriteEndElement();
 		}
 	}
 }

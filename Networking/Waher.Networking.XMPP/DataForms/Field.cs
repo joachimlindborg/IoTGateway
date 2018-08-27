@@ -4,7 +4,7 @@ using System.Text;
 using System.Xml;
 using Waher.Networking.XMPP.DataForms.DataTypes;
 using Waher.Networking.XMPP.DataForms.ValidationMethods;
-using Waher.Content;
+using Waher.Content.Xml;
 
 namespace Waher.Networking.XMPP.DataForms
 {
@@ -23,10 +23,13 @@ namespace Waher.Networking.XMPP.DataForms
 		private DataType dataType;
 		private ValidationMethod validationMethod;
 		private string error;
+		private int priority = 0;
+		private int ordinal = 0;
 		private bool postBack;
 		private bool readOnly;
 		private bool notSame;
 		private bool edited = false;
+		private bool exclude = false;
 
 		/// <summary>
 		/// Base class for form fields
@@ -128,7 +131,7 @@ namespace Waher.Networking.XMPP.DataForms
 		public string Error
 		{
 			get { return this.error; }
-			internal set { this.error = value; }
+			set { this.error = value; }
 		}
 
 		/// <summary>
@@ -157,7 +160,25 @@ namespace Waher.Networking.XMPP.DataForms
 		public bool Edited { get { return this.edited; } }
 
 		/// <summary>
-		/// Validates field input. The <see cref="Error"/> property will reflect any errors found.
+		/// Can be used to sort fields. Not serialized to or from XML.
+		/// </summary>
+		public int Priority
+		{
+			get { return this.priority; }
+			set { this.priority = value; }
+		}
+
+		/// <summary>
+		/// Can be used to sort fields having the same priority. Not serialized to or from XML.
+		/// </summary>
+		public int Ordinal
+		{
+			get { return this.ordinal; }
+			set { this.ordinal = value; }
+		}
+
+		/// <summary>
+		/// Validates field input. The <see cref="Field.Error"/> property will reflect any errors found.
 		/// </summary>
 		/// <param name="Value">Field Value(s)</param>
 		public virtual void Validate(params string[] Value)
@@ -211,7 +232,7 @@ namespace Waher.Networking.XMPP.DataForms
 				Xml.Append("<submit xmlns='");
 				Xml.Append(XmppClient.NamespaceDynamicForms);
 				Xml.Append("'>");
-				this.form.ExportXml(Xml, "submit", true);
+				this.form.ExportXml(Xml, "submit", true, false);
 				Xml.Append("</submit>");
 
 				this.form.Client.SendIqSet(this.form.From, Xml.ToString(), this.FormUpdated, null);
@@ -220,8 +241,7 @@ namespace Waher.Networking.XMPP.DataForms
 
 		private void FormUpdated(object Sender, IqResultEventArgs e)
 		{
-			XmppClient Client = Sender as XmppClient;
-			if (Client != null && e.Ok)
+			if (e.Ok && Sender is XmppClient Client && Client != null)
 			{
 				foreach (XmlNode N in e.Response)
 				{
@@ -234,9 +254,9 @@ namespace Waher.Networking.XMPP.DataForms
 			}
 		}
 
-		internal bool Serialize(StringBuilder Output, bool ValuesOnly)
+		internal bool Serialize(StringBuilder Output, bool ValuesOnly, bool IncludeLabels)
 		{
-			if (this.notSame && ValuesOnly)
+			if ((this.notSame || this.readOnly) && ValuesOnly)
 				return false;
 
 			string TypeName = this.TypeName;
@@ -246,14 +266,14 @@ namespace Waher.Networking.XMPP.DataForms
 				Output.Append("<field var='");
 				Output.Append(XML.Encode(this.var));
 
+				if (IncludeLabels && !string.IsNullOrEmpty(this.label))
+				{
+					Output.Append("' label='");
+					Output.Append(XML.Encode(this.label));
+				}
+
 				if (!ValuesOnly)
 				{
-					if (!string.IsNullOrEmpty(this.label))
-					{
-						Output.Append("' label='");
-						Output.Append(XML.Encode(this.label));
-					}
-
 					Output.Append("' type='");
 					Output.Append(this.TypeName);
 				}
@@ -281,11 +301,14 @@ namespace Waher.Networking.XMPP.DataForms
 						if (this.validationMethod != null)
 							this.validationMethod.Serialize(Output);
 
-						Output.Append("</validate>");
+						Output.Append("</xdv:validate>");
 					}
 
 					if (this.notSame)
 						Output.Append("<xdd:notSame/>");
+
+					if (this.readOnly)
+						Output.Append("<xdd:readOnly/>");
 
 					if (!string.IsNullOrEmpty(this.error))
 					{
@@ -314,10 +337,10 @@ namespace Waher.Networking.XMPP.DataForms
 						foreach (KeyValuePair<string, string> P in this.options)
 						{
 							Output.Append("<option label='");
-							Output.Append(XML.Encode(P.Key));
-							Output.Append("'>");
 							Output.Append(XML.Encode(P.Value));
-							Output.Append("</option>");
+							Output.Append("'><value>");
+							Output.Append(XML.Encode(P.Key));
+							Output.Append("</value></option>");
 						}
 					}
 				}
@@ -336,5 +359,117 @@ namespace Waher.Networking.XMPP.DataForms
 			get;
 		}
 
+		/// <summary>
+		/// If the the field is marked as excluded.
+		/// </summary>
+		public bool Exclude
+		{
+			get { return this.exclude; }
+			set { this.exclude = value; }
+		}
+
+		/// <summary>
+		/// Merges the field with a secondary field, if possible.
+		/// </summary>
+		/// <param name="SecondaryField">Secondary field to merge with.</param>
+		/// <returns>If merger was possible.</returns>
+		public bool Merge(Field SecondaryField)
+		{
+			if (this.var != SecondaryField.var ||
+				this.label != SecondaryField.label ||
+				this.description != SecondaryField.description ||
+				this.postBack != SecondaryField.postBack ||
+				this.description != SecondaryField.description ||
+				this.required != SecondaryField.required ||
+				(this.dataType == null) ^ (SecondaryField.dataType == null) ||
+				(this.validationMethod == null) ^ (SecondaryField.validationMethod == null) ||
+				(this.options == null) ^ (SecondaryField.options == null))
+			{
+				return false;
+			}
+
+			if (this.dataType != null && !this.dataType.Equals(SecondaryField.dataType))
+				return false;
+
+			if (this.validationMethod != null && !this.validationMethod.Equals(SecondaryField.validationMethod))
+				return false;
+
+			this.readOnly |= SecondaryField.readOnly;
+			this.notSame |= SecondaryField.notSame;
+
+			int i, c;
+
+			if (this.options != null)
+			{
+				KeyValuePair<string, string> O1;
+				KeyValuePair<string, string> O2;
+
+				c = this.options.Length;
+				bool OptionsDifferent = (c == SecondaryField.options.Length);
+
+				if (!OptionsDifferent)
+				{
+					for (i = 0; i < c; i++)
+					{
+						O1 = this.options[i];
+						O2 = SecondaryField.options[i];
+
+						if (O1.Key != O2.Key || O1.Value != O2.Value)
+						{
+							OptionsDifferent = true;
+							break;
+						}
+					}
+				}
+
+				if (OptionsDifferent)
+				{
+					List<KeyValuePair<string, string>> NewOptions = null;
+
+					for (i = 0; i < c; i++)
+					{
+						O1 = this.options[i];
+						O2 = SecondaryField.options[i];
+
+						if (O1.Key == O2.Key && O1.Value == O2.Value)
+						{
+							if (NewOptions == null)
+								NewOptions = new List<KeyValuePair<string, string>>();
+
+							NewOptions.Add(O1);
+						}
+
+						if (NewOptions == null)
+							return false;
+
+						this.options = NewOptions.ToArray();
+					}
+				}
+			}
+
+			if (!this.notSame)
+			{
+				if ((c = this.valueStrings.Length) != SecondaryField.valueStrings.Length)
+					this.notSame = true;
+				else
+				{
+					for (i = 0; i < c; i++)
+					{
+						if (this.valueStrings[i] != SecondaryField.valueStrings[i])
+						{
+							this.notSame = true;
+							break;
+						}
+					}
+				}
+			}
+
+			return true;
+		}
+
+
+		/*
+		private string[] valueStrings;
+		 */
 	}
 }

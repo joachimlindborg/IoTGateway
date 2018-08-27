@@ -18,7 +18,7 @@ namespace Waher.Client.WPF.Controls.SensorData
 		private QuantityField quantityField;
 
 		/// <summary>
-		/// Represents one item in a sniffer output.
+		/// Represents one item in a sensor data readout.
 		/// </summary>
 		/// <param name="Field">Sensor data field.</param>
 		public FieldItem(Field Field)
@@ -172,15 +172,7 @@ namespace Waher.Client.WPF.Controls.SensorData
 							case FieldType.Status: Output.Append("Status"); break;
 							case FieldType.Computed: Output.Append("Computed"); break;
 							case FieldType.Peak: Output.Append("Peak"); break;
-							case FieldType.HistoricalSecond: Output.Append("Historical (Second)"); break;
-							case FieldType.HistoricalMinute: Output.Append("Historical (Minute)"); break;
-							case FieldType.HistoricalHour: Output.Append("Historical (Hour)"); break;
-							case FieldType.HistoricalDay: Output.Append("Historical (Day)"); break;
-							case FieldType.HistoricalWeek: Output.Append("Historical (Week)"); break;
-							case FieldType.HistoricalMonth: Output.Append("Historical (Month)"); break;
-							case FieldType.HistoricalQuarter: Output.Append("Historical (Quarter)"); break;
-							case FieldType.HistoricalYear: Output.Append("Historical (Year)"); break;
-							case FieldType.HistoricalOther: Output.Append("Historical (Other)"); break;
+							case FieldType.Historical: Output.Append("Historical"); break;
 							default: Output.Append(Value.ToString()); break;
 						}
 					}
@@ -198,8 +190,12 @@ namespace Waher.Client.WPF.Controls.SensorData
 		{
 			get
 			{
-				if (this.field is QuantityField)
+				if (this.field is QuantityField ||
+					this.field is Int32Field ||
+					this.field is Int64Field)
+				{
 					return "Right";
+				}
 				else if (this.field is BooleanField)
 					return "Center";
 				else

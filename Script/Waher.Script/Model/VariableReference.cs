@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
+using Waher.Runtime.Inventory;
 using Waher.Script.Abstraction.Elements;
 using Waher.Script.Exceptions;
 using Waher.Script.Objects;
@@ -10,10 +10,10 @@ namespace Waher.Script.Model
     /// <summary>
     /// Represents a variable reference.
     /// </summary>
-    public sealed class VariableReference : ScriptNode
+    public sealed class VariableReference : ScriptNode, IDifferentiable
     {
-        private string variableName;
-        private bool onlyVariables;
+        private readonly string variableName;
+        private readonly bool onlyVariables;
 
         /// <summary>
         /// Represents a variable reference.
@@ -21,6 +21,7 @@ namespace Waher.Script.Model
         /// <param name="VariableName">Variable name.</param>
         /// <param name="Start">Start position in script expression.</param>
         /// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
         public VariableReference(string VariableName, int Start, int Length, Expression Expression)
             : base(Start, Length, Expression)
         {
@@ -36,6 +37,7 @@ namespace Waher.Script.Model
         /// also be included in the scope of the reference (false).</param>
         /// <param name="Start">Start position in script expression.</param>
         /// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
         public VariableReference(string VariableName, bool OnlyVariables, int Start, int Length, Expression Expression)
             : base(Start, Length, Expression)
         {
@@ -67,16 +69,12 @@ namespace Waher.Script.Model
         /// <returns>Result.</returns>
         public override IElement Evaluate(Variables Variables)
         {
-            Variable v;
-
-            if (Variables.TryGetVariable(this.variableName, out v))
+            if (Variables.TryGetVariable(this.variableName, out Variable v))
                 return v.ValueElement;
 
             if (!this.onlyVariables)
             {
-                IElement ValueElement;
-
-                if (Expression.TryGetConstant(this.variableName, out ValueElement))
+                if (Expression.TryGetConstant(this.variableName, out IElement ValueElement))
                     return ValueElement;
 
                 if (Types.IsRootNamespace(this.variableName))
@@ -97,13 +95,30 @@ namespace Waher.Script.Model
         /// <param name="AlreadyFound">Variables already identified.</param>
         public override void PatternMatch(IElement CheckAgainst, Dictionary<string, IElement> AlreadyFound)
         {
-            IElement E;
-
-            if (AlreadyFound.TryGetValue(this.variableName,out E) && !E.Equals(CheckAgainst))
+            if (AlreadyFound.TryGetValue(this.variableName,out IElement E) && !E.Equals(CheckAgainst))
                 throw new ScriptRuntimeException("Pattern mismatch.", this);
 
             AlreadyFound[this.variableName] = CheckAgainst;
         }
 
-    }
+		/// <summary>
+		/// Differentiates a script node, if possible.
+		/// </summary>
+		/// <param name="VariableName">Name of variable to differentiate on.</param>
+		/// <param name="Variables">Collection of variables.</param>
+		/// <returns>Differentiated node.</returns>
+		public ScriptNode Differentiate(string VariableName, Variables Variables)
+		{
+			if (VariableName == this.variableName)
+				return new ConstantElement(DoubleNumber.OneElement, this.Start, this.Length, this.Expression);
+			else
+				return new ConstantElement(DoubleNumber.ZeroElement, this.Start, this.Length, this.Expression);
+		}
+
+		/// <summary>
+		/// Default variable name, if any, null otherwise.
+		/// </summary>
+		public string DefaultVariableName => this.variableName;
+
+	}
 }

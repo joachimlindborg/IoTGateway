@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
+using Waher.Runtime.Inventory;
 using Waher.Script;
 
 namespace Waher.Content.Markdown.Model.Multimedia
@@ -36,15 +37,24 @@ namespace Waher.Content.Markdown.Model.Multimedia
 				return Grade.NotAtAll;
         }
 
-        /// <summary>
-        /// Generates HTML for the markdown element.
-        /// </summary>
-        /// <param name="Output">HTML will be output here.</param>
-        /// <param name="Items">Multimedia items.</param>
-        /// <param name="ChildNodes">Child nodes.</param>
-        /// <param name="AloneInParagraph">If the element is alone in a paragraph.</param>
-        /// <param name="Document">Markdown document containing element.</param>
-        public override void GenerateHTML(StringBuilder Output, MultimediaItem[] Items, IEnumerable<MarkdownElement> ChildNodes,
+		/// <summary>
+		/// If the link provided should be embedded in a multi-media construct automatically.
+		/// </summary>
+		/// <param name="Url">Inline link.</param>
+		public override bool EmbedInlineLink(string Url)
+		{
+			return false;
+		}
+
+		/// <summary>
+		/// Generates HTML for the markdown element.
+		/// </summary>
+		/// <param name="Output">HTML will be output here.</param>
+		/// <param name="Items">Multimedia items.</param>
+		/// <param name="ChildNodes">Child nodes.</param>
+		/// <param name="AloneInParagraph">If the element is alone in a paragraph.</param>
+		/// <param name="Document">Markdown document containing element.</param>
+		public override void GenerateHTML(StringBuilder Output, MultimediaItem[] Items, IEnumerable<MarkdownElement> ChildNodes,
             bool AloneInParagraph, MarkdownDocument Document)
         {
             Variables Variables = Document.Settings.Variables;
@@ -88,20 +98,17 @@ namespace Waher.Content.Markdown.Model.Multimedia
 
 			if (!string.IsNullOrEmpty(ParentURL))
 			{
-				Uri NewUri;
-				if (Uri.TryCreate(new Uri(ParentURL), FileName, out NewUri))
+				if (Uri.TryCreate(new Uri(ParentURL), FileName, out Uri NewUri))
 					ParentURL = NewUri.ToString();
 			}
 
-			FileName = Path.Combine(Path.GetDirectoryName(Item.Document.FileName), FileName);
+			FileName = Item.Document.Settings.GetFileName(Item.Document.FileName, FileName);
 
 			if (!string.IsNullOrEmpty(Query))
 			{
 				Variables Variables = Item.Document.Settings.Variables;
 				string Value;
-				double d;
-				bool b;
-
+				
 				if (Variables != null)
 				{
 					foreach (string Part in Query.Split('&'))
@@ -113,9 +120,9 @@ namespace Waher.Content.Markdown.Model.Multimedia
 						{
 							Value = Part.Substring(i + 1);
 
-							if (double.TryParse(Value.Replace(".", System.Globalization.NumberFormatInfo.CurrentInfo.NumberDecimalSeparator), out d))
+							if (double.TryParse(Value.Replace(".", System.Globalization.NumberFormatInfo.CurrentInfo.NumberDecimalSeparator), out double d))
 								Variables[Part.Substring(0, i)] = d;
-							else if (bool.TryParse(Value, out b))
+							else if (bool.TryParse(Value, out bool b))
 								Variables[Part.Substring(0, i)] = b;
 							else
 								Variables[Part.Substring(0, i)] = Value;
@@ -125,22 +132,35 @@ namespace Waher.Content.Markdown.Model.Multimedia
 			}
 
 			string MarkdownText = File.ReadAllText(FileName);
-			MarkdownDocument Markdown = new MarkdownDocument(MarkdownText, Item.Document.Settings, FileName, string.Empty, ParentURL);
-            Markdown.Master = Item.Document;
+			MarkdownDocument Markdown = new MarkdownDocument(MarkdownText, Item.Document.Settings, FileName, string.Empty, ParentURL)
+			{
+				Master = Item.Document
+			};
 
             MarkdownDocument Loop = Item.Document;
-            while (Loop != null)
+
+			while (Loop != null)
             {
                 if (Loop.FileName == FileName)
                     throw new Exception("Circular reference detected.");
 
-                Loop = Loop.Master;
+				MarkdownDocument.CopyMetaDataTags(Loop, Markdown);
+
+				Loop = Loop.Master;
             }
 
             return Markdown;
         }
 
-        public override void GeneratePlainText(StringBuilder Output, MultimediaItem[] Items, IEnumerable<MarkdownElement> ChildNodes,
+		/// <summary>
+		/// Generates Plain Text for the markdown element.
+		/// </summary>
+		/// <param name="Output">HTML will be output here.</param>
+		/// <param name="Items">Multimedia items.</param>
+		/// <param name="ChildNodes">Child nodes.</param>
+		/// <param name="AloneInParagraph">If the element is alone in a paragraph.</param>
+		/// <param name="Document">Markdown document containing element.</param>
+		public override void GeneratePlainText(StringBuilder Output, MultimediaItem[] Items, IEnumerable<MarkdownElement> ChildNodes,
             bool AloneInParagraph, MarkdownDocument Document)
         {
             Variables Variables = Document.Settings.Variables;

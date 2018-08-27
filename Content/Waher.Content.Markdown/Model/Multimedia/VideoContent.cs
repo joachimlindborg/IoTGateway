@@ -3,7 +3,8 @@ using System.IO;
 using System.Collections.Generic;
 using System.Text;
 using System.Xml;
-using Waher.Script;
+using Waher.Content.Xml;
+using Waher.Runtime.Inventory;
 
 namespace Waher.Content.Markdown.Model.Multimedia
 {
@@ -30,6 +31,15 @@ namespace Waher.Content.Markdown.Model.Multimedia
 				return Grade.Ok;
 			else
 				return Grade.NotAtAll;
+		}
+
+		/// <summary>
+		/// If the link provided should be embedded in a multi-media construct automatically.
+		/// </summary>
+		/// <param name="Url">Inline link.</param>
+		public override bool EmbedInlineLink(string Url)
+		{
+			return true;
 		}
 
 		/// <summary>

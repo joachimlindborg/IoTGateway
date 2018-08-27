@@ -1,9 +1,9 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <xs:schema id="ClientConnections"
-		   targetNamespace="http://waher.se/ClientConnections.xsd"
+		   targetNamespace="http://waher.se/Schema/ClientConnections.xsd"
 		   elementFormDefault="qualified"
-		   xmlns="http://waher.se/ClientConnections.xsd"
-		   xmlns:mstns="http://waher.se/ClientConnections.xsd"
+		   xmlns="http://waher.se/Schema/ClientConnections.xsd"
+		   xmlns:mstns="http://waher.se/Schema/ClientConnections.xsd"
 		   xmlns:xs="http://www.w3.org/2001/XMLSchema">
 
 	<xs:element name="ClientConnections">
@@ -15,18 +15,31 @@
 	</xs:element>
 
 	<xs:complexType name="XmppAccount">
-		<xs:attribute name="host" type="xs:string" use="required"/>
-		<xs:attribute name="port" type="PortNumber" use="optional" default="5222"/>
+    <xs:attribute name="host" type="xs:string" use="required"/>
+		<xs:attribute name="transport" type="Transport" use="optional" default="TraditionalSocket"/>
+		<xs:attribute name="urlBindResource" type="xs:anyURI" use="optional"/>
+    <xs:attribute name="port" type="PortNumber" use="optional" default="5222"/>
 		<xs:attribute name="account" type="xs:string" use="required"/>
 		<xs:attribute name="password" type="xs:string" use="optional"/>
 		<xs:attribute name="passwordHash" type="xs:string" use="optional"/>
 		<xs:attribute name="passwordHashMethod" type="xs:string" use="optional"/>
-		<xs:attribute name="trustCertificate" type="xs:boolean" use="optional" default="false"/>
-	</xs:complexType>
+    <xs:attribute name="domain" type="xs:string" use="optional"/>
+    <xs:attribute name="trustCertificate" type="xs:boolean" use="optional" default="false"/>
+    <xs:attribute name="allowInsecureAuthentication" type="xs:boolean" use="optional" default="false"/>
+    <xs:attribute name="supportsHashes" type="xs:boolean" use="optional" default="true"/>
+  </xs:complexType>
 
 	<xs:simpleType name="PortNumber">
 		<xs:restriction base="xs:positiveInteger">
 			<xs:maxInclusive value="65535"/>
+		</xs:restriction>
+	</xs:simpleType>
+
+	<xs:simpleType name="Transport">
+		<xs:restriction base="xs:string">
+			<xs:enumeration value="TraditionalSocket"/>
+			<xs:enumeration value="BOSH"/>
+			<xs:enumeration value="WS"/>
 		</xs:restriction>
 	</xs:simpleType>
 

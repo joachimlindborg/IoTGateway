@@ -3,13 +3,16 @@ using System.Collections.Generic;
 using System.Text;
 using System.Xml;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Waher.Content.Markdown;
 using Waher.Events;
 using Waher.Networking.Sniffers;
 using Waher.Networking.XMPP.Control;
 using Waher.Networking.XMPP.DataForms;
 using Waher.Networking.XMPP.Sensor;
+using Waher.Things.DisplayableParameters;
 
 namespace Waher.Client.WPF.Model
 {
@@ -19,6 +22,7 @@ namespace Waher.Client.WPF.Model
 	public abstract class TreeNode : SelectableItem, IDisposable
 	{
 		private TreeNode parent;
+		protected DisplayableParameters parameters = null;
 		protected SortedDictionary<string, TreeNode> children = null;
 		private object tag = null;
 		private bool expanded = false;
@@ -143,6 +147,30 @@ namespace Waher.Client.WPF.Model
 		}
 
 		/// <summary>
+		/// If the second image resource is visible or not.
+		/// </summary>
+		public virtual Visibility ImageResourceVisibility
+		{
+			get { return Visibility.Visible; }
+		}
+
+		/// <summary>
+		/// Secondary image resource for the node.
+		/// </summary>
+		public virtual ImageSource ImageResource2
+		{
+			get { return null; }
+		}
+
+		/// <summary>
+		/// If the second image resource is visible or not.
+		/// </summary>
+		public virtual Visibility ImageResource2Visibility
+		{
+			get { return Visibility.Hidden; }
+		}
+
+		/// <summary>
 		/// Tool Tip for node.
 		/// </summary>
 		public abstract string ToolTip
@@ -156,6 +184,38 @@ namespace Waher.Client.WPF.Model
 		public abstract string TypeName
 		{
 			get;
+		}
+
+		/// <summary>
+		/// Gets a displayable parameter value.
+		/// </summary>
+		/// <param name="DisplayableParameter">Name of displayable parameter.</param>
+		/// <returns>Parameter value, if exists, or <see cref="string.Empty"/> if not.</returns>
+		public virtual string this[string DisplayableParameter]
+		{
+			get
+			{
+				if (this.parameters != null)
+					return this.parameters[DisplayableParameter];
+				else
+					return string.Empty;
+			}
+		}
+
+		public virtual void Add(params Parameter[] Parameters)
+		{
+			if (this.parameters == null)
+				this.parameters = new DisplayableParameters(Parameters);
+			else
+				this.parameters.AddRange(Parameters);
+		}
+
+		/// <summary>
+		/// Gets available displayable parameters.
+		/// </summary>
+		public virtual DisplayableParameters DisplayableParameters
+		{
+			get { return this.parameters; }
 		}
 
 		/// <summary>
@@ -206,7 +266,68 @@ namespace Waher.Client.WPF.Model
 		/// </summary>
 		protected virtual void OnExpanded()
 		{
+			this.LoadChildren();
 			this.Raise(this.Expanded);
+		}
+
+		/// <summary>
+		/// Raises the <see cref="Selected"/> event.
+		/// </summary>
+		protected override void OnSelected()
+		{
+			this.LoadChildren();
+			base.OnSelected();
+		}
+
+		protected virtual bool IsLoaded
+		{
+			get
+			{
+				if (this.children == null)
+					return true;
+
+				lock (this.children)
+				{
+					return this.children.Count != 1 || !this.children.ContainsKey(string.Empty);
+				}
+			}
+		}
+
+		/// <summary>
+		/// Method is called to make sure children are loaded.
+		/// </summary>
+		protected virtual void LoadChildren()
+		{
+			// Do nothing by default.
+		}
+
+		/// <summary>
+		/// Method is called to notify children can be unloaded.
+		/// </summary>
+		protected virtual void UnloadChildren()
+		{
+			// Do nothing by default.
+		}
+
+		/// <summary>
+		/// Method is called to notify grandchildren can be unloaded.
+		/// </summary>
+		protected virtual void UnloadGrandchildren()
+		{
+			if (this.children != null)
+			{
+				foreach (TreeNode Node in this.children.Values)
+					Node.UnloadChildren();
+			}
+		}
+
+		/// <summary>
+		/// Method is called to make sure siblings are loaded.
+		/// </summary>
+		protected virtual void LoadSiblings()
+		{
+			if (this.parent != null)
+				this.parent.LoadChildren();
 		}
 
 		/// <summary>
@@ -214,6 +335,7 @@ namespace Waher.Client.WPF.Model
 		/// </summary>
 		protected virtual void OnCollapsed()
 		{
+			this.UnloadGrandchildren();
 			this.Raise(this.Collapsed);
 		}
 
@@ -235,6 +357,42 @@ namespace Waher.Client.WPF.Model
 		}
 
 		/// <summary>
+		/// If the node can be deleted.
+		/// </summary>
+		public abstract bool CanDelete
+		{
+			get;
+		}
+
+		/// <summary>
+		/// Method called when a node is to be deleted.
+		/// </summary>
+		/// <param name="Parent">Parent node.</param>
+		/// <param name="OnDeleted">Method called when node has been successfully deleted.</param>
+		public virtual void Delete(TreeNode Parent, EventHandler OnDeleted)
+		{
+			Parent?.RemoveChild(this);
+			OnDeleted?.Invoke(this, new EventArgs());
+		}
+
+		/// <summary>
+		/// If the node can be edited.
+		/// </summary>
+		public abstract bool CanEdit
+		{
+			get;
+		}
+
+		/// <summary>
+		/// Is called when the user wants to edit a node.
+		/// </summary>
+		/// <exception cref="NotSupportedException">If the feature is not supported by the node.</exception>
+		public virtual void Edit()
+		{
+			throw new NotSupportedException();
+		}
+
+		/// <summary>
 		/// If the node can be recycled.
 		/// </summary>
 		public abstract bool CanRecycle
@@ -245,8 +403,9 @@ namespace Waher.Client.WPF.Model
 		/// <summary>
 		/// Is called when the user wants to recycle the node.
 		/// </summary>
+		/// <param name="Window">Window</param>
 		/// <exception cref="NotSupportedException">If the feature is not supported by the node.</exception>
-		public virtual void Recycle()
+		public virtual void Recycle(MainWindow Window)
 		{
 			throw new NotSupportedException();
 		}
@@ -256,7 +415,7 @@ namespace Waher.Client.WPF.Model
 		/// </summary>
 		/// <param name="Node">Child node.</param>
 		/// <returns>If the node was found and removed.</returns>
-		public virtual bool Delete(TreeNode Node)
+		public virtual bool RemoveChild(TreeNode Node)
 		{
 			if (this.children != null)
 			{
@@ -267,6 +426,18 @@ namespace Waher.Client.WPF.Model
 			}
 			else
 				return false;
+		}
+
+		internal void RenameChild(string OldKey, string NewKey, TreeNode Node)
+		{
+			if (this.children != null)
+			{
+				lock (this.children)
+				{
+					this.children.Remove(OldKey);
+					this.children[NewKey] = Node;
+				}
+			}
 		}
 
 		/// <summary>
@@ -342,6 +513,14 @@ namespace Waher.Client.WPF.Model
 		}
 
 		/// <summary>
+		/// If it's possible to subscribe to sensor data from the node.
+		/// </summary>
+		public virtual bool CanSubscribeToSensorData
+		{
+			get { return false; }
+		}
+
+		/// <summary>
 		/// Starts readout of momentary sensor data values.
 		/// </summary>
 		/// <exception cref="NotSupportedException">If the feature is not supported by the node.</exception>
@@ -355,6 +534,16 @@ namespace Waher.Client.WPF.Model
 		/// </summary>
 		/// <exception cref="NotSupportedException">If the feature is not supported by the node.</exception>
 		public virtual SensorDataClientRequest StartSensorDataFullReadout()
+		{
+			throw new NotSupportedException();
+		}
+
+		/// <summary>
+		/// Starts subscription of momentary sensor data values.
+		/// </summary>
+		/// <param name="Rules">Any rules to apply.</param>
+		/// <exception cref="NotSupportedException">If the feature is not supported by the node.</exception>
+		public virtual SensorDataSubscriptionRequest SubscribeSensorDataMomentaryReadout(FieldSubscriptionRule[] Rules)
 		{
 			throw new NotSupportedException();
 		}
@@ -376,6 +565,221 @@ namespace Waher.Client.WPF.Model
 		public virtual void GetConfigurationForm(DataFormResultEventHandler Callback, object State)
 		{
 			throw new NotSupportedException();
+		}
+
+		/// <summary>
+		/// If it's possible to search for data on the node.
+		/// </summary>
+		public virtual bool CanSearch
+		{
+			get { return false; }
+		}
+
+		/// <summary>
+		/// Performs a search on the node.
+		/// </summary>
+		public virtual void Search()
+		{
+			throw new NotSupportedException();
+		}
+
+		/// <summary>
+		/// Adds context sensitive menu items to a context menu.
+		/// </summary>
+		/// <param name="CurrentGroup">Current group.</param>
+		/// <param name="Menu">Menu being built.</param>
+		public virtual void AddContexMenuItems(ref string CurrentGroup, ContextMenu Menu)
+		{
+			if (this.CanAddChildren)
+			{
+				CurrentGroup = "Edit";
+				Menu.Items.Add(new MenuItem()
+				{
+					Header = "_Add...",
+					IsEnabled = true,
+					Command = MainWindow.Add,
+					Icon = new Image()
+					{
+						Source = new BitmapImage(new Uri("../Graphics/Add.png", UriKind.Relative)),
+						Width = 16,
+						Height = 16
+					}
+				});
+			}
+
+			if (this.Parent != null && this.Parent.CanAddChildren)
+			{
+				CurrentGroup = "Edit";
+				Menu.Items.Add(new MenuItem()
+				{
+					Header = "_Delete...",
+					IsEnabled = true,
+					Command = MainWindow.Delete,
+					Icon = new Image()
+					{
+						Source = new BitmapImage(new Uri("../Graphics/delete_32_h.png", UriKind.Relative)),
+						Width = 16,
+						Height = 16
+					}
+				});
+			}
+
+			if (this.CanRecycle)
+			{
+				this.GroupSeparator(ref CurrentGroup, "Connection", Menu);
+				Menu.Items.Add(new MenuItem()
+				{
+					Header = "_Refresh",
+					IsEnabled = true,
+					Command = MainWindow.Refresh,
+					Icon = new Image()
+					{
+						Source = new BitmapImage(new Uri("../Graphics/refresh_document_16_h.png", UriKind.Relative)),
+						Width = 16,
+						Height = 16
+					}
+				});
+			}
+
+			if (this.IsSniffable)
+			{
+				this.GroupSeparator(ref CurrentGroup, "Connection", Menu);
+				Menu.Items.Add(new MenuItem()
+				{
+					Header = "_Sniff...",
+					IsEnabled = true,
+					Command = MainWindow.Sniff,
+					Icon = new Image()
+					{
+						Source = new BitmapImage(new Uri("../Graphics/Spy-icon.png", UriKind.Relative)),
+						Width = 16,
+						Height = 16
+					}
+				});
+			}
+
+			if (this.CanChat)
+			{
+				this.GroupSeparator(ref CurrentGroup, "Communication", Menu);
+				Menu.Items.Add(new MenuItem()
+				{
+					Header = "C_hat...",
+					IsEnabled = true,
+					Command = MainWindow.Chat,
+					Icon = new Image()
+					{
+						Source = new BitmapImage(new Uri("../Graphics/Chat-icon_16.png", UriKind.Relative)),
+						Width = 16,
+						Height = 16
+					}
+				});
+			}
+
+			if (this.CanReadSensorData)
+			{
+				this.GroupSeparator(ref CurrentGroup, "Communication", Menu);
+				Menu.Items.Add(new MenuItem()
+				{
+					Header = "Read _Momentary Values...",
+					IsEnabled = true,
+					Command = MainWindow.ReadMomentary,
+					Icon = new Image()
+					{
+						Source = new BitmapImage(new Uri("../Graphics/history_16_h.png", UriKind.Relative)),
+						Width = 16,
+						Height = 16
+					}
+				});
+
+				Menu.Items.Add(new MenuItem()
+				{
+					Header = "Read _Detailed Values...",
+					IsEnabled = true,
+					Command = MainWindow.ReadDetailed,
+					Icon = new Image()
+					{
+						Source = new BitmapImage(new Uri("../Graphics/print_preview_lined_16_h.png", UriKind.Relative)),
+						Width = 16,
+						Height = 16
+					}
+				});
+			}
+
+			if (this.CanSubscribeToSensorData)
+			{
+				this.GroupSeparator(ref CurrentGroup, "Communication", Menu);
+				Menu.Items.Add(new MenuItem()
+				{
+					Header = "Su_bscribe to Momentary Values...",
+					IsEnabled = true,
+					Command = MainWindow.SubscribeToMomentary,
+					Icon = new Image()
+					{
+						Source = new BitmapImage(new Uri("../Graphics/rss-feed-icon_16.png", UriKind.Relative)),
+						Width = 16,
+						Height = 16
+					}
+				});
+			}
+
+			if (this.CanConfigure)
+			{
+				this.GroupSeparator(ref CurrentGroup, "Communication", Menu);
+				Menu.Items.Add(new MenuItem()
+				{
+					Header = "Configure _Parameters...",
+					IsEnabled = true,
+					Command = MainWindow.Configure,
+					Icon = new Image()
+					{
+						Source = new BitmapImage(new Uri("../Graphics/Settings-icon_16.png", UriKind.Relative)),
+						Width = 16,
+						Height = 16
+					}
+				});
+			}
+
+			if (this.CanSearch)
+			{
+				this.GroupSeparator(ref CurrentGroup, "Database", Menu);
+				Menu.Items.Add(new MenuItem()
+				{
+					Header = "_Search",
+					IsEnabled = true,
+					Command = MainWindow.Search,
+					Icon = new Image()
+					{
+						Source = new BitmapImage(new Uri("../Graphics/search_16_h.png", UriKind.Relative)),
+						Width = 16,
+						Height = 16
+					}
+				});
+			}
+
+			TreeNode Loop = this;
+			while (Loop != null)
+			{
+				if (Loop is IMenuAggregator MenuAggregator)
+					MenuAggregator.AddContexMenuItems(this, ref CurrentGroup, Menu);
+
+				Loop = Loop.parent;
+			}
+		}
+
+		protected void GroupSeparator(ref string CurrentGroup, string Group, ContextMenu Menu)
+		{
+			if (CurrentGroup != Group)
+			{
+				if (!string.IsNullOrEmpty(CurrentGroup))
+					Menu.Items.Add(new MenuItem());
+
+				CurrentGroup = Group;
+			}
+		}
+
+		public virtual void SelectionChanged()
+		{
+			// Do nothing by default.
 		}
 
 	}

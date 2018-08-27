@@ -13,9 +13,22 @@ namespace Waher.Networking.XMPP.DataForms.DataTypes
 		private readonly static Regex pattern = new Regex(@"^[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*$", RegexOptions.Singleline | RegexOptions.Compiled);
 
 		/// <summary>
+		/// Public instance of data type.
+		/// </summary>
+		public static readonly LanguageDataType Instance = new LanguageDataType();
+
+		/// <summary>
 		/// Language Data Type (xs:language)
 		/// </summary>
-		/// <param name="TypeName">Type Name</param>
+		public LanguageDataType()
+			: this("xs:language")
+		{
+		}
+
+		/// <summary>
+		/// Language Data Type (xs:language)
+		/// </summary>
+		/// <param name="DataType">Data Type</param>
 		public LanguageDataType(string DataType)
 			: base(DataType)
 		{

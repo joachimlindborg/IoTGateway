@@ -10,9 +10,22 @@ namespace Waher.Networking.XMPP.DataForms.DataTypes
 	public class DateTimeDataType : DataType
 	{
 		/// <summary>
+		/// Public instance of data type.
+		/// </summary>
+		public static readonly DateTimeDataType Instance = new DateTimeDataType();
+
+		/// <summary>
 		/// DateTime Data Type (xs:dateTime)
 		/// </summary>
-		/// <param name="TypeName">Type Name</param>
+		public DateTimeDataType()
+			: this("xs:dateTime")
+		{
+		}
+
+		/// <summary>
+		/// DateTime Data Type (xs:dateTime)
+		/// </summary>
+		/// <param name="DataType">Data Type</param>
 		public DateTimeDataType(string DataType)
 			: base(DataType)
 		{
@@ -30,15 +43,12 @@ namespace Waher.Networking.XMPP.DataForms.DataTypes
 			if (i == 10)
 			{
 				DateTime? DT = DateDataType.ParseDate(Value.Substring(0, 10));
-				TimeSpan TS;
-
-				if (DT.HasValue && TimeSpan.TryParse(Value.Substring(11), out TS))
+				
+				if (DT.HasValue && TimeSpan.TryParse(Value.Substring(11), out TimeSpan TS))
 					return DT.Value + TS;
 			}
 
-			DateTime DT2;
-
-			if (DateTime.TryParse(Value, out DT2))
+			if (DateTime.TryParse(Value, out DateTime DT2))
 				return DT2;
 			else
 				return null;

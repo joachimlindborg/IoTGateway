@@ -10,9 +10,22 @@ namespace Waher.Networking.XMPP.DataForms.DataTypes
 	public class StringDataType : DataType
 	{
 		/// <summary>
+		/// Public instance of data type.
+		/// </summary>
+		public static readonly StringDataType Instance = new StringDataType();
+
+		/// <summary>
 		/// String Data Type (xs:string)
 		/// </summary>
-		/// <param name="TypeName">Type Name</param>
+		public StringDataType()
+			: this("xs:string")
+		{
+		}
+
+		/// <summary>
+		/// String Data Type (xs:string)
+		/// </summary>
+		/// <param name="DataType">Data Type</param>
 		public StringDataType(string DataType)
 			: base(DataType)
 		{

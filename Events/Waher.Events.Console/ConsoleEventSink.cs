@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace Waher.Events.Console
 {
@@ -10,7 +11,8 @@ namespace Waher.Events.Console
 	public class ConsoleEventSink : EventSink
 	{
 		private const int TabWidth = 8;
-		private bool beep;
+		private readonly bool beep;
+		private bool consoleWidthWorks = true;
 
 		/// <summary>
 		/// Outputs events to the console standard output.
@@ -34,7 +36,7 @@ namespace Waher.Events.Console
 		/// <summary>
 		/// <see cref="IEventSink.Queue"/>
 		/// </summary>
-		public override void Queue(Event Event)
+		public override Task Queue(Event Event)
 		{
 			lock (System.Console.Out)
 			{
@@ -46,14 +48,23 @@ namespace Waher.Events.Console
 				bool WriteLine = false;
 				int i;
 
-				try
+				if (this.consoleWidthWorks)
 				{
-					Width = System.Console.WindowWidth;
+					try
+					{
+						Width = System.Console.WindowWidth;
 
-					if (System.Console.CursorLeft > 1)
-						System.Console.Out.WriteLine();
+						if (System.Console.CursorLeft > 1)
+							System.Console.Out.WriteLine();
+					}
+					catch (Exception)
+					{
+						Width = 80;
+						WriteLine = true;
+						this.consoleWidthWorks = false;
+					}
 				}
-				catch (Exception)
+				else
 				{
 					Width = 80;
 					WriteLine = true;
@@ -167,7 +178,27 @@ namespace Waher.Events.Console
 						this.AddTag(Output, Width, "Module", Event.Module, false, WriteLine);
 
 					foreach (KeyValuePair<string, object> P in Event.Tags)
-						this.AddTag(Output, Width, P.Key, P.Value, false, WriteLine);
+					{
+						if (P.Value is Array A)
+						{
+							StringBuilder sb2 = new StringBuilder();
+							bool First = true;
+
+							foreach (object Item in A)
+							{
+								if (First)
+									First = false;
+								else
+									sb2.Append(", ");
+
+								sb2.Append(Item.ToString());
+							}
+
+							this.AddTag(Output, Width, P.Key, sb2.ToString(), false, WriteLine);
+						}
+						else
+							this.AddTag(Output, Width, P.Key, P.Value, false, WriteLine);
+					}
 
 					if (WriteLine)
 						Output.AppendLine();
@@ -186,6 +217,8 @@ namespace Waher.Events.Console
 					System.Console.BackgroundColor = BgBak;
 				}
 			}
+
+			return Task.CompletedTask;
 		}
 
 		private void AddTag(StringBuilder Output, int Width, string Key, object Value, bool First, bool WriteLine)

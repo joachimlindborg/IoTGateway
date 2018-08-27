@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Xml;
-using Waher.Script;
+using Waher.Runtime.Inventory;
 
 namespace Waher.Content.Markdown.Model
 {
@@ -17,6 +17,12 @@ namespace Waher.Content.Markdown.Model
 		/// <param name="Item">Multimedia item.</param>
 		/// <returns>How well the handler supports the content.</returns>
 		public abstract Grade Supports(MultimediaItem Item);
+
+		/// <summary>
+		/// If the link provided should be embedded in a multi-media construct automatically.
+		/// </summary>
+		/// <param name="Url">Inline link.</param>
+		public abstract bool EmbedInlineLink(string Url);
 
 		/// <summary>
 		/// Generates HTML for the markdown element.

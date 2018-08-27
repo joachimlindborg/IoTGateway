@@ -13,7 +13,7 @@ namespace Waher.Networking.XMPP.Sensor
 	/// </summary>
 	public class Subscription
 	{
-		private Dictionary<ThingReference, bool> nodes = new Dictionary<ThingReference, bool>();
+		private Dictionary<IThingReference, bool> nodes = new Dictionary<IThingReference, bool>();
 		private Dictionary<string, FieldSubscriptionRule> fields = null;
 		private Availability availability = Availability.Online;
 		private FieldType fieldTypes;
@@ -25,14 +25,14 @@ namespace Waher.Networking.XMPP.Sensor
 		private string serviceToken;
 		private string deviceToken;
 		private string userToken;
-		private int seqNr;
+		private string id;
 		private bool active = true;
 		private bool supressedTrigger = false;
 
 		/// <summary>
 		/// Maintains the status of a subscription.
 		/// </summary>
-		/// <param name="SeqNr">Sequence number.</param>
+		/// <param name="Id">Request identity.</param>
 		/// <param name="From">Subscription made by this JID.</param>
 		/// <param name="Nodes">Nodes involved in subscription.</param>
 		/// <param name="Fields">Optional field rules.</param>
@@ -43,13 +43,13 @@ namespace Waher.Networking.XMPP.Sensor
 		/// <param name="ServiceToken">Service Token.</param>
 		/// <param name="DeviceToken">Device Token.</param>
 		/// <param name="UserToken">User Token.</param>
-		public Subscription(int SeqNr, string From, ThingReference[] Nodes, Dictionary<string, FieldSubscriptionRule> Fields,
+		public Subscription(string Id, string From, IThingReference[] Nodes, Dictionary<string, FieldSubscriptionRule> Fields,
 			FieldType FieldTypes, Duration MaxAge, Duration MinInterval, Duration MaxInterval, string ServiceToken, string DeviceToken,
 			string UserToken)
 		{
-			this.nodes = new Dictionary<ThingReference, bool>();
+			this.nodes = new Dictionary<IThingReference, bool>();
 
-			foreach (ThingReference Ref in Nodes)
+			foreach (IThingReference Ref in Nodes)
 				this.nodes[Ref] = true;
 
 			this.fields = Fields;
@@ -58,7 +58,7 @@ namespace Waher.Networking.XMPP.Sensor
 			this.minInterval = MinInterval;
 			this.maxInterval = MaxInterval;
 			this.from = From;
-			this.seqNr = SeqNr;
+			this.id = Id;
 			this.serviceToken = ServiceToken;
 			this.deviceToken = DeviceToken;
 			this.userToken = UserToken;
@@ -69,7 +69,7 @@ namespace Waher.Networking.XMPP.Sensor
 		/// </summary>
 		/// <param name="Reference">Reference to remove.</param>
 		/// <returns>If the subscription has become inactive, due to lack of referenced things.</returns>
-		public bool RemoveNode(ThingReference Reference)
+		public bool RemoveNode(IThingReference Reference)
 		{
 			lock (this.nodes)
 			{
@@ -89,7 +89,7 @@ namespace Waher.Networking.XMPP.Sensor
 		/// <summary>
 		/// Nodes in subscription.
 		/// </summary>
-		public Dictionary<ThingReference, bool>.KeyCollection Nodes
+		public Dictionary<IThingReference, bool>.KeyCollection Nodes
 		{
 			get { return this.nodes.Keys; }
 		}
@@ -115,14 +115,14 @@ namespace Waher.Networking.XMPP.Sensor
 		/// <summary>
 		/// Node references, for use when requesting a new readout.
 		/// </summary>
-		public ThingReference[] NodeReferences
+		public IThingReference[] NodeReferences
 		{
 			get
 			{
 				if (this.nodes.Count == 1 && this.nodes.ContainsKey(ThingReference.Empty))
 					return null;
 
-				ThingReference[] Result = new ThingReference[this.nodes.Count];
+				IThingReference[] Result = new IThingReference[this.nodes.Count];
 				this.nodes.Keys.CopyTo(Result, 0);
 				return Result;
 			}
@@ -154,9 +154,9 @@ namespace Waher.Networking.XMPP.Sensor
 		public string From { get { return this.from; } }
 
 		/// <summary>
-		/// Sequence number.
+		/// Request identity.
 		/// </summary>
-		public int SeqNr { get { return this.seqNr; } }
+		public string Id { get { return this.id; } }
 
 		/// <summary>
 		/// If the subscription is still active.
@@ -220,51 +220,40 @@ namespace Waher.Networking.XMPP.Sensor
 			if (!this.active)
 				return false;
 
-			FieldSubscriptionRule Rule;
-			DateTime Now = DateTime.Now;
-
-			if (this.supressedTrigger)
-			{
-				this.supressedTrigger = false;
-				this.lastTrigger = this.lastTrigger + this.minInterval;
-
-				if (this.lastTrigger + this.minInterval < Now)
-					this.lastTrigger = Now + this.minInterval;
-
-				return true;
-			}
-
-			if (this.maxInterval != null && this.lastTrigger + this.maxInterval >= Now)
-			{
-				this.lastTrigger = this.lastTrigger + this.maxInterval;
-				return true;
-			}
-
-			if (this.fields == null)
-				return false;
-
 			bool Trigger = false;
 
-			foreach (Field Field in Values)
+			if (this.fields != null)
 			{
-				if (!this.fields.TryGetValue(Field.Name, out Rule))
-					continue;
+				foreach (Field Field in Values)
+				{
+					if (!this.fields.TryGetValue(Field.Name, out FieldSubscriptionRule Rule))
+						continue;
 
-				if (Rule.TriggerEvent(Field.ReferenceValue))
-					Trigger = true;
+					if (Rule.TriggerEvent(Field.ReferenceValue))
+						Trigger = true;
+				}
+			}
+
+			DateTime Now = DateTime.Now;
+			DateTime TP;
+
+			if (Trigger && this.minInterval != null && this.lastTrigger + this.minInterval > Now)
+			{
+				this.supressedTrigger = true;
+				return false;
+			}
+
+			if (this.maxInterval != null && (TP = this.lastTrigger + this.maxInterval) <= Now)
+			{
+				this.lastTrigger = TP;
+				return true;
 			}
 
 			if (!Trigger)
 				return false;
 
-			if ((this.minInterval != null && this.lastTrigger + this.minInterval > Now) ||
-				this.availability == Availability.Offline)
-			{
-				this.supressedTrigger = true;
-				return false;
-			}
-			else
-				return true;
+			this.lastTrigger = Now;
+			return true;
 		}
 
 	}

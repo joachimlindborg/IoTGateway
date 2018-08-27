@@ -15,6 +15,7 @@ namespace Waher.Script.Functions.Runtime
         /// <param name="Argument">Argument.</param>
         /// <param name="Start">Start position in script expression.</param>
         /// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
         public Print(ScriptNode Argument, int Start, int Length, Expression Expression)
             : base(Argument, Start, Length, Expression)
         {
@@ -37,8 +38,8 @@ namespace Waher.Script.Functions.Runtime
         {
             IElement E = this.Argument.Evaluate(Variables);
             StringValue S = E as StringValue;
-            string Msg = S != null ? S.Value : E.AssociatedObjectValue.ToString();
-            Variables.ConsoleOut.Write(Msg);
+            string Msg = S != null ? S.Value : Expression.ToString(E.AssociatedObjectValue);
+            Variables.ConsoleOut?.Write(Msg);
             return E;
         }
 

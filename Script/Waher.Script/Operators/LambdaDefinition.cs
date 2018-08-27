@@ -16,20 +16,22 @@ namespace Waher.Script.Operators
     /// <summary>
     /// Lambda Definition.
     /// </summary>
-    public class LambdaDefinition : UnaryOperator, IElement, ILambdaExpression
+    public class LambdaDefinition : UnaryOperator, IElement, ILambdaExpression, IDifferentiable
     {
-        private string[] argumentNames;
-        private ArgumentType[] argumentTypes;
-        private int nrArguments;
-        private bool allNormal;
+        private readonly string[] argumentNames;
+        private readonly ArgumentType[] argumentTypes;
+        private readonly int nrArguments;
+        private readonly bool allNormal;
 
         /// <summary>
         /// Lambda Definition.
         /// </summary>
         /// <param name="ArgumentNames">Argument Names.</param>
+		/// <param name="ArgumentTypes">Argument Types.</param>
         /// <param name="Operand">Operand.</param>
         /// <param name="Start">Start position in script expression.</param>
         /// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
         public LambdaDefinition(string[] ArgumentNames, ArgumentType[] ArgumentTypes, ScriptNode Operand, int Start, int Length, Expression Expression)
             : base(Operand, Start, Length, Expression)
         {
@@ -363,7 +365,7 @@ namespace Waher.Script.Operators
         /// <returns>If conversion was possible.</returns>
         public bool TryConvertTo(Type DesiredType, out object Value)
         {
-            if (DesiredType.IsAssignableFrom(this.GetType()))
+            if (DesiredType.GetTypeInfo().IsAssignableFrom(this.GetType().GetTypeInfo()))
             {
                 Value = this;
                 return true;
@@ -379,11 +381,33 @@ namespace Waher.Script.Operators
 		/// <param name="VariableName">Name of variable to differentiate on.</param>
 		/// <param name="Variables">Collection of variables.</param>
 		/// <returns>Differentiated lambda expression.</returns>
-		public ILambdaExpression Differentiate(string VariableName, Variables Variables)
+		public ScriptNode Differentiate(string VariableName, Variables Variables)
 		{
-			throw new NotImplementedException();	// TODO: Implement.
+			if (Array.IndexOf<string>(this.argumentNames, VariableName) < 0)
+				return new ConstantElement(Objects.DoubleNumber.ZeroElement, this.Start, this.Length, this.Expression);
+			else if (this.op is IDifferentiable Differentiable)
+				return new LambdaDefinition(this.argumentNames, this.argumentTypes, Differentiable.Differentiate(VariableName, Variables), this.Start, this.Length, this.Expression);
+			else
+				throw new ScriptRuntimeException("Lambda expression not differentiable.", this);
 		}
 
+		/// <summary>
+		/// Default variable name, if any, null otherwise.
+		/// </summary>
+		public override string DefaultVariableName
+		{
+			get
+			{
+				if (this.argumentNames.Length == 1)
+					return this.argumentNames[0];
+				else
+					return null;
+			}
+		}
+
+		/// <summary>
+		/// <see cref="Object.ToString()"/>
+		/// </summary>
 		public override string ToString()
 		{
 			return ToString(this);

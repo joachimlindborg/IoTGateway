@@ -18,6 +18,7 @@ namespace Waher.Script.Model
         /// <param name="Argument">Argument.</param>
         /// <param name="Start">Start position in script expression.</param>
         /// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
         public FunctionOneVariable(ScriptNode Argument, int Start, int Length, Expression Expression)
 			: base(Start, Length, Expression)
 		{
@@ -40,12 +41,12 @@ namespace Waher.Script.Model
             get { return new string[] { "x" }; }
 		}
 
-        /// <summary>
-        /// Evaluates the node, using the variables provided in the <paramref name="Variables"/> collection.
-        /// </summary>
-        /// <param name="Variables">Variables collection.</param>
-        /// <returns>Result.</returns>
-        public override IElement Evaluate(Variables Variables)
+		/// <summary>
+		/// Evaluates the node, using the variables provided in the <paramref name="Variables"/> collection.
+		/// </summary>
+		/// <param name="Variables">Variables collection.</param>
+		/// <returns>Result.</returns>
+		public override IElement Evaluate(Variables Variables)
         {
             IElement Arg = this.argument.Evaluate(Variables);
             return this.Evaluate(Arg, Variables);

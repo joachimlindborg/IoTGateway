@@ -15,12 +15,8 @@ namespace Waher.Script
 	{
 		private Dictionary<string, Variable> variables = new Dictionary<string, Variable>();
         private Stack<Dictionary<string, Variable>> stack = null;
-#if WINDOWS_UWP
-		private TextWriter consoleOut = new DebugWriter();
-#else
-		private TextWriter consoleOut = Console.Out;
-#endif
-		private Mutex mutex = new Mutex();
+		private TextWriter consoleOut = null;
+		private readonly Mutex mutex = new Mutex();
 
         /// <summary>
         /// Collection of variables.
@@ -67,11 +63,9 @@ namespace Waher.Script
 		{
 			get
 			{
-				Variable v;
-
 				lock (this.variables)
 				{
-					if (this.variables.TryGetValue(Name, out v))
+					if (this.variables.TryGetValue(Name, out Variable v))
 						return v.ValueObject;
 					else
 						return null;
@@ -80,16 +74,24 @@ namespace Waher.Script
 
 			set
 			{
-				Variable v;
-
 				lock (this.variables)
 				{
-					if (this.variables.TryGetValue(Name, out v))
+					if (this.variables.TryGetValue(Name, out Variable v))
 						v.SetValue(value);
 					else
 						this.variables[Name] = new Variable(Name, value);
 				}
 			}
+		}
+
+		/// <summary>
+		/// Adds a variable to the collection.
+		/// </summary>
+		/// <param name="Name">Variable name.</param>
+		/// <param name="Value">Associated variable object value.</param>
+		public void Add(string Name, object Value)
+		{
+			this[Name] = Value;
 		}
 
         /// <summary>
@@ -118,7 +120,7 @@ namespace Waher.Script
 
             Dictionary<string, Variable> Clone = new Dictionary<string, Variable>();
             foreach (KeyValuePair<string, Variable> P in this.variables)
-                Clone[P.Key] = P.Value;
+                Clone[P.Key] = new Variable(P.Key, P.Value.ValueElement);
 
             this.variables = Clone;
         }
@@ -172,13 +174,16 @@ namespace Waher.Script
 		}
 
 		/// <summary>
-		/// Releases the collection, previously locked through a call to <see cref="Lock"/>.
+		/// Releases the collection, previously locked through a call to <see cref="Lock()"/>.
 		/// </summary>
 		public void Release()
 		{
 			this.mutex.ReleaseMutex();
 		}
 
+		/// <summary>
+		/// Returns an array of available variables.
+		/// </summary>
 		public Variable[] AvailableVariables
 		{
 			get
@@ -206,7 +211,7 @@ namespace Waher.Script
 
 		private class VariableEnumerator : IEnumerator<Variable>
 		{
-			private Variable[] variables;
+			private readonly Variable[] variables;
 			private int pos = -1;
 
 			internal VariableEnumerator(Variable[] Variables)

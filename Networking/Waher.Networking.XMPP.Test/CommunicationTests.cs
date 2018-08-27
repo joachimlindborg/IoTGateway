@@ -3,7 +3,7 @@ using System.Threading;
 using System.Reflection;
 using System.Collections.Generic;
 using System.Text;
-using NUnit.Framework;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Waher.Events;
 using Waher.Events.Console;
 using Waher.Networking.Sniffers;
@@ -11,15 +11,16 @@ using Waher.Networking.XMPP;
 
 namespace Waher.Networking.XMPP.Test
 {
+	[TestClass]
 	public abstract class CommunicationTests
 	{
 		private ConsoleEventSink sink = null;
-		protected AutoResetEvent connected1 = new AutoResetEvent(false);
-		protected AutoResetEvent error1 = new AutoResetEvent(false);
-		protected AutoResetEvent offline1 = new AutoResetEvent(false);
-		protected AutoResetEvent connected2 = new AutoResetEvent(false);
-		protected AutoResetEvent error2 = new AutoResetEvent(false);
-		protected AutoResetEvent offline2 = new AutoResetEvent(false);
+		protected ManualResetEvent connected1 = new ManualResetEvent(false);
+		protected ManualResetEvent error1 = new ManualResetEvent(false);
+		protected ManualResetEvent offline1 = new ManualResetEvent(false);
+		protected ManualResetEvent connected2 = new ManualResetEvent(false);
+		protected ManualResetEvent error2 = new ManualResetEvent(false);
+		protected ManualResetEvent offline2 = new ManualResetEvent(false);
 		protected XmppClient client1;
 		protected XmppClient client2;
 		protected Exception ex1 = null;
@@ -29,14 +30,14 @@ namespace Waher.Networking.XMPP.Test
 		{
 		}
 
-		[TestFixtureSetUp]
+		[ClassInitialize]
 		public virtual void TestFixtureSetUp()
 		{
 			this.sink = new ConsoleEventSink();
 			Log.Register(this.sink);
 		}
 
-		[TestFixtureTearDown]
+		[ClassCleanup]
 		public virtual void TestFixtureTearDown()
 		{
 			if (this.sink != null)
@@ -47,8 +48,7 @@ namespace Waher.Networking.XMPP.Test
 			}
 		}
 
-		[SetUp]
-		public virtual void Setup()
+		public virtual void ConnectClients()
 		{
 			this.connected1.Reset();
 			this.error1.Reset();
@@ -57,43 +57,68 @@ namespace Waher.Networking.XMPP.Test
 			this.connected2.Reset();
 			this.error2.Reset();
 			this.offline2.Reset();
-			
+
 			this.ex1 = null;
 			this.ex2 = null;
 
-			//this.client1 = new XmppClient("tigase.im", 5222, "xmppclient.test01", "testpassword", "en");
-			//this.client1.AllowPlain = true;
-			//this.client1.TrustServer = true;
-			//this.client1 = new XmppClient("jabber.se", 5222, "xmppclient.test01", "testpassword", "en");
-			this.client1 = new XmppClient("kode.im", 5222, "xmppclient.test01", "testpassword", "en");
-			this.client1.Add(new ConsoleOutSniffer(BinaryPresentationMethod.ByteCount));
-			this.client1.DefaultNrRetries = 2;
-			this.client1.DefaultRetryTimeout = 1000;
-			this.client1.DefaultMaxRetryTimeout = 5000;
-			this.client1.DefaultDropOff = true;
-			this.client1.OnConnectionError += new XmppExceptionEventHandler(client_OnConnectionError1);
-			this.client1.OnError += new XmppExceptionEventHandler(client_OnError1);
-			this.client1.OnStateChanged += new StateChangedEventHandler(client_OnStateChanged1);
+			this.client1 = new XmppClient(this.GetCredentials1(), "en", typeof(CommunicationTests).Assembly)
+			{
+				DefaultNrRetries = 2,
+				DefaultRetryTimeout = 1000,
+				DefaultMaxRetryTimeout = 5000,
+				DefaultDropOff = true
+			};
+
+			this.client1.Add(new TextWriterSniffer(Console.Out, BinaryPresentationMethod.ByteCount));
+			this.client1.OnConnectionError += Client_OnConnectionError1;
+			this.client1.OnError += Client_OnError1;
+			this.client1.OnStateChanged += Client_OnStateChanged1;
 			this.client1.SetPresence(Availability.Chat, string.Empty, new KeyValuePair<string, string>("en", "Live and well"));
+			this.client1.Connect();
 
-			//this.client2 = new XmppClient("tigase.im", 5222, "xmppclient.test02", "testpassword", "en");
-			//this.client2.AllowPlain = true;
-			//this.client2.TrustServer = true;
-			//this.client2 = new XmppClient("jabber.se", 5222, "xmppclient.test02", "testpassword", "en");
-			this.client2 = new XmppClient("kode.im", 5222, "xmppclient.test02", "testpassword", "en");
-			this.client2.DefaultNrRetries = 2;
-			this.client2.DefaultRetryTimeout = 1000;
-			this.client2.DefaultMaxRetryTimeout = 5000;
-			this.client2.DefaultDropOff = true;
-			this.client2.OnConnectionError += new XmppExceptionEventHandler(client_OnConnectionError2);
-			this.client2.OnError += new XmppExceptionEventHandler(client_OnError2);
-			this.client2.OnStateChanged += new StateChangedEventHandler(client_OnStateChanged2);
+			this.WaitConnected1(5000);
+
+			this.client2 = new XmppClient(this.GetCredentials2(), "en", typeof(CommunicationTests).Assembly)
+			{
+				DefaultNrRetries = 2,
+				DefaultRetryTimeout = 1000,
+				DefaultMaxRetryTimeout = 5000,
+				DefaultDropOff = true
+			};
+
+			//this.client2.Add(new TextWriterSniffer(Console.Out, BinaryPresentationMethod.ByteCount));
+			this.client2.OnConnectionError += Client_OnConnectionError2;
+			this.client2.OnError += Client_OnError2;
+			this.client2.OnStateChanged += Client_OnStateChanged2;
 			this.client2.SetPresence(Availability.Chat, string.Empty, new KeyValuePair<string, string>("en", "Ready to chat."));
+			this.client2.Connect();
 
-			this.WaitConnected(10000);
+			this.WaitConnected2(5000);
 		}
 
-		private void client_OnStateChanged1(object Sender, XmppState NewState)
+		public virtual XmppCredentials GetCredentials1()
+		{
+			return new XmppCredentials()
+			{
+				Host = "waher.se",
+				Port = 5222,
+				Account = "xmppclient.test01",
+				Password = "testpassword"
+			};
+		}
+
+		public virtual XmppCredentials GetCredentials2()
+		{
+			return new XmppCredentials()
+			{
+				Host = "waher.se",
+				Port = 5222,
+				Account = "xmppclient.test02",
+				Password = "testpassword"
+			};
+		}
+
+		private void Client_OnStateChanged1(object Sender, XmppState NewState)
 		{
 			switch (NewState)
 			{
@@ -108,10 +133,13 @@ namespace Waher.Networking.XMPP.Test
 				case XmppState.Offline:
 					this.offline1.Set();
 					break;
+
+				case XmppState.Connecting:
+					break;
 			}
 		}
 
-		private void client_OnStateChanged2(object Sender, XmppState NewState)
+		private void Client_OnStateChanged2(object Sender, XmppState NewState)
 		{
 			switch (NewState)
 			{
@@ -126,25 +154,28 @@ namespace Waher.Networking.XMPP.Test
 				case XmppState.Offline:
 					this.offline2.Set();
 					break;
+
+				case XmppState.Connecting:
+					break;
 			}
 		}
 
-		void client_OnError1(object Sender, Exception Exception)
+		void Client_OnError1(object Sender, Exception Exception)
 		{
 			this.ex1 = Exception;
 		}
 
-		void client_OnError2(object Sender, Exception Exception)
+		void Client_OnError2(object Sender, Exception Exception)
 		{
 			this.ex2 = Exception;
 		}
 
-		void client_OnConnectionError1(object Sender, Exception Exception)
+		void Client_OnConnectionError1(object Sender, Exception Exception)
 		{
 			this.ex1 = Exception;
 		}
 
-		void client_OnConnectionError2(object Sender, Exception Exception)
+		void Client_OnConnectionError2(object Sender, Exception Exception)
 		{
 			this.ex2 = Exception;
 		}
@@ -162,17 +193,13 @@ namespace Waher.Networking.XMPP.Test
 		private void WaitConnected1(int Timeout)
 		{
 			this.AssertWaitConnected(this.Wait1(Timeout));
+			Thread.Sleep(100);  // Wait for presence to be processed by server.
 		}
 
 		private void WaitConnected2(int Timeout)
 		{
 			this.AssertWaitConnected(this.Wait2(Timeout));
-		}
-
-		private void WaitConnected(int Timeout)
-		{
-			this.WaitConnected1(Timeout);
-			this.WaitConnected2(Timeout);
+			Thread.Sleep(100);  // Wait for presence to be processed by server.
 		}
 
 		private void AssertWaitConnected(int Event)
@@ -180,7 +207,11 @@ namespace Waher.Networking.XMPP.Test
 			switch (Event)
 			{
 				case -1:
+				case WaitHandle.WaitTimeout:
 					Assert.Fail("Unable to connect. Timeout occurred.");
+					break;
+
+				case 0: // Connected
 					break;
 
 				case 1:
@@ -193,8 +224,7 @@ namespace Waher.Networking.XMPP.Test
 			}
 		}
 
-		[TearDown]
-		public virtual void TearDown()
+		public virtual void DisposeClients()
 		{
 			if (this.client1 != null)
 				this.client1.Dispose();

@@ -1,10 +1,10 @@
 ﻿using System;
 using System.IO;
 using System.Collections.Generic;
+using System.Net.Http;
 using System.Text;
+using System.Threading.Tasks;
 using System.Xml;
-using System.Net;
-using System.Web.Services.Protocols;
 
 namespace Waher.Networking.UPnP
 {
@@ -83,30 +83,83 @@ namespace Waher.Networking.UPnP
 		/// <summary>
 		/// Invokes the action.
 		/// </summary>
-		/// <param name="OutputValues">Output values.</param>
 		/// <param name="InputValues">Input values.</param>
+		/// <param name="OutputValues">Any Output values found in response.</param>
 		/// <returns>Return value, if any, null otherwise.</returns>
 		public object Invoke(out Dictionary<string, object> OutputValues, params KeyValuePair<string, object>[] InputValues)
 		{
-			Dictionary<string, object> InputValues2 = new Dictionary<string, object>();
-
-			foreach (KeyValuePair<string, object> P in InputValues)
-				InputValues2[P.Key] = P.Value;
-
-			return this.Invoke(InputValues2, out OutputValues);
+			return this.Invoke(out OutputValues, 10000, InputValues);
 		}
 
 		/// <summary>
 		/// Invokes the action.
 		/// </summary>
 		/// <param name="InputValues">Input values.</param>
-		/// <param name="OutputValues">Output values.</param>
+		/// <param name="OutputValues">Any Output values found in response.</param>
 		/// <returns>Return value, if any, null otherwise.</returns>
 		public object Invoke(Dictionary<string, object> InputValues, out Dictionary<string, object> OutputValues)
 		{
+			return this.Invoke(InputValues, out OutputValues, 10000);
+		}
+
+		/// <summary>
+		/// Invokes the action.
+		/// </summary>
+		/// <param name="InputValues">Input values.</param>
+		/// <param name="OutputValues">Any Output values found in response.</param>
+		/// <param name="Timeout">Timeout, in milliseconds.</param>
+		/// <returns>Return value, if any, null otherwise.</returns>
+		public object Invoke(out Dictionary<string, object> OutputValues, int Timeout, params KeyValuePair<string, object>[] InputValues)
+		{
+			Dictionary<string, object> InputValues2 = new Dictionary<string, object>();
+
+			foreach (KeyValuePair<string, object> P in InputValues)
+				InputValues2[P.Key] = P.Value;
+
+			return this.Invoke(InputValues2, out OutputValues, Timeout);
+		}
+
+		/// <summary>
+		/// Invokes the action.
+		/// </summary>
+		/// <param name="InputValues">Input values.</param>
+		/// <param name="OutputValues">Any Output values found in response.</param>
+		/// <param name="Timeout">Timeout, in milliseconds.</param>
+		/// <returns>Return value, if any, null otherwise.</returns>
+		public object Invoke(Dictionary<string, object> InputValues, out Dictionary<string, object> OutputValues, int Timeout)
+		{
+			KeyValuePair<object, Dictionary<string, object>> Result = this.InvokeAsync(InputValues, Timeout).Result;
+			OutputValues = Result.Value;
+			return Result.Key;
+		}
+
+		/// <summary>
+		/// Invokes the action.
+		/// </summary>
+		/// <param name="InputValues">Input values.</param>
+		/// <param name="Timeout">Timeout, in milliseconds.</param>
+		/// <returns>Return value, if any, null otherwise, together with any output values found in response.</returns>
+		public Task<KeyValuePair<object, Dictionary<string, object>>> InvokeAsync(int Timeout, params KeyValuePair<string, object>[] InputValues)
+		{
+			Dictionary<string, object> InputValues2 = new Dictionary<string, object>();
+
+			foreach (KeyValuePair<string, object> P in InputValues)
+				InputValues2[P.Key] = P.Value;
+
+			return this.InvokeAsync(InputValues2, Timeout);
+		}
+
+		/// <summary>
+		/// Invokes the action.
+		/// </summary>
+		/// <param name="InputValues">Input values.</param>
+		/// <param name="Timeout">Timeout, in milliseconds.</param>
+		/// <returns>Return value, if any, null otherwise, together with any output values found in response.</returns>
+		public async Task<KeyValuePair<object, Dictionary<string, object>>> InvokeAsync(Dictionary<string, object> InputValues, int Timeout)
+		{
+			Dictionary<string, object> OutputValues;
 			StringBuilder Soap = new StringBuilder();
 			UPnPStateVariable Variable;
-			object Value;
 			object Result = null;
 			object First = null;
 
@@ -127,7 +180,7 @@ namespace Waher.Networking.UPnP
 					Soap.Append(Argument.Name);
 					Soap.Append(">");
 
-					if (InputValues.TryGetValue(Argument.Name, out Value) &&
+					if (InputValues.TryGetValue(Argument.Name, out object Value) &&
 						(Variable = this.parent.GetVariable(Argument.RelatedStateVariable)) != null)
 					{
 						Soap.Append(XmlAttributeEncode(Variable.ValueToXmlString(Value)));
@@ -145,42 +198,21 @@ namespace Waher.Networking.UPnP
 			Soap.AppendLine("</s:Body>");
 			Soap.AppendLine("</s:Envelope>");
 
-			string Body = Soap.ToString();
-			byte[] BodyBin = Encoding.UTF8.GetBytes(Body);
-
-			using (WebClient WebClient = new WebClient())
+			using (HttpClient HttpClient = new HttpClient())
 			{
-				WebClient.Headers["CONTENT-TYPE"] = "text/xml; charset=\"utf-8\"";
-				WebClient.Headers["SOAPACTION"] = "\"" + this.parent.Service.ServiceType + "#" + this.name + "\"";
+				HttpClient.Timeout = TimeSpan.FromMilliseconds(Timeout);
+				HttpClient.DefaultRequestHeaders.ExpectContinue = false;
 
-				byte[] Response;
+				HttpContent Body = new StringContent(Soap.ToString(), Encoding.UTF8, "text/xml");
+				Body.Headers.Add("SOAPACTION", "\"" + this.parent.Service.ServiceType + "#" + this.name + "\"");
+
 				XmlDocument ResponseXml;
 
-				try
-				{
-					Uri Uri = this.parent.Service.ControlURI;
-					ServicePoint ServicePoint = ServicePointManager.FindServicePoint(Uri);
-					ServicePoint.Expect100Continue = false;
+				HttpResponseMessage Response = await HttpClient.PostAsync(this.parent.Service.ControlURI, Body);
+				Stream Stream = await Response.Content.ReadAsStreamAsync(); // Regardless of status code, we check for XML content.
 
-					Response = WebClient.UploadData(Uri, "POST", BodyBin);
-					ResponseXml = new XmlDocument();
-					ResponseXml.Load(new MemoryStream(Response));
-				}
-				catch (WebException ex)
-				{
-					ResponseXml = new XmlDocument();
-					try
-					{
-						ResponseXml.Load(ex.Response.GetResponseStream());
-					}
-					catch
-					{
-						ResponseXml = null;
-					}
-
-					if (ResponseXml == null)
-						throw;
-				}
+				ResponseXml = new XmlDocument();
+				ResponseXml.Load(Stream);
 
 				if (ResponseXml.DocumentElement == null ||
 					ResponseXml.DocumentElement.LocalName != "Envelope" ||
@@ -246,10 +278,9 @@ namespace Waher.Networking.UPnP
 					throw new UPnPException(FaultCode, FaultString, UPnPErrorCode, UPnPErrorDescription);
 				}
 
-				OutputValues = new Dictionary<string, object>();
-
-				UPnPArgument Argument2;
 				XmlElement E;
+
+				OutputValues = new Dictionary<string, object>();
 
 				foreach (XmlNode N in ActionResponse.ChildNodes)
 				{
@@ -257,7 +288,7 @@ namespace Waher.Networking.UPnP
 					if (E == null)
 						continue;
 
-					if (this.argumentByName.TryGetValue(E.LocalName, out Argument2))
+					if (this.argumentByName.TryGetValue(E.LocalName, out UPnPArgument Argument2))
 					{
 						if ((Variable = this.parent.GetVariable(Argument2.RelatedStateVariable)) != null)
 						{
@@ -291,7 +322,7 @@ namespace Waher.Networking.UPnP
 			if (Result == null)
 				Result = First;
 
-			return Result;
+			return new KeyValuePair<object, Dictionary<string, object>>(Result, OutputValues);
 		}
 
 		private static XmlElement GetChildElement(XmlElement E, string LocalName, string Namespace)
@@ -311,9 +342,14 @@ namespace Waher.Networking.UPnP
 			return null;
 		}
 
+		/// <summary>
+		/// Encodes an XML attribute.
+		/// </summary>
+		/// <param name="AttributeValue">Attribute value.</param>
+		/// <returns>Encoded attribute value.</returns>
 		public static string XmlAttributeEncode(string AttributeValue)
 		{
-			if (AttributeValue.IndexOfAny(reservedCharacters) < 0)
+			if (AttributeValue == null || AttributeValue.IndexOfAny(reservedCharacters) < 0)
 				return AttributeValue;
 
 			return AttributeValue.

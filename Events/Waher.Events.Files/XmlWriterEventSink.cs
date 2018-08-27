@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 using System.Xml;
 
 namespace Waher.Events.Files
@@ -11,7 +11,11 @@ namespace Waher.Events.Files
 	/// </summary>
 	public class XmlWriterEventSink : EventSink, IDisposable
 	{
+		/// <summary>
+		/// XML writer object.
+		/// </summary>
 		protected XmlWriter output;
+
 		private bool disposed = false;
 		private object synchObject = new object();
 
@@ -52,72 +56,81 @@ namespace Waher.Events.Files
 			base.Dispose();
 		}
 
-		public override void Queue(Event Event)
+		/// <summary>
+		/// Queues an event to be output.
+		/// </summary>
+		/// <param name="Event">Event to queue.</param>
+		public override Task Queue(Event Event)
 		{
 			if (this.disposed)
-				return;
+				return Task.CompletedTask;
 
-			this.BeforeWrite();
-			try
+			lock (this.synchObject)
 			{
-				this.output.WriteStartElement(Event.Type.ToString());
-				this.output.WriteAttributeString("timestamp", Encode(Event.Timestamp));
-				this.output.WriteAttributeString("level", Event.Level.ToString());
-
-
-				if (!string.IsNullOrEmpty(Event.EventId))
-					this.output.WriteAttributeString("id", Event.EventId);
-
-				if (!string.IsNullOrEmpty(Event.Object))
-					this.output.WriteAttributeString("object", Event.Object);
-
-				if (!string.IsNullOrEmpty(Event.Actor))
-					this.output.WriteAttributeString("actor", Event.Actor);
-
-				if (!string.IsNullOrEmpty(Event.Module))
-					this.output.WriteAttributeString("module", Event.Module);
-
-				if (!string.IsNullOrEmpty(Event.Facility))
-					this.output.WriteAttributeString("facility", Event.Facility);
-
-				this.output.WriteStartElement("Message");
-
-				foreach (string Row in GetRows(Event.Message))
-					this.output.WriteElementString("Row", Row);
-
-				this.output.WriteEndElement();
-
-				if (Event.Tags != null && Event.Tags.Length > 0)
+				this.BeforeWrite();
+				try
 				{
-					foreach (KeyValuePair<string, object> Tag in Event.Tags)
-					{
-						this.output.WriteStartElement("Tag");
-						this.output.WriteAttributeString("key", Tag.Key);
+					this.output.WriteStartElement(Event.Type.ToString());
+					this.output.WriteAttributeString("timestamp", Encode(Event.Timestamp));
+					this.output.WriteAttributeString("level", Event.Level.ToString());
 
-						if (Tag.Value != null)
-							this.output.WriteAttributeString("value", Tag.Value.ToString());
 
-						this.output.WriteEndElement();
-					}
-				}
+					if (!string.IsNullOrEmpty(Event.EventId))
+						this.output.WriteAttributeString("id", Event.EventId);
 
-				if (Event.Type >= EventType.Critical && !string.IsNullOrEmpty(Event.StackTrace))
-				{
-					this.output.WriteStartElement("StackTrace");
+					if (!string.IsNullOrEmpty(Event.Object))
+						this.output.WriteAttributeString("object", Event.Object);
 
-					foreach (string Row in GetRows(Event.StackTrace))
+					if (!string.IsNullOrEmpty(Event.Actor))
+						this.output.WriteAttributeString("actor", Event.Actor);
+
+					if (!string.IsNullOrEmpty(Event.Module))
+						this.output.WriteAttributeString("module", Event.Module);
+
+					if (!string.IsNullOrEmpty(Event.Facility))
+						this.output.WriteAttributeString("facility", Event.Facility);
+
+					this.output.WriteStartElement("Message");
+
+					foreach (string Row in GetRows(Event.Message))
 						this.output.WriteElementString("Row", Row);
 
 					this.output.WriteEndElement();
-				}
 
-				this.output.WriteEndElement();
-				this.output.Flush();
+					if (Event.Tags != null && Event.Tags.Length > 0)
+					{
+						foreach (KeyValuePair<string, object> Tag in Event.Tags)
+						{
+							this.output.WriteStartElement("Tag");
+							this.output.WriteAttributeString("key", Tag.Key);
+
+							if (Tag.Value != null)
+								this.output.WriteAttributeString("value", Tag.Value.ToString());
+
+							this.output.WriteEndElement();
+						}
+					}
+
+					if (Event.Type >= EventType.Critical && !string.IsNullOrEmpty(Event.StackTrace))
+					{
+						this.output.WriteStartElement("StackTrace");
+
+						foreach (string Row in GetRows(Event.StackTrace))
+							this.output.WriteElementString("Row", Row);
+
+						this.output.WriteEndElement();
+					}
+
+					this.output.WriteEndElement();
+					this.output.Flush();
+				}
+				finally
+				{
+					this.AfterWrite();
+				}
 			}
-			finally
-			{
-				this.AfterWrite();
-			}
+
+			return Task.CompletedTask;
 		}
 
 		private static string[] GetRows(string s)

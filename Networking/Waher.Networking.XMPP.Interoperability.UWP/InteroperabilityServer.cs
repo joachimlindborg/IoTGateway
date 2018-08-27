@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Xml;
-using Waher.Content;
+using Waher.Content.Xml;
 using Waher.Events;
 
 namespace Waher.Networking.XMPP.Interoperability
@@ -13,14 +13,12 @@ namespace Waher.Networking.XMPP.Interoperability
 	/// https://github.com/joachimlindborg/XMPP-IoT/blob/master/xep-0000-IoT-Interoperability.html
 	/// http://htmlpreview.github.io/?https://github.com/joachimlindborg/XMPP-IoT/blob/master/xep-0000-IoT-Interoperability.html
 	/// </summary>
-	public class InteroperabilityServer : IDisposable
+	public class InteroperabilityServer : XmppExtension
 	{
 		/// <summary>
 		/// urn:xmpp:iot:interoperability
 		/// </summary>
 		public const string NamespaceInteroperability = "urn:xmpp:iot:interoperability";
-
-		private XmppClient client;
 
 		/// <summary>
 		/// Implements the server-side for Interoperability interfaces, as defined in:
@@ -30,37 +28,37 @@ namespace Waher.Networking.XMPP.Interoperability
 		/// </summary>
 		/// <param name="Client">XMPP Client</param>
 		public InteroperabilityServer(XmppClient Client)
+			: base(Client)
 		{
-			this.client = Client;
-
 			this.client.RegisterIqGetHandler("getInterfaces", NamespaceInteroperability, this.GetInterfacesHandler, true);
 		}
 
 		/// <summary>
-		/// <see cref="Object.Dispose"/>
+		/// <see cref="IDisposable.Dispose"/>
 		/// </summary>
-		public void Dispose()
+		public override void Dispose()
 		{
+			base.Dispose();
 			this.client.UnregisterIqGetHandler("getInterfaces", NamespaceInteroperability, this.GetInterfacesHandler, true);
 		}
 
 		/// <summary>
-		/// XMPP Client.
+		/// Implemented extensions.
 		/// </summary>
-		public XmppClient Client { get { return this.client; } }
+		public override string[] Extensions => new string[0];
 
 		private void GetInterfacesHandler(object Sender, IqEventArgs e)
 		{
 			XmlElement E = e.Query;
-			string NodeId = XML.Attribute(E, "nodeId");
-			string SourceId = XML.Attribute(E, "sourceId");
-			string CacheType = XML.Attribute(E, "cacheType");
-			string ServiceToken = XML.Attribute(E, "serviceToken");
-			string DeviceToken = XML.Attribute(E, "deviceToken");
-			string UserToken = XML.Attribute(E, "userToken");
+			string NodeId = XML.Attribute(E, "id");
+			string SourceId = XML.Attribute(E, "src");
+			string Partition = XML.Attribute(E, "pt");
+			string ServiceToken = XML.Attribute(E, "st");
+			string DeviceToken = XML.Attribute(E, "dt");
+			string UserToken = XML.Attribute(E, "ut");
 
 			InteroperabilityServerInterfacesEventHandler h = this.OnGetInterfaces;
-			InteroperabilityServerEventArgs e2 = new InteroperabilityServerEventArgs(NodeId, SourceId, CacheType, ServiceToken, DeviceToken, UserToken);
+			InteroperabilityServerEventArgs e2 = new InteroperabilityServerEventArgs(NodeId, SourceId, Partition, ServiceToken, DeviceToken, UserToken);
 			if (h != null)
 			{
 				try

@@ -18,11 +18,12 @@ namespace Waher.Networking.XMPP.Sensor
 		private Duration minInterval;
 		private Duration maxInterval;
 		private Duration maxAge;
+		private bool unsubscribed = false;
 
 		/// <summary>
 		/// Manages a sensor data client request.
 		/// </summary>
-		/// <param name="SeqNr">Sequence number assigned to the request.</param>
+		/// <param name="Id">Request identity.</param>
 		/// <param name="SensorClient">Sensor client object.</param>
 		/// <param name="RemoteJID">JID of the other side of the conversation in the sensor data readout.</param>
 		/// <param name="Actor">Actor causing the request to be made.</param>
@@ -32,13 +33,13 @@ namespace Waher.Networking.XMPP.Sensor
 		/// <param name="MinInterval">Smallest interval for reporting events. Events are not reported more often than this limit.</param>
 		/// <param name="MaxInterval">Largest interval for reporting events. Events are not reported less often than this limit.</param>
 		/// <param name="MaxAge">Maximum age of historical data.</param>
-		/// <param name="ServiceToken">Optional service token, as defined in XEP-0324.</param>
-		/// <param name="DeviceToken">Optional device token, as defined in XEP-0324.</param>
-		/// <param name="UserToken">Optional user token, as defined in XEP-0324.</param>
-		internal SensorDataSubscriptionRequest(int SeqNr, SensorClient SensorClient, string RemoteJID, string Actor, ThingReference[] Nodes, 
+		/// <param name="ServiceToken">Optional service token.</param>
+		/// <param name="DeviceToken">Optional device token.</param>
+		/// <param name="UserToken">Optional user token.</param>
+		internal SensorDataSubscriptionRequest(string Id, SensorClient SensorClient, string RemoteJID, string Actor, IThingReference[] Nodes, 
 			FieldType Types, FieldSubscriptionRule[] FieldRules, Duration MinInterval, Duration MaxInterval, Duration MaxAge, string ServiceToken, 
 			string DeviceToken, string UserToken)
-			: base(SeqNr, SensorClient, RemoteJID, Actor, Nodes, Types, ExtractFieldNames(FieldRules), 
+			: base(Id, SensorClient, RemoteJID, Actor, Nodes, Types, ExtractFieldNames(FieldRules), 
 				  DateTime.MinValue, DateTime.MaxValue, DateTime.MinValue, ServiceToken, DeviceToken, UserToken)
 		{
 			this.minInterval = MinInterval;
@@ -98,21 +99,42 @@ namespace Waher.Networking.XMPP.Sensor
 		/// </summary>
 		public void Unsubscribe()
 		{
-			StringBuilder Xml = new StringBuilder();
+			this.unsubscribed = true;
 
-			Xml.Append("<unsubscribe xmlns='");
-			Xml.Append(SensorClient.NamespaceSensorEvents);
-			Xml.Append("' seqnr='");
-			Xml.Append(this.SeqNr.ToString());
-			Xml.Append("'/>");
+			if (this.sensorClient.Client.State == XmppState.Connected)
+			{
+				StringBuilder Xml = new StringBuilder();
 
-			this.sensorClient.Client.SendIqGet(this.RemoteJID, Xml.ToString(), this.UnsubscribeResponse, null);
+				Xml.Append("<unsubscribe xmlns='");
+				Xml.Append(SensorClient.NamespaceSensorEvents);
+				Xml.Append("' id='");
+				Xml.Append(this.Id);
+				Xml.Append("'/>");
+
+				this.sensorClient.Client.SendIqSet(this.RemoteJID, Xml.ToString(), this.UnsubscribeResponse, null);
+			}
 		}
 
 		private void UnsubscribeResponse(object Sender, IqResultEventArgs e)
 		{
 			if (!e.Ok)
 				this.Fail(e.ErrorText);
+		}
+
+		internal override void LogFields(IEnumerable<Field> Fields)
+		{
+			if (this.unsubscribed)
+				this.Unsubscribe();
+			else
+				base.LogFields(Fields);
+		}
+
+		internal override void LogErrors(IEnumerable<ThingError> Errors)
+		{
+			if (this.unsubscribed)
+				this.Unsubscribe();
+			else
+				base.LogErrors(Errors);
 		}
 
 	}

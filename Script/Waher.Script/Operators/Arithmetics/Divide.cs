@@ -11,7 +11,7 @@ namespace Waher.Script.Operators.Arithmetics
 	/// <summary>
 	/// Division operator.
 	/// </summary>
-	public class Divide : BinaryOperator 
+	public class Divide : BinaryOperator, IDifferentiable
 	{
 		/// <summary>
 		/// Division operator.
@@ -20,6 +20,7 @@ namespace Waher.Script.Operators.Arithmetics
 		/// <param name="Right">Right operand.</param>
 		/// <param name="Start">Start position in script expression.</param>
 		/// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
 		public Divide(ScriptNode Left, ScriptNode Right, int Start, int Length, Expression Expression)
 			: base(Left, Right, Start, Length, Expression)
 		{
@@ -47,12 +48,11 @@ namespace Waher.Script.Operators.Arithmetics
 		/// <returns>Result</returns>
 		public static IElement EvaluateDivision(IElement Left, IElement Right, ScriptNode Node)
 		{
-			IRingElement LE = Left as IRingElement;
 			IRingElement RE = Right as IRingElement;
 			IElement Result;
 			IRingElement Temp;
-			
-			if (LE != null && RE != null)
+
+			if (Left is IRingElement LE && RE != null)
 			{
 				Temp = RE.Invert();
 				if (Temp != null)
@@ -162,6 +162,40 @@ namespace Waher.Script.Operators.Arithmetics
 					}
 				}
 			}
+		}
+
+		/// <summary>
+		/// Differentiates a script node, if possible.
+		/// </summary>
+		/// <param name="VariableName">Name of variable to differentiate on.</param>
+		/// <param name="Variables">Collection of variables.</param>
+		/// <returns>Differentiated node.</returns>
+		public ScriptNode Differentiate(string VariableName, Variables Variables)
+		{
+			if (this.left is IDifferentiable Left &&
+				this.right is IDifferentiable Right)
+			{
+				int Start = this.Start;
+				int Len = this.Length;
+				Expression Expression = this.Expression;
+
+				return new Divide(
+					new Subtract(
+						new Multiply(
+							Left.Differentiate(VariableName, Variables),
+							this.right,
+							Start, Len, Expression),
+						new Multiply(
+							this.left,
+							Right.Differentiate(VariableName, Variables),
+							Start, Len, Expression),
+						Start, Len, Expression),
+					new Square(
+						this.right, Start, Len, Expression),
+					Start, Len, Expression);
+			}
+			else
+				throw new ScriptRuntimeException("Factors not differentiable.", this);
 		}
 
 	}

@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Drawing;
+using SkiaSharp;
 
 namespace Waher.Script.Graphs
 {
@@ -9,9 +9,9 @@ namespace Waher.Script.Graphs
 	/// </summary>
 	public class GraphSettings
 	{
-		private Color backgroundColor = Color.White;
-		private Color axisColor = Color.Black;
-		private Color gridColor = Color.LightGray;
+		private SKColor backgroundColor = SKColors.White;
+		private SKColor axisColor = SKColors.Black;
+		private SKColor gridColor = SKColors.LightGray;
 		private string fontName = "Segoe UI";
 		private double labelFontSize = 12;
 		private int axisWidth = 2;
@@ -42,7 +42,7 @@ namespace Waher.Script.Graphs
 			set
 			{
 				if (value < 1)
-					throw new ArgumentException("Value must be positive.", "Width");
+					throw new ArgumentOutOfRangeException("Value must be positive.", nameof(Width));
 
 				this.width = value;
 			}
@@ -57,7 +57,7 @@ namespace Waher.Script.Graphs
 			set
 			{
 				if (value < 1)
-					throw new ArgumentException("Value must be positive.", "Height");
+					throw new ArgumentOutOfRangeException("Value must be positive.", nameof(Height));
 
 				this.height = value;
 			}
@@ -66,7 +66,7 @@ namespace Waher.Script.Graphs
 		/// <summary>
 		/// Background color.
 		/// </summary>
-		public Color BackgroundColor
+		public SKColor BackgroundColor
 		{
 			get { return this.backgroundColor; }
 			set { this.backgroundColor = value; }
@@ -75,7 +75,7 @@ namespace Waher.Script.Graphs
 		/// <summary>
 		/// Axis color.
 		/// </summary>
-		public Color AxisColor
+		public SKColor AxisColor
 		{
 			get { return this.axisColor; }
 			set { this.axisColor = value; }
@@ -90,7 +90,7 @@ namespace Waher.Script.Graphs
 			set
 			{
 				if (value < 0)
-					throw new ArgumentException("Value must be non-negative.", "AxisWidth");
+					throw new ArgumentOutOfRangeException("Value must be non-negative.", nameof(AxisWidth));
 
 				this.axisWidth = value;
 			}
@@ -99,7 +99,7 @@ namespace Waher.Script.Graphs
 		/// <summary>
 		/// Grid color.
 		/// </summary>
-		public Color GridColor
+		public SKColor GridColor
 		{
 			get { return this.gridColor; }
 			set { this.gridColor = value; }
@@ -114,7 +114,7 @@ namespace Waher.Script.Graphs
 			set
 			{
 				if (value < 0)
-					throw new ArgumentException("Value must be non-negative.", "GridWidth");
+					throw new ArgumentOutOfRangeException("Value must be non-negative.", nameof(GridWidth));
 
 				this.gridWidth = value;
 			}
@@ -129,7 +129,7 @@ namespace Waher.Script.Graphs
 			set
 			{
 				if (value < 0)
-					throw new ArgumentException("Value must be non-negative.", "MarginTop");
+					throw new ArgumentOutOfRangeException("Value must be non-negative.", nameof(MarginTop));
 
 				this.marginTop = value;
 			}
@@ -144,7 +144,7 @@ namespace Waher.Script.Graphs
 			set
 			{
 				if (value < 0)
-					throw new ArgumentException("Value must be non-negative.", "MarginBottom");
+					throw new ArgumentOutOfRangeException("Value must be non-negative.", nameof(MarginBottom));
 
 				this.marginBottom = value;
 			}
@@ -159,7 +159,7 @@ namespace Waher.Script.Graphs
 			set
 			{
 				if (value < 0)
-					throw new ArgumentException("Value must be non-negative.", "MarginLeft");
+					throw new ArgumentOutOfRangeException("Value must be non-negative.", nameof(MarginLeft));
 
 				this.marginLeft = value;
 			}
@@ -174,7 +174,7 @@ namespace Waher.Script.Graphs
 			set
 			{
 				if (value < 0)
-					throw new ArgumentException("Value must be non-negative.", "MarginRight");
+					throw new ArgumentOutOfRangeException("Value must be non-negative.", nameof(MarginRight));
 
 				this.marginRight = value;
 			}
@@ -189,7 +189,7 @@ namespace Waher.Script.Graphs
 			set
 			{
 				if (value < 0)
-					throw new ArgumentException("Value must be non-negative.", "MarginLabel");
+					throw new ArgumentOutOfRangeException("Value must be non-negative.", nameof(MarginLabel));
 
 				this.marginLabel = value;
 			}
@@ -204,7 +204,7 @@ namespace Waher.Script.Graphs
 			set
 			{
 				if (string.IsNullOrEmpty(value))
-					throw new ArgumentException("Value cannot be empty.", "FontName");
+					throw new ArgumentException("Value cannot be empty.", nameof(FontName));
 
 				this.fontName = value;
 			}
@@ -219,7 +219,7 @@ namespace Waher.Script.Graphs
 			set
 			{
 				if (value < 0)
-					throw new ArgumentException("Value must be positive.", "LabelFontSize");
+					throw new ArgumentOutOfRangeException("Value must be positive.", nameof(LabelFontSize));
 
 				this.labelFontSize = value;
 			}
@@ -234,7 +234,7 @@ namespace Waher.Script.Graphs
 			set
 			{
 				if (value < 0)
-					throw new ArgumentException("Value must be non-negative.", "ApproxNrLabelsX");
+					throw new ArgumentOutOfRangeException("Value must be non-negative.", nameof(ApproxNrLabelsX));
 
 				this.approxNrLabelsX = value;
 			}
@@ -249,7 +249,7 @@ namespace Waher.Script.Graphs
 			set
 			{
 				if (value < 0)
-					throw new ArgumentException("Value must be non-negative.", "ApproxNrLabelsY");
+					throw new ArgumentOutOfRangeException("Value must be non-negative.", nameof(ApproxNrLabelsY));
 
 				this.approxNrLabelsY = value;
 			}

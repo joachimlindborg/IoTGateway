@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading.Tasks;
 using Waher.Persistence.Attributes;
 
 namespace Waher.Things
@@ -9,15 +10,15 @@ namespace Waher.Things
 	/// Contains a reference to a thing
 	/// </summary>
 	[CollectionName("ThingReferences")]
-	[Index("NodeId", "SourceId", "CacheType")]
-	public class ThingReference
+	[Index("NodeId", "SourceId", "Partition")]
+	public class ThingReference : IThingReference
 	{
 		private static readonly ThingReference empty = new ThingReference(string.Empty, string.Empty, string.Empty);
 
 		private string objectId = null;
 		private string nodeId;
 		private string sourceId;
-		private string cacheType;
+		private string partition;
 
 		/// <summary>
 		/// Contains a reference to a thing
@@ -51,12 +52,12 @@ namespace Waher.Things
 		/// </summary>
 		/// <param name="NodeId">ID of node.</param>
 		/// <param name="SourceId">Optional ID of source containing node.</param>
-		/// <param name="CacheType">Optional Type of cache in which the Node ID is unique.</param>
-		public ThingReference(string NodeId, string SourceId, string CacheType)
+		/// <param name="Partition">Optional partition in which the Node ID is unique.</param>
+		public ThingReference(string NodeId, string SourceId, string Partition)
 		{
 			this.nodeId = NodeId;
 			this.sourceId = SourceId;
-			this.cacheType = CacheType;
+			this.partition = Partition;
 		}
 
 		/// <summary>
@@ -91,14 +92,14 @@ namespace Waher.Things
 		}
 
 		/// <summary>
-		/// Optional Type of cache in which the Node ID is unique.
+		/// Optional partition in which the Node ID is unique.
 		/// </summary>
 		[DefaultValueStringEmpty]
-		[ShortName("c")]
-		public string CacheType
+		[ShortName("p")]
+		public string Partition
 		{
-			get { return this.cacheType; }
-			set { this.cacheType = value; }
+			get { return this.partition; }
+			set { this.partition = value; }
 		}
 
 		/// <summary>
@@ -106,11 +107,11 @@ namespace Waher.Things
 		/// </summary>
 		public bool IsEmpty
 		{
-			get { return string.IsNullOrEmpty(this.nodeId) && string.IsNullOrEmpty(this.sourceId) && string.IsNullOrEmpty(this.cacheType); }
+			get { return string.IsNullOrEmpty(this.nodeId) && string.IsNullOrEmpty(this.sourceId) && string.IsNullOrEmpty(this.partition); }
 		}
 
 		/// <summary>
-		/// Key for thing reference: [NodeId[, SourceId[, CacheType]]]
+		/// Key for thing reference: [NodeId[, SourceId[, Partition]]]
 		/// </summary>
 		public string Key
 		{
@@ -127,10 +128,10 @@ namespace Waher.Things
 						sb.Append(", ");
 						sb.Append(this.sourceId);
 
-						if (!string.IsNullOrEmpty(this.cacheType))
+						if (!string.IsNullOrEmpty(this.partition))
 						{
 							sb.Append(", ");
-							sb.Append(this.cacheType);
+							sb.Append(this.partition);
 						}
 					}
 				}
@@ -144,9 +145,9 @@ namespace Waher.Things
 		/// </summary>
 		/// <param name="Ref">Second thing reference.</param>
 		/// <returns>If they point to the same thing.</returns>
-		public bool SameThing(ThingReference Ref)
+		public bool SameThing(IThingReference Ref)
 		{
-			return this.nodeId == Ref.nodeId && this.sourceId == Ref.sourceId && this.cacheType == Ref.cacheType;
+			return this.nodeId == Ref.NodeId && this.sourceId == Ref.SourceId && this.partition == Ref.Partition;
 		}
 
 		/// <summary>
@@ -156,7 +157,7 @@ namespace Waher.Things
 		/// <returns>true if the specified object is equal to the current object; otherwise, false.</returns>
 		public override bool Equals(object obj)
 		{
-			ThingReference Ref = obj as ThingReference;
+			IThingReference Ref = obj as IThingReference;
 			if (Ref == null)
 				return false;
 			else
@@ -171,7 +172,7 @@ namespace Waher.Things
 		{
 			return this.nodeId.GetHashCode() ^
 				this.sourceId.GetHashCode() ^
-				this.cacheType.GetHashCode();
+				this.partition.GetHashCode();
 		}
 
 		/// <summary>
@@ -199,10 +200,10 @@ namespace Waher.Things
 				Output.Append(", ");
 				Output.Append(this.sourceId);
 
-				if (!string.IsNullOrEmpty(this.cacheType))
+				if (!string.IsNullOrEmpty(this.partition))
 				{
 					Output.Append(", ");
-					Output.Append(this.cacheType);
+					Output.Append(this.partition);
 				}
 			}
 

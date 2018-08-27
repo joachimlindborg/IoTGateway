@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Xml;
-using Waher.Content;
+using Waher.Content.Xml;
 
 namespace Waher.Networking.XMPP
 {
@@ -83,6 +83,15 @@ namespace Waher.Networking.XMPP
 			this.ok = e.ok;
 		}
 
+		/// <summary>
+		/// Event arguments for responses to IQ queries.
+		/// </summary>
+		/// <param name="Response">Response element.</param>
+		/// <param name="Id">ID attribute.</param>
+		/// <param name="To">To attribute.</param>
+		/// <param name="From">From attribute.</param>
+		/// <param name="Ok">If response is a proper response (true), or an error response (false).</param>
+		/// <param name="State">State object passed in the original request.</param>
 		public IqResultEventArgs(XmlElement Response, string Id, string To, string From, bool Ok, object State)
 		{
 			XmlElement E;
@@ -95,7 +104,7 @@ namespace Waher.Networking.XMPP
 			this.state = State;
 			this.errorCode = 0;
 
-			if (!Ok)
+			if (!Ok && Response != null)
 			{
 				foreach (XmlNode N in Response.ChildNodes)
 				{
@@ -194,7 +203,11 @@ namespace Waher.Networking.XMPP
 		/// <summary>
 		/// If the response is an OK result response (true), or an error response (false).
 		/// </summary>
-		public bool Ok { get { return this.ok; } }
+		public bool Ok
+		{
+			get { return this.ok; }
+			set { this.ok = value; }
+		}
 
 		/// <summary>
 		/// Error Code

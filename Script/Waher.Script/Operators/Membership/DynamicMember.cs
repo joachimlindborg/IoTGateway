@@ -20,6 +20,7 @@ namespace Waher.Script.Operators.Membership
 		/// <param name="Right">Right operand.</param>
 		/// <param name="Start">Start position in script expression.</param>
 		/// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
 		public DynamicMember(ScriptNode Left, ScriptNode Right, int Start, int Length, Expression Expression)
 			: base(Left, Right, Start, Length, Expression)
 		{
@@ -38,6 +39,13 @@ namespace Waher.Script.Operators.Membership
             return EvaluateDynamicMember(Operand, Name, this);
 		}
 
+		/// <summary>
+		/// Evaluates a dynamic member.
+		/// </summary>
+		/// <param name="Operand">Operand</param>
+		/// <param name="Member">Member</param>
+		/// <param name="Node">Script node.</param>
+		/// <returns>Resulting value.</returns>
         public static IElement EvaluateDynamicMember(IElement Operand, IElement Member, ScriptNode Node)
         {
             if (Member.IsScalar)

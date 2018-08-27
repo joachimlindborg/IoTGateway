@@ -35,6 +35,29 @@ namespace Waher.Networking.XMPP.DataForms.FieldTypes
 		}
 
 		/// <summary>
+		/// JidMulti form field.
+		/// </summary>
+		/// <param name="Var">Variable name</param>
+		/// <param name="Values">Values for the field (string representations).</param>
+		public JidMultiField(string Var, string[] Values)
+			: base(null, Var, string.Empty, false, Values, null, string.Empty, null, null,
+				  string.Empty, false, false, false)
+		{
+		}
+
+		/// <summary>
+		/// JidMulti form field.
+		/// </summary>
+		/// <param name="Var">Variable name</param>
+		/// <param name="Label">Label</param>
+		/// <param name="Values">Values for the field (string representations).</param>
+		public JidMultiField(string Var, string Label, string[] Values)
+			: base(null, Var, Label, false, Values, null, string.Empty, null, null,
+				  string.Empty, false, false, false)
+		{
+		}
+
+		/// <summary>
 		/// <see cref="Field.TypeName"/>
 		/// </summary>
 		public override string TypeName
@@ -43,15 +66,18 @@ namespace Waher.Networking.XMPP.DataForms.FieldTypes
 		}
 
 		/// <summary>
-		/// Validates field input. The <see cref="Error"/> property will reflect any errors found.
+		/// Validates field input. The <see cref="Field.Error"/> property will reflect any errors found.
 		/// </summary>
 		/// <param name="Value">Field Value(s)</param>
 		public override void Validate(params string[] Value)
 		{
 			base.Validate(Value);
 
-			if (!this.HasError)
+			if (!this.HasError && Value != null)
 			{
+				if (Value.Length == 1 && string.IsNullOrEmpty(Value[0]) && !this.Required)
+					return;
+
 				foreach (string s in Value)
 				{
 					if (!XmppClient.FullJidRegEx.IsMatch(s))

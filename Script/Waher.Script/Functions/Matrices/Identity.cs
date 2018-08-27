@@ -14,11 +14,21 @@ namespace Waher.Script.Functions.Matries
 	/// </summary>
 	public class Identity : FunctionOneScalarVariable
 	{
+		/// <summary>
+		/// Creates an identity matrix.
+		/// </summary>
+		/// <param name="Dimension">Dimension of matrix.</param>
+		/// <param name="Start">Start position in script expression.</param>
+		/// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
 		public Identity(ScriptNode Dimension, int Start, int Length, Expression Expression)
 			: base(Dimension, Start, Length, Expression)
 		{
 		}
 
+		/// <summary>
+		/// Name of the function
+		/// </summary>
 		public override string FunctionName
 		{
 			get
@@ -27,6 +37,12 @@ namespace Waher.Script.Functions.Matries
 			}
 		}
 
+		/// <summary>
+		/// Evaluates the function.
+		/// </summary>
+		/// <param name="Argument">Function argument.</param>
+		/// <param name="Variables">Variables collection.</param>
+		/// <returns>Function result.</returns>
 		public override IElement Evaluate(IElement Argument, Variables Variables)
 		{
 			double n = Expression.ToDouble(Argument.AssociatedObjectValue);

@@ -12,12 +12,13 @@ namespace Waher.Networking.Sniffers
 	/// </summary>
 	public class XmlFileSniffer : XmlWriterSniffer
 	{
-		private XmlWriterSettings settings;
+		private readonly XmlWriterSettings settings;
 		private StreamWriter file;
-		private string fileName;
+		private DateTime lastEvent = DateTime.MinValue;
+		private readonly string fileName;
 		private string lastFileName = null;
-		private string transform = null;
-		private int deleteAfterDays;
+		private readonly string transform = null;
+		private readonly int deleteAfterDays;
 
 		/// <summary>
 		/// Outputs sniffed data to an XML file.
@@ -110,23 +111,92 @@ namespace Waher.Networking.Sniffers
 			this.transform = Transform;
 			this.deleteAfterDays = DeleteAfterDays;
 
-			this.settings = new XmlWriterSettings();
-			this.settings.CloseOutput = true;
-			this.settings.ConformanceLevel = ConformanceLevel.Document;
-			this.settings.Encoding = Encoding.UTF8;
-			this.settings.Indent = true;
-			this.settings.IndentChars = "\t";
-			this.settings.NewLineChars = "\r\n";
-			this.settings.NewLineHandling = NewLineHandling.Entitize;
-			this.settings.NewLineOnAttributes = false;
-			this.settings.OmitXmlDeclaration = false;
+			this.settings = new XmlWriterSettings()
+			{
+				CloseOutput = true,
+				ConformanceLevel = ConformanceLevel.Document,
+				Encoding = Encoding.UTF8,
+				Indent = true,
+				IndentChars = "\t",
+				NewLineChars = "\r\n",
+				NewLineHandling = NewLineHandling.Entitize,
+				NewLineOnAttributes = false,
+				OmitXmlDeclaration = false
+			};
 
 			string FolderName = Path.GetDirectoryName(FileName);
 
-			if (!Directory.Exists(FolderName))
+			if (!string.IsNullOrEmpty(FolderName) && !Directory.Exists(FolderName))
 			{
 				Log.Informational("Creating folder.", FolderName);
 				Directory.CreateDirectory(FolderName);
+			}
+		}
+
+		/// <summary>
+		/// File Name.
+		/// </summary>
+		public string FileName
+		{
+			get { return this.fileName; }
+		}
+
+		/// <summary>
+		/// Transform to use.
+		/// </summary>
+		public string Transform
+		{
+			get { return this.transform; }
+		}
+
+		/// <summary>
+		/// Timestamp of Last event
+		/// </summary>
+		public DateTime LastEvent
+		{
+			get { return this.lastEvent; }
+		}
+
+		/// <summary>
+		/// Gets the name of a file, given a file name template.
+		/// </summary>
+		/// <param name="TemplateFileName">File Name template.</param>
+		/// <param name="TP">Timestamp</param>
+		/// <returns>File name</returns>
+		public static string GetFileName(string TemplateFileName, DateTime TP)
+		{
+			return TemplateFileName.
+				Replace("%YEAR%", TP.Year.ToString("D4")).
+				Replace("%MONTH%", TP.Month.ToString("D2")).
+				Replace("%DAY%", TP.Day.ToString("D2")).
+				Replace("%HOUR%", TP.Hour.ToString("D2")).
+				Replace("%MINUTE%", TP.Minute.ToString("D2")).
+				Replace("%SECOND%", TP.Second.ToString("D2"));
+		}
+
+		/// <summary>
+		/// Makes a file name unique.
+		/// </summary>
+		/// <param name="FileName">File name.</param>
+		public static void MakeUnique(ref string FileName)
+		{
+			if (File.Exists(FileName))
+			{
+				int i = FileName.LastIndexOf('.');
+				int j = 2;
+
+				if (i < 0)
+					i = FileName.Length;
+
+				string s;
+
+				do
+				{
+					s = FileName.Insert(i, " (" + (j++).ToString() + ")");
+				}
+				while (File.Exists(s));
+
+				FileName = s;
 			}
 		}
 
@@ -136,13 +206,8 @@ namespace Waher.Networking.Sniffers
 		protected override void BeforeWrite()
 		{
 			DateTime TP = DateTime.Now;
-			string s = this.fileName.
-				Replace("%YEAR%", TP.Year.ToString("D4")).
-				Replace("%MONTH%", TP.Month.ToString("D2")).
-				Replace("%DAY%", TP.Day.ToString("D2")).
-				Replace("%HOUR%", TP.Hour.ToString("D2")).
-				Replace("%MINUTE%", TP.Minute.ToString("D2")).
-				Replace("%SECOND%", TP.Second.ToString("D2"));
+			string s = GetFileName(this.fileName, TP);
+			this.lastEvent = TP;
 
 			if (this.lastFileName != null && this.lastFileName == s)
 				return;
@@ -165,16 +230,28 @@ namespace Waher.Networking.Sniffers
 				this.output = null;
 			}
 
-			this.file = File.CreateText(s);
-			this.lastFileName = s;
+			string s2 = s;
+			MakeUnique(ref s2);
 
-			this.output = XmlWriter.Create(this.file, this.settings);
+			try
+			{
+				this.file = File.CreateText(s2);
+				this.lastFileName = s;
+				this.output = XmlWriter.Create(this.file, this.settings);
+			}
+			catch (Exception ex)
+			{
+				Log.Critical(ex);
+				this.output = null;
+				return;
+			}
+
 			this.output.WriteStartDocument();
 
 			if (!string.IsNullOrEmpty(this.transform))
 				this.output.WriteProcessingInstruction("xml-stylesheet", "type=\"text/xsl\" href=\"" + this.transform + "\"");
 
-			this.output.WriteStartElement("SnifferOutput", "http://waher.se/SnifferOutput.xsd");
+			this.output.WriteStartElement("SnifferOutput", "http://waher.se/Schema/SnifferOutput.xsd");
 			this.output.Flush();
 
 			string FolderName = Path.GetDirectoryName(s);
@@ -188,9 +265,13 @@ namespace Waher.Networking.Sniffers
 					{
 						File.Delete(FileName);
 					}
+					catch (IOException ex)
+					{
+						Log.Error("Unable to delete file: " + ex.Message, FileName);
+					}
 					catch (Exception ex)
 					{
-						Log.Critical(ex);
+						Log.Critical(ex, FileName);
 					}
 				}
 			}

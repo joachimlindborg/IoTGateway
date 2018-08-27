@@ -20,6 +20,7 @@ namespace Waher.Script.Operators.Matrices
 		/// <param name="X">X-coordinate operand.</param>
 		/// <param name="Start">Start position in script expression.</param>
 		/// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
 		public ColumnVector(ScriptNode Left, ScriptNode X, int Start, int Length, Expression Expression)
 			: base(Left, X, Start, Length, Expression)
 		{
@@ -47,8 +48,7 @@ namespace Waher.Script.Operators.Matrices
         /// <returns>Result</returns>
         public static IElement EvaluateIndex(IElement Matrix, IElement Index, ScriptNode Node)
         {
-            IMatrix M = Matrix as IMatrix;
-            if (M != null)
+            if (Matrix is IMatrix M)
                 return EvaluateIndex(M, Index, Node);
             else if (Matrix.IsScalar)
                 throw new ScriptRuntimeException("The column index operator operates on matrices.", Node);
@@ -72,11 +72,9 @@ namespace Waher.Script.Operators.Matrices
         /// <returns>Result</returns>
         public static IElement EvaluateIndex(IMatrix Matrix, IElement Index, ScriptNode Node)
         {
-            DoubleNumber RE = Index as DoubleNumber;
-
-            if (RE != null)
-            {
-                double d = RE.Value;
+            if (Index is DoubleNumber RE)
+			{
+				double d = RE.Value;
                 if (d < 0 || d > int.MaxValue || d != Math.Truncate(d))
                     throw new ScriptRuntimeException("Column index must be a non-negative integer.", Node);
 

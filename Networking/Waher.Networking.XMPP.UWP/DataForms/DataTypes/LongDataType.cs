@@ -10,9 +10,22 @@ namespace Waher.Networking.XMPP.DataForms.DataTypes
 	public class LongDataType : DataType
 	{
 		/// <summary>
+		/// Public instance of data type.
+		/// </summary>
+		public static readonly LongDataType Instance = new LongDataType();
+
+		/// <summary>
 		/// Long Data Type (xs:long)
 		/// </summary>
-		/// <param name="TypeName">Type Name</param>
+		public LongDataType()
+			: this("xs:long")
+		{
+		}
+
+		/// <summary>
+		/// Long Data Type (xs:long)
+		/// </summary>
+		/// <param name="DataType">Data Type</param>
 		public LongDataType(string DataType)
 			: base(DataType)
 		{
@@ -25,9 +38,7 @@ namespace Waher.Networking.XMPP.DataForms.DataTypes
 		/// <returns>Parsed value, if possible, null otherwise.</returns>
 		public override object Parse(string Value)
 		{
-			long Result;
-
-			if (long.TryParse(Value, out Result))
+			if (long.TryParse(Value, out long Result))
 				return Result;
 			else
 				return null;

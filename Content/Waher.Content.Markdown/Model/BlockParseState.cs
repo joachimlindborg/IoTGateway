@@ -7,6 +7,7 @@ namespace Waher.Content.Markdown.Model
 	internal class BlockParseState
 	{
 		private string[] rows;
+		private int[] positions;
 		private string currentRow;
 		private int current;
 		private int start;
@@ -17,9 +18,10 @@ namespace Waher.Content.Markdown.Model
 		private bool preserveCrLf;
 		private char lastChar = (char)0;
 
-		public BlockParseState(string[] Rows, int Start, int End, bool PreserveCrLf)
+		public BlockParseState(string[] Rows, int[] Positions, int Start, int End, bool PreserveCrLf)
 		{
 			this.rows = Rows;
+			this.positions = Positions;
 			this.current = this.start = Start;
 			this.end = End;
 			this.currentRow = this.rows[this.current];
@@ -38,6 +40,11 @@ namespace Waher.Content.Markdown.Model
 		public string[] Rows
 		{
 			get { return this.rows; }
+		}
+
+		public int[] Positions
+		{
+			get { return this.positions; }
 		}
 
 		public int Start
@@ -64,7 +71,7 @@ namespace Waher.Content.Markdown.Model
 		{
 			char ch = this.NextChar();
 
-			while (ch > (char)0 && ch <= ' ')
+			while (ch > (char)0 && (ch <= ' ' || ch == 160))
 				ch = this.NextChar();
 
 			return ch;
@@ -74,7 +81,7 @@ namespace Waher.Content.Markdown.Model
 		{
 			char ch = this.NextCharSameRow();
 
-			while (ch > (char)0 && ch <= ' ')
+			while (ch > (char)0 && (ch <= ' ' || ch == 160))
 				ch = this.NextCharSameRow();
 
 			return ch;
@@ -92,7 +99,7 @@ namespace Waher.Content.Markdown.Model
 		{
 			char ch = this.PeekNextCharSameRow();
 
-			while (ch > 0 && ch <= ' ')
+			while (ch > 0 && (ch <= ' ' || ch == 160))
 			{
 				this.NextCharSameRow();
 				ch = this.PeekNextCharSameRow();
@@ -105,7 +112,7 @@ namespace Waher.Content.Markdown.Model
 		{
 			char ch = this.PeekNextChar();
 
-			while (ch > 0 && ch <= ' ')
+			while (ch > 0 && (ch <= ' ' || ch == 160))
 			{
 				this.NextChar();
 				ch = this.PeekNextChar();
@@ -141,6 +148,28 @@ namespace Waher.Content.Markdown.Model
 			return ch;
 		}
 
+		public char[] PeekNextChars(int Len)
+		{
+			int PosBak = this.pos;
+			int LenBak = this.len;
+			int CurrentBak = this.current;
+			string CurrentRowBak = this.currentRow;
+			bool LineBreakAfterBak = this.lineBreakAfter;
+			char[] Result = new char[Len];
+			int i;
+
+			for (i = 0; i < Len; i++)
+				Result[i] = this.NextChar();
+
+			this.pos = PosBak;
+			this.len = LenBak;
+			this.current = CurrentBak;
+			this.currentRow = CurrentRowBak;
+			this.lineBreakAfter = LineBreakAfterBak;
+
+			return Result;
+		}
+
 		private class StateBackup
 		{
 			public int Pos;
@@ -154,12 +183,14 @@ namespace Waher.Content.Markdown.Model
 
 		public void BackupState()
 		{
-			StateBackup Backup = new StateBackup();
-			Backup.Pos = this.pos;
-			Backup.Len = this.len;
-			Backup.Current = this.current;
-			Backup.CurrentRow = this.currentRow;
-			Backup.LineBreakAfter = this.lineBreakAfter;
+			StateBackup Backup = new StateBackup()
+			{
+				Pos = this.pos,
+				Len = this.len,
+				Current = this.current,
+				CurrentRow = this.currentRow,
+				LineBreakAfter = this.lineBreakAfter
+			};
 
 			if (this.backup == null)
 				this.backup = new LinkedList<StateBackup>();
@@ -194,11 +225,11 @@ namespace Waher.Content.Markdown.Model
 		{
 			char ch;
 
-			while ((ch = this.PeekNextCharSameRow()) <= ' ' && ch > 0 && MaxSpaces > 0)
+			while ((((ch = this.PeekNextCharSameRow()) <= ' ' && ch > 0) || ch == 160) && MaxSpaces > 0)
 			{
 				this.NextCharSameRow();
 
-				if (ch == ' ')
+				if (ch == ' ' || ch == 160)
 					MaxSpaces--;
 				else if (ch == '\t')
 					MaxSpaces -= 4;
@@ -246,6 +277,17 @@ namespace Waher.Content.Markdown.Model
 			return this.lastChar = ch;
 		}
 
+		public int CurrentPosition
+		{
+			get
+			{
+				if (this.current <= this.end)
+					return this.positions[this.current] + this.pos;
+				else
+					return this.positions[this.end] + this.rows[this.end].Length;
+			}
+		}
+
 		public string RestOfRow()
 		{
 			string Result;
@@ -283,6 +325,7 @@ namespace Waher.Content.Markdown.Model
 			get
 			{
 				int i = this.pos - 2;
+				char ch;
 
 				if (i == -1)
 					return true;
@@ -290,7 +333,7 @@ namespace Waher.Content.Markdown.Model
 				if (i < 0 || i >= this.len)
 					return false;
 
-				while (i >= 0 && this.currentRow[i] <= ' ')
+				while (i >= 0 && ((ch = this.currentRow[i]) <= ' ' || ch == 160))
 					i--;
 
 				return i < 0;

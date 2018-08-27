@@ -18,10 +18,12 @@ namespace Waher.Networking.XMPP.HTTPX
 		internal HttpxResponseDataEventHandler dataCallback;
 		internal object state;
 		internal string streamId;
+		internal string jid;
 		internal int nextChunk = 0;
+		internal bool e2e;
 
 		internal ClientChunkRecord(HttpxClient Client, HttpxResponseEventArgs e, HttpResponse Response, 
-			HttpxResponseDataEventHandler DataCallback, object State, string StreamId)
+			HttpxResponseDataEventHandler DataCallback, object State, string StreamId, string Jid, bool E2e)
 			: base()
 		{
 			this.client = Client;
@@ -30,6 +32,8 @@ namespace Waher.Networking.XMPP.HTTPX
 			this.dataCallback = DataCallback;
 			this.state = State;
 			this.streamId = StreamId;
+			this.jid = Jid;
+			this.e2e = E2e;
 		}
 
 		internal override bool ChunkReceived(int Nr, bool Last, byte[] Data)
@@ -38,7 +42,7 @@ namespace Waher.Networking.XMPP.HTTPX
 			{
 				try
 				{
-					this.dataCallback(this.client, new HttpxResponseDataEventArgs(null, Data, this.streamId, Last));
+					this.dataCallback(this.client, new HttpxResponseDataEventArgs(null, Data, this.streamId, Last, this.state));
 				}
 				catch (Exception)
 				{
@@ -64,7 +68,7 @@ namespace Waher.Networking.XMPP.HTTPX
 								{
 									try
 									{
-										this.dataCallback(this.client, new HttpxResponseDataEventArgs(null, Chunk.Data, this.streamId, Chunk.Last));
+										this.dataCallback(this.client, new HttpxResponseDataEventArgs(null, Chunk.Data, this.streamId, Chunk.Last, this.state));
 									}
 									catch (Exception)
 									{

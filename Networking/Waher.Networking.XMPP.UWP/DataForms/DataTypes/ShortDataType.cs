@@ -10,9 +10,22 @@ namespace Waher.Networking.XMPP.DataForms.DataTypes
 	public class ShortDataType : DataType
 	{
 		/// <summary>
+		/// Public instance of data type.
+		/// </summary>
+		public static readonly ShortDataType Instance = new ShortDataType();
+
+		/// <summary>
 		/// Short Data Type (xs:short)
 		/// </summary>
-		/// <param name="TypeName">Type Name</param>
+		public ShortDataType()
+			: this("xs:short")
+		{
+		}
+
+		/// <summary>
+		/// Short Data Type (xs:short)
+		/// </summary>
+		/// <param name="DataType">Data Type</param>
 		public ShortDataType(string DataType)
 			: base(DataType)
 		{
@@ -25,9 +38,7 @@ namespace Waher.Networking.XMPP.DataForms.DataTypes
 		/// <returns>Parsed value, if possible, null otherwise.</returns>
 		public override object Parse(string Value)
 		{
-			short Result;
-
-			if (short.TryParse(Value, out Result))
+			if (short.TryParse(Value, out short Result))
 				return Result;
 			else
 				return null;

@@ -19,6 +19,7 @@ namespace Waher.Script.Model
 		/// <param name="Operand">Operand.</param>
 		/// <param name="Start">Start position in script expression.</param>
 		/// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
 		public UnaryScalarOperator(ScriptNode Operand, int Start, int Length, Expression Expression)
 			: base(Operand, Start, Length, Expression)
 		{
@@ -57,12 +58,12 @@ namespace Waher.Script.Model
 			}
 		}
 
-        /// <summary>
-        /// Evaluates the operator on scalar operands.
-        /// </summary>
-        /// <param name="Operand">Operand.</param>
-        /// <param name="Variables">Variables collection.</param>
-        /// <returns>Result</returns>
-        public abstract IElement EvaluateScalar(IElement Operand, Variables Variables);
+		/// <summary>
+		/// Evaluates the operator on scalar operands.
+		/// </summary>
+		/// <param name="Operand">Operand.</param>
+		/// <param name="Variables">Variables collection.</param>
+		/// <returns>Result</returns>
+		public abstract IElement EvaluateScalar(IElement Operand, Variables Variables);
 	}
 }

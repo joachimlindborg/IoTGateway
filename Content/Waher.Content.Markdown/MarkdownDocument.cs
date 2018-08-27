@@ -9,9 +9,11 @@ using Waher.Content.Emoji;
 using Waher.Content.Markdown.Model;
 using Waher.Content.Markdown.Model.BlockElements;
 using Waher.Content.Markdown.Model.SpanElements;
+using Waher.Content.Xml;
 using Waher.Script;
 using Waher.Script.Exceptions;
 using Waher.Events;
+using System.Collections;
 
 namespace Waher.Content.Markdown
 {
@@ -24,155 +26,28 @@ namespace Waher.Content.Markdown
 	public delegate bool MarkdownElementHandler(MarkdownElement Element, object State);
 
 	/// <summary>
-	/// Contains a markdown document. This markdown document class supports original markdown, as well as several markdown extensions, as
-	/// defined in the following links.
-	/// 
-	/// Original Markdown was invented by John Gruber at Daring Fireball.
-	/// http://daringfireball.net/projects/markdown/basics
-	/// http://daringfireball.net/projects/markdown/syntax
-	/// 
-	/// Typographic enhancements inspired by the Smarty Pants addition for markdown is also supported:
-	/// http://daringfireball.net/projects/smartypants/
-	/// 
-	/// There are however some differences, and some definitions where the implementation in <see cref="Waher.Content.Markdown"/> differ:
-	/// 
-	/// - Markdown syntax within block-level HTML constructs is allowed.
-	/// - Numbered lists retain the number used in the text.
-	/// - Lazy numbering supported by prefixing items using "#. " instead of using actual numbers.
-	/// - _underline_ underlines text.
-	/// - __inserted__ displays inserted text.
-	/// - ~strike through~ strikes through text.
-	/// - ~~deleted~~ displays deleted text.
-	/// - `` is solely used to display code. Curly quotes are inserted using normal ".
-	/// - Headers receive automatic id's (camel casing).
-	/// - Emojis are supported using the shortname syntax `:shortname:`.
-	/// - Smileys are supported, and converted to emojis. Inspired from: http://git.emojione.com/demos/ascii-smileys.html
-	/// - Sections can be created by separating them using a block containing a single line of = signs. Number of desired columns can be specified
-	///   by dividing the line into groups of = signs, separating them with one or more space characters. Number of actual columns used to present
-	///   the information will depend on medium used to display the content. Currently, only HTML supports multi-column sections, and then only if
-	///   the client used has sufficient space to display the desired number of columns.
-	/// - Script can be embedded in the markdown between curly braces { and }. It is evaluated and the result inserted in the final output.
-	/// - Pre-processed script can be embedded in the markdown between double curly braces `{{` and `}}`. It is evaluated in a pre-processing phase,
-	///   and can be used to modify the structure of the markdown document.Implicit print operations can be used to create dynamic markdown content.
-	/// 
-	/// - Any multimedia, not just images, can be inserted using the ! syntax, including audio and video. The architecture is pluggable and allows for 
-	///   customization of inclusion of content, including web content such as YouTube videos, etc.
-	///   
-	///   Linking to a local markdown file will include the file into the context of the document. This allows for markdown templates to be used, and 
-	///   for more complex constructs, such as richer tables, to be built.
-	///   
-	///   Multimedia can have additional width and height information. Multimedia handler is selected based on URL or file extension. If no particular 
-	///   multimedia handler is found, the source is considered to be an image.
-	///   
-	///   Examples:
-	///   
-	///	    ![some text](/some/url "some title" WIDTH HEIGHT) where WIDTH and HEIGHT are positive integers.
-	///     ![Your browser does not support the audio tag](/local/music.mp3)            (is rendered using the &lt;audio&gt; tag)
-	///     ![Your browser does not support the video tag](/local/video.mp4 320 200)    (is rendered using the &lt;video&gt; tag)
-	///     ![Your browser does not support the iframe tag](https://www.youtube.com/watch?v=whBPLc8m4SU 800 600)
-	///     ![Table of Contents](ToC)		(ToC is case insensitive)
-	///     ![Web Page](http://example.com/Index.html 1200 300)		(embeds a web page).
-	///     ![Markdown](/Templates/template1.md)					(includes a local markdown file).
-	///
-	///   Width and Height can also be defined in referenced content. Example: ![some text][someref]
-	///   [someref]: some/url "some title" WIDTH HEIGHT
-	///
-	///   Multiresolution or Multiformatted multimedia can be included by including a sequence of sources. If inline mode is used, each source is written
-	///   between a set of parenthesis. The sources are then optionally separated by whitespace (inluding on a new row).
-	///   
-	/// - Typographical additions include:
-	///     (c)				©		&copy;
-	///     (C)				©		&COPY;
-	///     (r)				®		&reg;
-	///     (R)				®		&REG;
-	///     (p)				℗		&copysr;
-	///     (P)				℗		&copysr;
-	///     (s)				Ⓢ		&oS;
-	///     (S)				Ⓢ		&circledS;
-	///     &lt;&lt;		«		&laquo;
-	///     &gt;&gt;		»		&raquo;
-	///     &lt;&lt;&lt;	⋘		&Ll;
-	///     &gt;&gt;&gt;	⋙		&Gg;
-	///     &lt;--			←		&larr;
-	///     --&gt;			→		&rarr;
-	///     &lt;--&gt;		↔		&harr;
-	///     &lt;==			⇐		&lArr;
-	///     ==&gt;			⇒		&rArr;
-	///     &lt;==&gt;		⇔		&hArr;
-	///     [[				⟦		&LeftDoubleBracket;
-	///     ]]				⟧		&RightDoubleBracket;
-	///     +-				±		&PlusMinus;
-	///     -+				∓		&MinusPlus;
-	///     &lt;&gt;		≠		&ne;
-	///     &lt;=			≤		&leq;
-	///     &gt;=			≥		&geq;
-	///     ==				≡		&equiv;
-	///     ^a				ª		&ordf;
-	///     ^o				º		&ordm;
-	///     ^0				°		&deg;
-	///     ^1				¹		&#185;
-	///     ^2				²		&#178;
-	///     ^3				³		&#179;
-	///     ^TM				™		&trade;
-	///     %0				‰		&permil;
-	///     %00				‱		&pertenk;
-	///     
-	/// Selected features from MultiMarkdown (https://rawgit.com/fletcher/human-markdown-reference/master/index.html) and
-	/// Markdown Extra (https://michelf.ca/projects/php-markdown/extra/) have also been included:
-	/// 
-	/// - Images placed in a paragraph by itself is wrapped in a &lt;figure&gt; tag.
-	/// - Tables.
-	/// - Definition lists.
-	/// - Metadata
-	/// - Footnotes.
-	/// - Fenced code blocks, with syntax highlighting.
-	/// 
-	/// Meta-data tags that are recognized by the parser are, as follows. Other meta-data tags are simply copied into the meta-data section of the 
-	/// generated HTML document. Keys are case insensitive.
-	/// 
-	/// - Title			Title of document.
-	/// - Subtitle		Subtitle of document.
-	/// - Description	Description of document.
-	/// - Author		Author(s) of document.
-	/// - Date			(Publication) date of document.
-	/// - Copyright		Link to copyright statement.
-	/// - Previous		Link to previous document, in a paginated set of documents.
-	/// - Prev			Synonymous with Previous.
-	/// - Next			Link to next document, in a paginated set of documents.
-	/// - Alternate		Link to alternate page.
-	/// - Help			Link to help page.
-	/// - Icon			Link to icon for page.
-	/// - CSS			Link(s) to Cascading Style Sheet(s) that should be used for visual formatting of the generated HTML page.
-	/// - JavaScript	Link(s) to javascript document(s) that should be used for visual formatting of the generated HTML page.
-	/// - Keywords		Keywords.
-	/// - Image			Link to image for page.
-	/// - Web			Link to web page
-	/// - Cache-Control	The value of this tag will be used when returning the document over an HTTP interface.
-	/// - Vary			The value of this tag will be used when returning the document over an HTTP interface.
-	/// - Script		Links to server-side script files that should be included before processing the page.
-	/// - AudioAutoplay If audio should be played automatically. (Default=true).
-	/// - AudioControls If audio should be played with controls. (Default=false).
-	/// - VideoAutoplay If video should be played automatically. (Default=false).
-	/// - VideoControls If video should be played with controls. (Default=true).
-	/// - Refresh		Tells the browser to refresh the page after a given number of seconds.
+	/// Contains a markdown document. This markdown document class supports original markdown, as well as several markdown extensions.
+	/// See the markdown reference documentation provided with the library for more information.
 	/// </summary>
-	public class MarkdownDocument : IFileNameResource
+	public class MarkdownDocument : IFileNameResource, IEnumerable<MarkdownElement>
 	{
-		private Dictionary<string, Multimedia> references = new Dictionary<string, Multimedia>();
+		private readonly Dictionary<string, Multimedia> references = new Dictionary<string, Multimedia>();
 		private Dictionary<string, KeyValuePair<string, bool>[]> metaData = new Dictionary<string, KeyValuePair<string, bool>[]>();
 		private Dictionary<string, int> footnoteNumbers = null;
 		private Dictionary<string, Footnote> footnotes = null;
+		private SortedDictionary<int, string> toInsert = null;
+		private readonly Type[] transparentExceptionTypes;
 		private List<string> footnoteOrder = null;
-		private LinkedList<MarkdownElement> elements;
-		private List<Header> headers = new List<Header>();
-		private IEmojiSource emojiSource;
-		private string markdownText;
+		private readonly LinkedList<MarkdownElement> elements;
+		private readonly List<Header> headers = new List<Header>();
+		private readonly IEmojiSource emojiSource;
+		private readonly string markdownText;
 		private string fileName = string.Empty;
 		private string resourceName = string.Empty;
 		private string url = string.Empty;
 		private MarkdownDocument master = null;
 		private MarkdownDocument detail = null;
-		private MarkdownSettings settings;
+		private readonly MarkdownSettings settings;
 		private int lastFootnote = 0;
 		private bool footnoteBacklinksAdded = false;
 		private bool syntaxHighlighting = false;
@@ -183,8 +58,10 @@ namespace Waher.Content.Markdown
 		/// Contains a markdown document. This markdown document class supports original markdown, as well as several markdown extensions.
 		/// </summary>
 		/// <param name="MarkdownText">Markdown text.</param>
-		public MarkdownDocument(string MarkdownText)
-			: this(MarkdownText, new MarkdownSettings(), string.Empty, string.Empty, string.Empty)
+		/// <param name="TransparentExceptionTypes">If an exception is thrown when processing script in markdown, and the exception is of
+		/// any of these types, the exception will be rethrown, instead of shown as an error in the generated output.</param>
+		public MarkdownDocument(string MarkdownText, params Type[] TransparentExceptionTypes)
+			: this(MarkdownText, new MarkdownSettings(), string.Empty, string.Empty, string.Empty, TransparentExceptionTypes)
 		{
 		}
 
@@ -193,8 +70,10 @@ namespace Waher.Content.Markdown
 		/// </summary>
 		/// <param name="MarkdownText">Markdown text.</param>
 		/// <param name="Settings">Parser settings.</param>
-		public MarkdownDocument(string MarkdownText, MarkdownSettings Settings)
-			: this(MarkdownText, Settings, string.Empty, string.Empty, string.Empty)
+		/// <param name="TransparentExceptionTypes">If an exception is thrown when processing script in markdown, and the exception is of
+		/// any of these types, the exception will be rethrown, instead of shown as an error in the generated output.</param>
+		public MarkdownDocument(string MarkdownText, MarkdownSettings Settings, params Type[] TransparentExceptionTypes)
+			: this(MarkdownText, Settings, string.Empty, string.Empty, string.Empty, TransparentExceptionTypes)
 		{
 		}
 
@@ -207,7 +86,10 @@ namespace Waher.Content.Markdown
 		/// Otherwise, the parameter is the empty string.</param>
 		/// <param name="ResourceName">Local resource name of file, if accessed from a web server.</param>
 		/// <param name="URL">Full URL of resource hosting the content, if accessed from a web server.</param>
-		public MarkdownDocument(string MarkdownText, MarkdownSettings Settings, string FileName, string ResourceName, string URL)
+		/// <param name="TransparentExceptionTypes">If an exception is thrown when processing script in markdown, and the exception is of
+		/// any of these types, the exception will be rethrown, instead of shown as an error in the generated output.</param>
+		public MarkdownDocument(string MarkdownText, MarkdownSettings Settings, string FileName, string ResourceName, string URL,
+			params Type[] TransparentExceptionTypes)
 		{
 			this.markdownText = MarkdownText;
 			this.emojiSource = Settings.EmojiSource;
@@ -215,9 +97,12 @@ namespace Waher.Content.Markdown
 			this.fileName = FileName;
 			this.resourceName = ResourceName;
 			this.url = URL;
+			this.transparentExceptionTypes = TransparentExceptionTypes;
 
 			if (Settings.Variables != null)
-				this.markdownText = this.Preprocess(this.markdownText, Settings.Variables);
+				this.markdownText = Preprocess(this.markdownText, Settings, this.fileName, out this.isDynamic, TransparentExceptionTypes);
+
+			this.markdownText = this.markdownText.Replace("\r\n", "\n").Replace('\r', '\n');
 
 			List<Block> Blocks = this.ParseTextToBlocks(this.markdownText);
 			List<KeyValuePair<string, bool>> Values = new List<KeyValuePair<string, bool>>();
@@ -229,7 +114,7 @@ namespace Waher.Content.Markdown
 			int End = Blocks.Count - 1;
 			int i, j;
 
-			if (Settings.ParseMetaData)
+			if (Settings.ParseMetaData && Blocks.Count > 0)
 			{
 				Block = Blocks[0];
 				for (i = Block.Start; i <= Block.End; i++)
@@ -287,32 +172,86 @@ namespace Waher.Content.Markdown
 			}
 
 			this.elements = this.ParseBlocks(Blocks, Start, End);
+
+			if (this.toInsert != null)
+			{
+				foreach (KeyValuePair<int, string> P in this.toInsert)
+					this.markdownText = this.markdownText.Insert(P.Key, P.Value);
+			}
 		}
 
-		private static Regex endOfHeader = new Regex(@"\r\n\s*\r\n", RegexOptions.Multiline | RegexOptions.Compiled);
-		private static Regex scriptHeader = new Regex(@"^Script:\s*(?'ScriptFile'[^\r\n]*)", RegexOptions.Multiline | RegexOptions.Compiled);
-
-		private string Preprocess(string s, Variables Variables)
+		/// <summary>
+		/// Markdown text. This text might differ slightly from the original text passed to the document.
+		/// </summary>
+		public string MarkdownText
 		{
+			get { return this.markdownText; }
+		}
+
+		internal static Regex endOfHeader = new Regex(@"\n\s*\n", RegexOptions.Multiline | RegexOptions.Compiled);
+		internal static Regex scriptHeader = new Regex(@"^[Ss][Cc][Rr][Ii][Pp][Tt]:\s*(?'ScriptFile'[^\r\n]*)", RegexOptions.Multiline | RegexOptions.Compiled);
+
+		/// <summary>
+		/// Preprocesses markdown text.
+		/// </summary>
+		/// <param name="Markdown">Markdown text</param>
+		/// <param name="Settings">Markdown settings.</param>
+		/// <param name="TransparentExceptionTypes">If an exception is thrown when processing script in markdown, and the exception is of
+		/// any of these types, the exception will be rethrown, instead of shown as an error in the generated output.</param>
+		/// <returns>Preprocessed markdown.</returns>
+		public static string Preprocess(string Markdown, MarkdownSettings Settings, params Type[] TransparentExceptionTypes)
+		{
+			return Preprocess(Markdown, Settings, string.Empty, out bool IsDynamic, TransparentExceptionTypes);
+		}
+
+		/// <summary>
+		/// Preprocesses markdown text.
+		/// </summary>
+		/// <param name="Markdown">Markdown text</param>
+		/// <param name="Settings">Markdown settings.</param>
+		/// <param name="FileName">Filename of markdown.</param>
+		/// <param name="TransparentExceptionTypes">If an exception is thrown when processing script in markdown, and the exception is of
+		/// any of these types, the exception will be rethrown, instead of shown as an error in the generated output.</param>
+		/// <returns>Preprocessed markdown.</returns>
+		public static string Preprocess(string Markdown, MarkdownSettings Settings, string FileName, params Type[] TransparentExceptionTypes)
+		{
+			return Preprocess(Markdown, Settings, FileName, out bool IsDynamic, TransparentExceptionTypes);
+		}
+
+		/// <summary>
+		/// Preprocesses markdown text.
+		/// </summary>
+		/// <param name="Markdown">Markdown text</param>
+		/// <param name="Settings">Markdown settings.</param>
+		/// <param name="FileName">Filename of markdown.</param>
+		/// <param name="IsDynamic">If the markdown contained preprocessed script.</param>
+		/// <param name="TransparentExceptionTypes">If an exception is thrown when processing script in markdown, and the exception is of
+		/// any of these types, the exception will be rethrown, instead of shown as an error in the generated output.</param>
+		/// <returns>Preprocessed markdown.</returns>
+		public static string Preprocess(string Markdown, MarkdownSettings Settings, string FileName, out bool IsDynamic, params Type[] TransparentExceptionTypes)
+		{
+			Variables Variables = Settings.Variables;
 			Expression Exp;
 			string Script, s2;
 			object Result;
 			int i, j;
 
-			if (!string.IsNullOrEmpty(this.fileName))
+			IsDynamic = false;
+
+			if (!string.IsNullOrEmpty(FileName))
 			{
-				Match M = endOfHeader.Match(s);
+				Match M = endOfHeader.Match(Markdown);
 				if (M.Success)
 				{
-					s2 = s.Substring(0, M.Index);
+					s2 = Markdown.Substring(0, M.Index);
 
 					foreach (Match M2 in scriptHeader.Matches(s2))
 					{
 						if (M.Success)
 						{
-							string FileName = Path.Combine(Path.GetDirectoryName(this.fileName), M2.Groups["ScriptFile"].Value);
+							string FileName2 = Settings.GetFileName(FileName, M2.Groups["ScriptFile"].Value);
 
-							Script = File.ReadAllText(FileName);
+							Script = File.ReadAllText(FileName2);
 							Exp = new Expression(Script);
 							Exp.Evaluate(Variables);
 						}
@@ -320,21 +259,21 @@ namespace Waher.Content.Markdown
 				}
 			}
 
-			i = s.IndexOf("{{");
+			i = Markdown.IndexOf("{{");
 
 			while (i >= 0)
 			{
-				j = s.IndexOf("}}", i + 2);
+				j = Markdown.IndexOf("}}", i + 2);
 				if (j < 0)
 					break;
 
-				Script = s.Substring(i + 2, j - i - 2);
-				s = s.Remove(i, j - i + 2);
+				Script = Markdown.Substring(i + 2, j - i - 2);
+				Markdown = Markdown.Remove(i, j - i + 2);
 
 				try
 				{
 					Exp = new Expression(Script);
-					this.isDynamic = true;
+					IsDynamic = true;
 
 					if (Exp.ContainsImplicitPrint)
 					{
@@ -361,25 +300,62 @@ namespace Waher.Content.Markdown
 				}
 				catch (Exception ex)
 				{
-					while ((ex is TargetInvocationException || ex is AggregateException) && ex.InnerException != null)
-						ex = ex.InnerException;
+					ex = Log.UnnestException(ex);
 
-					Log.Critical(ex);
+					if (ex is AggregateException ex2)
+					{
+						StringBuilder sb = new StringBuilder();
 
-					Result = "<font style=\"color:red\">" + XML.HtmlValueEncode(ex.Message) + "</font>";
+						foreach (Exception ex3 in ex2.InnerExceptions)
+						{
+							CheckException(ex3, TransparentExceptionTypes);
+
+							Log.Critical(ex3);
+
+							sb.Append("<p><font style=\"color:red\">");
+							sb.Append(XML.HtmlValueEncode(ex3.Message));
+							sb.Append("</font></p>");
+						}
+
+						Result = sb.ToString();
+					}
+					else
+					{
+						CheckException(ex, TransparentExceptionTypes);
+
+						Log.Critical(ex);
+
+						Result = "<font style=\"color:red\">" + XML.HtmlValueEncode(ex.Message) + "</font>";
+					}
 				}
 
 				if (Result != null)
 				{
 					s2 = Result.ToString();
-					s = s.Insert(i, s2);
+					Markdown = Markdown.Insert(i, s2);
 					i += s2.Length;
 				}
 
-				i = s.IndexOf("{{", i);
+				i = Markdown.IndexOf("{{", i);
 			}
 
-			return s;
+			return Markdown;
+		}
+
+		internal void CheckException(Exception ex)
+		{
+			CheckException(ex, this.transparentExceptionTypes);
+		}
+
+		internal static void CheckException(Exception ex, Type[] TransparentExceptionTypes)
+		{
+			TypeInfo ExceptionType = ex.GetType().GetTypeInfo();
+
+			foreach (Type T in TransparentExceptionTypes)
+			{
+				if (T.GetTypeInfo().IsAssignableFrom(ExceptionType))
+					System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex).Throw();
+			}
 		}
 
 		private LinkedList<MarkdownElement> ParseBlocks(List<Block> Blocks)
@@ -391,7 +367,6 @@ namespace Waher.Content.Markdown
 		{
 			LinkedList<MarkdownElement> Elements = new LinkedList<MarkdownElement>();
 			LinkedList<MarkdownElement> Content;
-			TableInformation TableInformation;
 			Block Block;
 			string[] Rows;
 			string s, s2;
@@ -497,8 +472,8 @@ namespace Waher.Content.Markdown
 				{
 					Content = this.ParseBlocks(Block.RemovePrefix(">", 2));
 
-					if (Elements.Last != null && Elements.Last.Value is BlockQuote)
-						((BlockQuote)Elements.Last.Value).AddChildren(Content);
+					if (Elements.Last != null && Elements.Last.Value is BlockQuote BlockQuote)
+						BlockQuote.AddChildren(Content);
 					else
 						Elements.AddLast(new BlockQuote(this, Content));
 
@@ -520,6 +495,11 @@ namespace Waher.Content.Markdown
 						Elements.AddLast(new SectionSeparator(this, ++SectionNr, NrColumns));
 					continue;
 				}
+				else if (Block.End == Block.Start && this.IsUnderline(Block.Rows[0], '~', false, false))
+				{
+					Elements.AddLast(new InvisibleBreak(this));
+					continue;
+				}
 				else if (Block.IsPrefixedBy(s2 = "*", true) || Block.IsPrefixedBy(s2 = "+", true) || Block.IsPrefixedBy(s2 = "-", true))
 				{
 					LinkedList<Block> Segments = null;
@@ -529,18 +509,18 @@ namespace Waher.Content.Markdown
 					for (d = Block.Start + 1; d <= c; d++)
 					{
 						s = Block.Rows[d];
-						if (IsPrefixedBy(s, "*", true) || IsPrefixedBy(s, "+", true) || IsPrefixedBy(s, "-", true))
+						if (IsPrefixedBy(s, s2, true))
 						{
 							if (Segments == null)
 								Segments = new LinkedList<Block>();
 
-							Segments.AddLast(new Block(Block.Rows, 0, i, d - 1));
+							Segments.AddLast(new Block(Block.Rows, Block.Positions, 0, i, d - 1));
 							i = d;
 						}
 					}
 
 					if (Segments != null)
-						Segments.AddLast(new Block(Block.Rows, 0, i, c));
+						Segments.AddLast(new Block(Block.Rows, Block.Positions, 0, i, c));
 
 					if (Segments == null)
 					{
@@ -559,8 +539,8 @@ namespace Waher.Content.Markdown
 								Items.AddLast(E);
 						}
 
-						if (Elements.Last != null && Elements.Last.Value is BulletList)
-							((BulletList)Elements.Last.Value).AddChildren(new UnnumberedItem(this, s2 + " ", new NestedBlock(this, Items)));
+						if (Elements.Last != null && Elements.Last.Value is BulletList BulletList)
+							BulletList.AddChildren(new UnnumberedItem(this, s2 + " ", new NestedBlock(this, Items)));
 						else
 							Elements.AddLast(new BulletList(this, new UnnumberedItem(this, s2 + " ", new NestedBlock(this, Items))));
 
@@ -575,12 +555,12 @@ namespace Waher.Content.Markdown
 							foreach (Block SegmentItem in Segment.RemovePrefix(s2, 4))
 							{
 								Items.AddLast(new UnnumberedItem(this, s2 + " ", new NestedBlock(this,
-									this.ParseBlock(SegmentItem.Rows, SegmentItem.Start, SegmentItem.End))));
+									this.ParseBlock(SegmentItem.Rows, SegmentItem.Positions, SegmentItem.Start, SegmentItem.End))));
 							}
 						}
 
-						if (Elements.Last != null && Elements.Last.Value is BulletList)
-							((BulletList)Elements.Last.Value).AddChildren(Items);
+						if (Elements.Last != null && Elements.Last.Value is BulletList BulletList)
+							BulletList.AddChildren(Items);
 						else
 							Elements.AddLast(new BulletList(this, Items));
 
@@ -601,17 +581,17 @@ namespace Waher.Content.Markdown
 							if (Segments == null)
 								Segments = new LinkedList<Block>();
 
-							Segments.AddLast(new Block(Block.Rows, 0, i, d - 1));
+							Segments.AddLast(new Block(Block.Rows, Block.Positions, 0, i, d - 1));
 							i = d;
 						}
 					}
 
 					if (Segments != null)
-						Segments.AddLast(new Block(Block.Rows, 0, i, c));
+						Segments.AddLast(new Block(Block.Rows, Block.Positions, 0, i, c));
 
 					if (Segments == null)
 					{
-						LinkedList<MarkdownElement> Items = this.ParseBlocks(Block.RemovePrefix("#.", 5));
+						LinkedList<MarkdownElement> Items = this.ParseBlocks(Block.RemovePrefix("#.", 4));
 
 						i = BlockIndex;
 						while (BlockIndex < EndBlock && (Block = Blocks[BlockIndex + 1]).Indent > 0)
@@ -626,8 +606,8 @@ namespace Waher.Content.Markdown
 								Items.AddLast(E);
 						}
 
-						if (Elements.Last != null && Elements.Last.Value is NumberedList)
-							((NumberedList)Elements.Last.Value).AddChildren(new UnnumberedItem(this, "#. ", new NestedBlock(this, Items)));
+						if (Elements.Last != null && Elements.Last.Value is NumberedList NumberedList)
+							NumberedList.AddChildren(new UnnumberedItem(this, "#. ", new NestedBlock(this, Items)));
 						else
 							Elements.AddLast(new NumberedList(this, new UnnumberedItem(this, "#. ", new NestedBlock(this, Items))));
 
@@ -639,17 +619,86 @@ namespace Waher.Content.Markdown
 
 						foreach (Block Segment in Segments)
 						{
-							foreach (Block SegmentItem in Segment.RemovePrefix("#.", 5))
+							foreach (Block SegmentItem in Segment.RemovePrefix("#.", 4))
 							{
 								Items.AddLast(new UnnumberedItem(this, "#. ", new NestedBlock(this,
-									this.ParseBlock(SegmentItem.Rows, SegmentItem.Start, SegmentItem.End))));
+									this.ParseBlock(SegmentItem.Rows, SegmentItem.Positions, SegmentItem.Start, SegmentItem.End))));
 							}
 						}
 
-						if (Elements.Last != null && Elements.Last.Value is NumberedList)
-							((NumberedList)Elements.Last.Value).AddChildren(Items);
+						if (Elements.Last != null && Elements.Last.Value is NumberedList NumberedList)
+							NumberedList.AddChildren(Items);
 						else
 							Elements.AddLast(new NumberedList(this, Items));
+
+						continue;
+					}
+				}
+				else if (Block.IsPrefixedBy(s2 = "[ ]", true) || Block.IsPrefixedBy(s2 = "[x]", true) || Block.IsPrefixedBy(s2 = "[X]", true))
+				{
+					LinkedList<KeyValuePair<Block, string>> Segments = null;
+					string s3;
+					i = 0;
+					c = Block.End;
+
+					for (d = Block.Start + 1; d <= c; d++)
+					{
+						s = Block.Rows[d];
+						if (IsPrefixedBy(s, s3 = "[ ]", true) || IsPrefixedBy(s, s3 = "[x]", true) || IsPrefixedBy(s, s3 = "[X]", true))
+						{
+							if (Segments == null)
+								Segments = new LinkedList<KeyValuePair<Block, string>>();
+
+							Segments.AddLast(new KeyValuePair<Block, string>(new Block(Block.Rows, Block.Positions, 0, i, d - 1), s2));
+							s2 = s3;
+							i = d;
+						}
+					}
+
+					if (Segments != null)
+						Segments.AddLast(new KeyValuePair<Block, string>(new Block(Block.Rows, Block.Positions, 0, i, c), s2));
+
+					if (Segments == null)
+					{
+						LinkedList<MarkdownElement> Items = this.ParseBlocks(Block.RemovePrefix(s2, 4));
+
+						i = BlockIndex;
+						while (BlockIndex < EndBlock && (Block = Blocks[BlockIndex + 1]).Indent > 0)
+						{
+							BlockIndex++;
+							Block.Indent--;
+						}
+
+						if (BlockIndex > i)
+						{
+							foreach (MarkdownElement E in this.ParseBlocks(Blocks, i + 1, BlockIndex))
+								Items.AddLast(E);
+						}
+
+						if (Elements.Last != null && Elements.Last.Value is TaskList TaskList)
+							TaskList.AddChildren(new TaskItem(this, s2 != "[ ]", new NestedBlock(this, Items)));
+						else
+							Elements.AddLast(new TaskList(this, new TaskItem(this, s2 != "[ ]", new NestedBlock(this, Items))));
+
+						continue;
+					}
+					else
+					{
+						LinkedList<MarkdownElement> Items = new LinkedList<MarkdownElement>();
+
+						foreach (KeyValuePair<Block, string> Segment in Segments)
+						{
+							foreach (Block SegmentItem in Segment.Key.RemovePrefix(Segment.Value, 4))
+							{
+								Items.AddLast(new TaskItem(this, Segment.Value != "[ ]", new NestedBlock(this,
+									this.ParseBlock(SegmentItem.Rows, SegmentItem.Positions, SegmentItem.Start, SegmentItem.End))));
+							}
+						}
+
+						if (Elements.Last != null && Elements.Last.Value is TaskList TaskList)
+							TaskList.AddChildren(Items);
+						else
+							Elements.AddLast(new TaskList(this, Items));
 
 						continue;
 					}
@@ -668,19 +717,19 @@ namespace Waher.Content.Markdown
 							if (Segments == null)
 								Segments = new LinkedList<KeyValuePair<int, Block>>();
 
-							Segments.AddLast(new KeyValuePair<int, Block>(Index, new Block(Block.Rows, 0, i, d - 1)));
+							Segments.AddLast(new KeyValuePair<int, Block>(Index, new Block(Block.Rows, Block.Positions, 0, i, d - 1)));
 							i = d;
 							Index = j;
 						}
 					}
 
 					if (Segments != null)
-						Segments.AddLast(new KeyValuePair<int, Block>(Index, new Block(Block.Rows, 0, i, c)));
+						Segments.AddLast(new KeyValuePair<int, Block>(Index, new Block(Block.Rows, Block.Positions, 0, i, c)));
 
 					if (Segments == null)
 					{
 						s = Index.ToString();
-						LinkedList<MarkdownElement> Items = this.ParseBlocks(Block.RemovePrefix(s + ".", s.Length + 4));
+						LinkedList<MarkdownElement> Items = this.ParseBlocks(Block.RemovePrefix(s + ".", Math.Max(4, s.Length + 2)));
 
 						i = BlockIndex;
 						while (BlockIndex < EndBlock && (Block = Blocks[BlockIndex + 1]).Indent > 0)
@@ -695,8 +744,8 @@ namespace Waher.Content.Markdown
 								Items.AddLast(E);
 						}
 
-						if (Elements.Last != null && Elements.Last.Value is NumberedList)
-							((NumberedList)Elements.Last.Value).AddChildren(new NumberedItem(this, Index, new NestedBlock(this, Items)));
+						if (Elements.Last != null && Elements.Last.Value is NumberedList NumberedList)
+							NumberedList.AddChildren(new NumberedItem(this, Index, new NestedBlock(this, Items)));
 						else
 							Elements.AddLast(new NumberedList(this, new NumberedItem(this, Index, new NestedBlock(this, Items))));
 
@@ -709,33 +758,36 @@ namespace Waher.Content.Markdown
 						foreach (KeyValuePair<int, Block> Segment in Segments)
 						{
 							s = Segment.Key.ToString();
-							foreach (Block SegmentItem in Segment.Value.RemovePrefix(s + ".", s.Length + 4))
+							foreach (Block SegmentItem in Segment.Value.RemovePrefix(s + ".", Math.Max(4, s.Length + 2)))
 							{
 								Items.AddLast(new NumberedItem(this, Segment.Key, new NestedBlock(this,
-									this.ParseBlock(SegmentItem.Rows, SegmentItem.Start, SegmentItem.End))));
+									this.ParseBlock(SegmentItem.Rows, SegmentItem.Positions, SegmentItem.Start, SegmentItem.End))));
 							}
 						}
 
-						if (Elements.Last != null && Elements.Last.Value is NumberedList)
-							((NumberedList)Elements.Last.Value).AddChildren(Items);
+						if (Elements.Last != null && Elements.Last.Value is NumberedList NumberedList)
+							NumberedList.AddChildren(Items);
 						else
 							Elements.AddLast(new NumberedList(this, Items));
 
 						continue;
 					}
 				}
-				else if (Block.IsTable(out TableInformation))
+				else if (Block.IsTable(out TableInformation TableInformation))
 				{
 					MarkdownElement[][] Headers = new MarkdownElement[TableInformation.NrHeaderRows][];
 					MarkdownElement[][] DataRows = new MarkdownElement[TableInformation.NrDataRows][];
 					LinkedList<MarkdownElement> CellElements;
 					string[] Row;
+					int[] Positions;
 
 					c = TableInformation.Columns;
 
 					for (j = 0; j < TableInformation.NrHeaderRows; j++)
 					{
 						Row = TableInformation.Headers[j];
+						Positions = TableInformation.HeaderPositions[j];
+
 						Headers[j] = new MarkdownElement[c];
 
 						for (i = 0; i < c; i++)
@@ -745,7 +797,7 @@ namespace Waher.Content.Markdown
 								Headers[j][i] = null;
 							else
 							{
-								CellElements = this.ParseBlock(new string[] { Row[i] });
+								CellElements = this.ParseBlock(new string[] { Row[i] }, new int[] { Positions[i] });
 
 								if (CellElements.First != null && CellElements.First.Next == null)
 									Headers[j][i] = CellElements.First.Value;
@@ -758,6 +810,8 @@ namespace Waher.Content.Markdown
 					for (j = 0; j < TableInformation.NrDataRows; j++)
 					{
 						Row = TableInformation.Rows[j];
+						Positions = TableInformation.RowPositions[j];
+
 						DataRows[j] = new MarkdownElement[c];
 
 						for (i = 0; i < c; i++)
@@ -767,7 +821,7 @@ namespace Waher.Content.Markdown
 								DataRows[j][i] = null;
 							else
 							{
-								CellElements = this.ParseBlock(new string[] { Row[i] });
+								CellElements = this.ParseBlock(new string[] { Row[i] }, new int[] { Positions[i] });
 
 								if (CellElements.First != null && CellElements.First.Next == null)
 									DataRows[j][i] = CellElements.First.Value;
@@ -806,12 +860,12 @@ namespace Waher.Content.Markdown
 					else
 						DefinitionDescriptions = new DefinitionDescriptions(this, new NestedBlock(this, Description));
 
-					if (Elements.Last.Value is DefinitionDescriptions)
-						((DefinitionDescriptions)Elements.Last.Value).AddChildren(DefinitionDescriptions.Children);
-					else if (Elements.Last.Value is DefinitionTerms)
-						Elements.Last.Value = new DefinitionList(this, Elements.Last.Value, DefinitionDescriptions);
-					else if (Elements.Last.Value is DefinitionList)
-						((DefinitionList)Elements.Last.Value).AddChildren(DefinitionDescriptions);
+					if (Elements.Last.Value is DefinitionDescriptions DefinitionDescriptions2)
+						DefinitionDescriptions2.AddChildren(DefinitionDescriptions.Children);
+					else if (Elements.Last.Value is DefinitionTerms DefinitionTerms)
+						Elements.Last.Value = new DefinitionList(this, DefinitionTerms, DefinitionDescriptions);
+					else if (Elements.Last.Value is DefinitionList DefinitionList)
+						DefinitionList.AddChildren(DefinitionDescriptions);
 					else
 						Elements.AddLast(new DefinitionList(this, DefinitionDescriptions));
 
@@ -826,7 +880,7 @@ namespace Waher.Content.Markdown
 					c = Block.End;
 					for (i = Block.Start; i <= c; i++)
 					{
-						Term = this.ParseBlock(Rows, i, i);
+						Term = this.ParseBlock(Rows, Block.Positions, i, i);
 						if (Term.First == null)
 							continue;
 
@@ -836,8 +890,8 @@ namespace Waher.Content.Markdown
 							Terms.AddLast(new NestedBlock(this, Term));
 					}
 
-					if (Elements.Last != null && Elements.Last.Value is DefinitionList)
-						((DefinitionList)Elements.Last.Value).AddChildren(new DefinitionTerms(this, Terms));
+					if (Elements.Last != null && Elements.Last.Value is DefinitionList DefinitionList)
+						DefinitionList.AddChildren(new DefinitionTerms(this, Terms));
 					else
 						Elements.AddLast(new DefinitionTerms(this, Terms));
 
@@ -878,14 +932,14 @@ namespace Waher.Content.Markdown
 
 					if (this.IsUnderline(s, '=', false, false))
 					{
-						Header Header = new Header(this, 1, this.ParseBlock(Rows, 0, c - 1));
+						Header Header = new Header(this, 1, this.ParseBlock(Rows, Block.Positions, 0, c - 1));
 						Elements.AddLast(Header);
 						this.headers.Add(Header);
 						continue;
 					}
 					else if (this.IsUnderline(s, '-', false, false))
 					{
-						Header Header = new Header(this, 2, this.ParseBlock(Rows, 0, c - 1));
+						Header Header = new Header(this, 2, this.ParseBlock(Rows, Block.Positions, 0, c - 1));
 						Elements.AddLast(Header);
 						this.headers.Add(Header);
 						continue;
@@ -895,7 +949,7 @@ namespace Waher.Content.Markdown
 				s = Rows[Block.Start];
 				if (this.IsPrefixedBy(s, '#', out d) && d < s.Length)
 				{
-					Rows[Block.Start] = Rows[Block.Start].Substring(d + 1).Trim();
+					Rows[Block.Start] = Rows[Block.Start].Substring(d).Trim();
 
 					s = Rows[c];
 					i = s.Length - 1;
@@ -905,24 +959,24 @@ namespace Waher.Content.Markdown
 					if (++i < s.Length)
 						Rows[c] = s.Substring(0, i).TrimEnd();
 
-					Header Header = new Header(this, d, this.ParseBlock(Rows, Block.Start, c));
+					Header Header = new Header(this, d, this.ParseBlock(Rows, Block.Positions, Block.Start, c));
 					Elements.AddLast(Header);
 					this.headers.Add(Header);
 					continue;
 				}
 
-				Content = this.ParseBlock(Rows, Block.Start, c);
+				Content = this.ParseBlock(Rows, Block.Positions, Block.Start, c);
 				if (Content.First != null)
 				{
 					if (Content.First.Value is InlineHTML && Content.Last.Value is InlineHTML)
 						Elements.AddLast(new HtmlBlock(this, Content));
 					else if (Content.First.Next == null && Content.First.Value.OutsideParagraph)
 					{
-						if (Content.First.Value is MarkdownElementChildren &&
-							((MarkdownElementChildren)Content.First.Value).JoinOverParagraphs &&
-							Elements.Last != null && Elements.Last.Value.GetType() == Content.First.Value.GetType())
+						if (Content.First.Value is MarkdownElementChildren MarkdownElementChildren &&
+							MarkdownElementChildren.JoinOverParagraphs && Elements.Last != null &&
+							Elements.Last.Value is MarkdownElementChildren MarkdownElementChildrenLast)
 						{
-							((MarkdownElementChildren)Elements.Last.Value).AddChildren(((MarkdownElementChildren)Content.First.Value).Children);
+							MarkdownElementChildrenLast.AddChildren(MarkdownElementChildren.Children);
 						}
 						else
 							Elements.AddLast(Content.First.Value);
@@ -942,16 +996,16 @@ namespace Waher.Content.Markdown
 				return Elements;
 		}
 
-		private LinkedList<MarkdownElement> ParseBlock(string[] Rows)
+		private LinkedList<MarkdownElement> ParseBlock(string[] Rows, int[] Positions)
 		{
-			return this.ParseBlock(Rows, 0, Rows.Length - 1);
+			return this.ParseBlock(Rows, Positions, 0, Rows.Length - 1);
 		}
 
-		private LinkedList<MarkdownElement> ParseBlock(string[] Rows, int StartRow, int EndRow)
+		private LinkedList<MarkdownElement> ParseBlock(string[] Rows, int[] Positions, int StartRow, int EndRow)
 		{
 			LinkedList<MarkdownElement> Elements = new LinkedList<MarkdownElement>();
 			bool PreserveCrLf = Rows[StartRow].StartsWith("<") && Rows[EndRow].EndsWith(">");
-			BlockParseState State = new BlockParseState(Rows, StartRow, EndRow, PreserveCrLf);
+			BlockParseState State = new BlockParseState(Rows, Positions, StartRow, EndRow, PreserveCrLf);
 
 			this.ParseBlock(State, (char)0, 1, Elements);
 
@@ -1001,27 +1055,32 @@ namespace Waher.Content.Markdown
 						break;
 
 					case '*':
-						if ((ch2 = State.PeekNextCharSameRow()) <= ' ' && ch2 > 0)
+						if (((ch2 = State.PeekNextCharSameRow()) <= ' ' && ch2 > 0) || ch2 == 160)
 						{
 							if (State.IsFirstCharOnLine)
 							{
 								this.AppendAnyText(Elements, Text);
 
-								while ((ch2 = State.PeekNextCharSameRow()) <= ' ' && ch2 > 0)
+								while (((ch2 = State.PeekNextCharSameRow()) <= ' ' && ch2 > 0) || ch2 == 160)
 									State.NextCharSameRow();
 
 								UnnumberedItem Item;
 								List<string> Rows = new List<string>();
+								List<int> Positions = new List<int>()
+								{
+									State.CurrentPosition
+								};
+
 								Rows.Add(State.RestOfRow());
 
 								while (!State.EOF)
 								{
 									if ((ch2 = State.PeekNextCharSameRow()) == '*' || ch2 == '+' || ch2 == '-')
 									{
-										Item = new UnnumberedItem(this, ch + " ", new NestedBlock(this, this.ParseBlock(Rows.ToArray())));
+										Item = new UnnumberedItem(this, ch + " ", new NestedBlock(this, this.ParseBlock(Rows.ToArray(), Positions.ToArray())));
 
-										if (Elements.Last != null && Elements.Last.Value is BulletList)
-											((BulletList)Elements.Last.Value).AddChildren(Item);
+										if (Elements.Last != null && Elements.Last.Value is BulletList BulletList)
+											BulletList.AddChildren(Item);
 										else
 											Elements.AddLast(new BulletList(this, Item));
 
@@ -1029,21 +1088,26 @@ namespace Waher.Content.Markdown
 										State.SkipWhitespaceSameRow(3);
 
 										Rows.Clear();
+										Positions.Clear();
+
+										Positions.Add(State.CurrentPosition);
 										Rows.Add(State.RestOfRow());
 									}
 									else
 									{
 										State.SkipWhitespaceSameRow(4);
+
+										Positions.Add(State.CurrentPosition);
 										Rows.Add(State.RestOfRow());
 									}
 								}
 
 								if (Rows.Count > 0)
 								{
-									Item = new UnnumberedItem(this, ch + " ", new NestedBlock(this, this.ParseBlock(Rows.ToArray())));
+									Item = new UnnumberedItem(this, ch + " ", new NestedBlock(this, this.ParseBlock(Rows.ToArray(), Positions.ToArray())));
 
-									if (Elements.Last != null && Elements.Last.Value is BulletList)
-										((BulletList)Elements.Last.Value).AddChildren(Item);
+									if (Elements.Last != null && Elements.Last.Value is BulletList BulletList)
+										BulletList.AddChildren(Item);
 									else
 										Elements.AddLast(new BulletList(this, Item));
 								}
@@ -1073,15 +1137,6 @@ namespace Waher.Content.Markdown
 
 							switch (ch2)
 							{
-								case '*':
-									State.NextCharSameRow();
-
-									if (this.ParseBlock(State, '*', 2, ChildElements))
-										Elements.AddLast(new Strong(this, ChildElements));
-									else
-										this.FixSyntaxError(Elements, "**", ChildElements);
-									break;
-
 								case ')':
 									State.NextCharSameRow();
 									Elements.AddLast(new EmojiReference(this, EmojiUtilities.Emoji_wink));
@@ -1144,7 +1199,7 @@ namespace Waher.Content.Markdown
 						break;
 
 					case '_':
-						if (State.PeekNextCharSameRow() <= ' ')
+						if ((ch2 = State.PeekNextCharSameRow()) <= ' ' || ch2 == 160)
 						{
 							Text.Append('_');
 							break;
@@ -1172,7 +1227,7 @@ namespace Waher.Content.Markdown
 						break;
 
 					case '~':
-						if (State.PeekNextCharSameRow() <= ' ')
+						if ((ch2 = State.PeekNextCharSameRow()) <= ' ' || ch2 == 160)
 						{
 							Text.Append('~');
 							break;
@@ -1311,7 +1366,7 @@ namespace Waher.Content.Markdown
 										Elements.AddLast(new FootnoteReference(this, Title));
 										this.footnoteNumbers[Title] = ++this.lastFootnote;
 										this.footnoteOrder.Add(Title);
-										this.footnotes[Title] = new Footnote(this, Title, new Paragraph(this, this.ParseBlock(new string[] { Url })));
+										this.footnotes[Title] = new Footnote(this, Title, new Paragraph(this, this.ParseBlock(new string[] { Url }, new int[] { State.CurrentPosition - 1 - Url.Length })));
 									}
 								}
 								else
@@ -1321,17 +1376,92 @@ namespace Waher.Content.Markdown
 							}
 						}
 
+						char[] chs;
+
+						if (FirstCharOnLine && (((chs = State.PeekNextChars(3))[0] == ' ' || chs[0] == 'x' || chs[0] == 'X') && chs[1] == ']' && ((chs[2] <= ' ' && chs[2] > 0) || chs[2] == 160)))
+						{
+							State.NextChar();
+							State.NextChar();
+							State.NextChar();
+
+							this.AppendAnyText(Elements, Text);
+
+							while (((ch2 = State.PeekNextCharSameRow()) <= ' ' && ch2 > 0) || ch2 == 160)
+								State.NextCharSameRow();
+
+							TaskItem Item;
+							List<string> Rows = new List<string>()
+							{
+								State.RestOfRow()
+							};
+							List<int> Positions = new List<int>()
+							{
+								State.CurrentPosition
+							};
+							bool Checked = (chs[0] != ' ');
+
+							while (!State.EOF)
+							{
+								if ((chs = State.PeekNextChars(4))[0] == '[' &&
+									(chs[1] == ' ' || chs[1] == 'x' || chs[1] == 'X') &&
+									chs[2] == ']' && ((chs[3] <= ' ' && chs[3] > 0) || chs[3] == 160))
+								{
+									State.NextChar();
+									State.NextChar();
+									State.NextChar();
+									State.NextChar();
+
+									while (((ch2 = State.PeekNextCharSameRow()) <= ' ' && ch2 > 0) || ch2 == 160)
+										State.NextCharSameRow();
+
+									Item = new TaskItem(this, Checked, new NestedBlock(this, this.ParseBlock(Rows.ToArray(), Positions.ToArray())));
+
+									if (Elements.Last != null && Elements.Last.Value is TaskList TaskList)
+										TaskList.AddChildren(Item);
+									else
+										Elements.AddLast(new TaskList(this, Item));
+
+									Rows.Clear();
+									Positions.Clear();
+
+									Positions.Add(State.CurrentPosition);
+									Rows.Add(State.RestOfRow());
+
+									Checked = (chs[1] != ' ');
+								}
+								else
+								{
+									State.SkipWhitespaceSameRow(4);
+									Positions.Add(State.CurrentPosition);
+									Rows.Add(State.RestOfRow());
+								}
+							}
+
+							if (Rows.Count > 0)
+							{
+								Item = new TaskItem(this, Checked, new NestedBlock(this, this.ParseBlock(Rows.ToArray(), Positions.ToArray())));
+
+								if (Elements.Last != null && Elements.Last.Value is TaskList TaskList)
+									TaskList.AddChildren(Item);
+								else
+									Elements.AddLast(new TaskList(this, Item));
+							}
+
+							break;
+						}
+
 						ChildElements = new LinkedList<MarkdownElement>();
 						this.AppendAnyText(Elements, Text);
 
 						if (this.ParseBlock(State, ']', 1, ChildElements))
 						{
-							ch2 = State.NextNonWhitespaceChar();
+							ch2 = State.PeekNextNonWhitespaceChar();
 							if (ch2 == '(')
 							{
+								State.NextNonWhitespaceChar();
 								Title = string.Empty;
 
-								while ((ch2 = State.NextCharSameRow()) != 0 && ch2 > ' ' && ch2 != ')')
+								while ((ch2 = State.NextCharSameRow()) != 0 && ch2 > ' ' && ch2 != ')' && ch2 != 160)
 									Text.Append(ch2);
 
 								Url = Text.ToString();
@@ -1340,13 +1470,13 @@ namespace Waher.Content.Markdown
 								if (Url.StartsWith("<") && Url.EndsWith(">"))
 									Url = Url.Substring(1, Url.Length - 2);
 
-								if (ch2 <= ' ')
+								if (ch2 <= ' ' || ch2 == 160)
 								{
 									ch2 = State.PeekNextNonWhitespaceChar();
 
 									if (ch2 == '"' || ch2 == '\'')
 									{
-										State.NextChar();
+										State.NextNonWhitespaceChar();
 										while ((ch3 = State.NextCharSameRow()) != 0 && ch3 != ch2)
 											Text.Append(ch3);
 
@@ -1368,9 +1498,11 @@ namespace Waher.Content.Markdown
 
 								if (ch == '!')
 								{
-									List<MultimediaItem> Items = new List<MultimediaItem>();
+									List<MultimediaItem> Items = new List<MultimediaItem>()
+									{
+										new MultimediaItem(this, Url, Title, Width, Height)
+									};
 
-									Items.Add(new MultimediaItem(this, Url, Title, Width, Height));
 									if (!this.includesTableOfContents && string.Compare(Url, "ToC", true) == 0)
 										this.includesTableOfContents = true;
 
@@ -1380,7 +1512,7 @@ namespace Waher.Content.Markdown
 									{
 										Title = string.Empty;
 
-										while ((ch2 = State.NextCharSameRow()) != 0 && ch2 > ' ' && ch2 != ')')
+										while ((ch2 = State.NextCharSameRow()) != 0 && ch2 > ' ' && ch2 != ')' && ch2 != 160)
 											Text.Append(ch2);
 
 										Url = Text.ToString();
@@ -1389,7 +1521,7 @@ namespace Waher.Content.Markdown
 										if (Url.StartsWith("<") && Url.EndsWith(">"))
 											Url = Url.Substring(1, Url.Length - 2);
 
-										if (ch2 <= ' ')
+										if (ch2 <= ' ' || ch2 == 160)
 										{
 											ch2 = State.PeekNextNonWhitespaceChar();
 
@@ -1428,19 +1560,20 @@ namespace Waher.Content.Markdown
 							}
 							else if (ch2 == ':' && FirstCharOnLine)
 							{
+								State.NextNonWhitespaceChar();
 								ch2 = State.NextChar();
-								while (ch2 != 0 && ch2 <= ' ')
+								while ((ch2 != 0 && ch2 <= ' ') || ch2 == 160)
 									ch2 = State.NextChar();
 
-								if (ch2 > ' ')
+								if (ch2 > ' ' && ch2 != 160)
 								{
 									List<MultimediaItem> Items = new List<MultimediaItem>();
 
 									Text.Append(ch2);
 
-									while (ch2 > ' ' && ch2 != '[')
+									while (ch2 > ' ' && ch2 != 160 && ch2 != '[')
 									{
-										while ((ch2 = State.NextCharSameRow()) != 0 && ch2 > ' ')
+										while ((ch2 = State.NextCharSameRow()) != 0 && ch2 > ' ' && ch2 != 160)
 											Text.Append(ch2);
 
 										Url = Text.ToString();
@@ -1487,6 +1620,7 @@ namespace Waher.Content.Markdown
 							}
 							else if (ch2 == '[')
 							{
+								State.NextNonWhitespaceChar();
 								while ((ch2 = State.NextCharSameRow()) != 0 && ch2 != ']')
 									Text.Append(ch2);
 
@@ -1510,10 +1644,12 @@ namespace Waher.Content.Markdown
 								else
 									Elements.AddLast(new LinkReference(this, ChildElements, Title));
 							}
+							else if (ch != '!')
+								Elements.AddLast(new SubScript(this, ChildElements));
 							else
 							{
-								this.FixSyntaxError(Elements, ch == '!' ? "![" : "[", ChildElements);
-								Elements.AddLast(new InlineText(this, "]"));
+								this.FixSyntaxError(Elements, "![", ChildElements);
+								Elements.AddLast(new InlineText(this, "]" + ch2));
 							}
 						}
 						else
@@ -1820,6 +1956,16 @@ namespace Waher.Content.Markdown
 					case '{':
 						if (this.settings.Variables == null)
 						{
+							int Pos = State.CurrentPosition - 1;
+							if (Pos < this.markdownText.Length && this.markdownText[Pos] == '{')
+							{
+								if (this.toInsert == null)
+									this.toInsert = new SortedDictionary<int, string>(new ReversePosition());
+
+								this.toInsert[Pos] = "\\";
+								if (Pos > 0 && ((ch2 = this.markdownText[Pos - 1]) == ':' || ch2 == '*' || ch2 == '='))
+									this.toInsert[Pos - 1] = "\\";  // To avoid creating a smiley.
+							}
 							Text.Append(ch);
 							break;
 						}
@@ -1848,11 +1994,37 @@ namespace Waher.Content.Markdown
 						}
 						catch (Exception ex)
 						{
-							while ((ex is TargetInvocationException || ex is AggregateException) && ex.InnerException != null)
-								ex = ex.InnerException;
+							ex = Log.UnnestException(ex);
 
-							string[] Rows = ex.Message.Replace("\r\n", "\n").Split(CommonTypes.CRLF);
-							Elements.AddLast(new CodeBlock(this, Rows, 0, Rows.Length - 1, 0));
+							if (ex is AggregateException ex2)
+							{
+								StringBuilder sb = new StringBuilder();
+
+								foreach (Exception ex3 in ex2.InnerExceptions)
+								{
+									this.CheckException(ex3);
+
+									Log.Critical(ex3);
+
+									sb.Append("<p><font style=\"color:red\">");
+									sb.Append(XML.HtmlValueEncode(ex3.Message));
+									sb.Append("</font></p>");
+								}
+
+								string[] Rows = ex.Message.Replace("\r\n", "\n").Split(CommonTypes.CRLF);
+								Elements.AddLast(new CodeBlock(this, Rows, 0, Rows.Length - 1, 0));
+							}
+							else
+							{
+								this.CheckException(ex);
+
+								Log.Critical(ex);
+
+								string[] Rows = ex.Message.Replace("\r\n", "\n").Split(CommonTypes.CRLF);
+								Elements.AddLast(new CodeBlock(this, Rows, 0, Rows.Length - 1, 0));
+							}
+
+							this.CheckException(ex);
 						}
 
 						break;
@@ -1909,27 +2081,32 @@ namespace Waher.Content.Markdown
 							else
 								Text.Append(ch);
 						}
-						else if (ch2 <= ' ' && ch2 > 0)
+						else if ((ch2 <= ' ' && ch2 > 0) || ch2 == 160)
 						{
 							if (State.IsFirstCharOnLine)
 							{
 								this.AppendAnyText(Elements, Text);
 
-								while ((ch2 = State.PeekNextCharSameRow()) <= ' ' && ch2 > 0)
+								while (((ch2 = State.PeekNextCharSameRow()) <= ' ' && ch2 > 0) || ch2 == 160)
 									State.NextCharSameRow();
 
 								UnnumberedItem Item;
 								List<string> Rows = new List<string>();
+								List<int> Positions = new List<int>()
+								{
+									State.CurrentPosition
+								};
+
 								Rows.Add(State.RestOfRow());
 
 								while (!State.EOF)
 								{
 									if ((ch2 = State.PeekNextCharSameRow()) == '*' || ch2 == '+' || ch2 == '-')
 									{
-										Item = new UnnumberedItem(this, ch + " ", new NestedBlock(this, this.ParseBlock(Rows.ToArray())));
+										Item = new UnnumberedItem(this, ch + " ", new NestedBlock(this, this.ParseBlock(Rows.ToArray(), Positions.ToArray())));
 
-										if (Elements.Last != null && Elements.Last.Value is BulletList)
-											((BulletList)Elements.Last.Value).AddChildren(Item);
+										if (Elements.Last != null && Elements.Last.Value is BulletList BulletList)
+											BulletList.AddChildren(Item);
 										else
 											Elements.AddLast(new BulletList(this, Item));
 
@@ -1937,21 +2114,26 @@ namespace Waher.Content.Markdown
 										State.SkipWhitespaceSameRow(3);
 
 										Rows.Clear();
+										Positions.Clear();
+
+										Positions.Add(State.CurrentPosition);
 										Rows.Add(State.RestOfRow());
 									}
 									else
 									{
 										State.SkipWhitespaceSameRow(4);
+
+										Positions.Add(State.CurrentPosition);
 										Rows.Add(State.RestOfRow());
 									}
 								}
 
 								if (Rows.Count > 0)
 								{
-									Item = new UnnumberedItem(this, ch + " ", new NestedBlock(this, this.ParseBlock(Rows.ToArray())));
+									Item = new UnnumberedItem(this, ch + " ", new NestedBlock(this, this.ParseBlock(Rows.ToArray(), Positions.ToArray())));
 
-									if (Elements.Last != null && Elements.Last.Value is BulletList)
-										((BulletList)Elements.Last.Value).AddChildren(Item);
+									if (Elements.Last != null && Elements.Last.Value is BulletList BulletList)
+										BulletList.AddChildren(Item);
 									else
 										Elements.AddLast(new BulletList(this, Item));
 								}
@@ -1971,27 +2153,32 @@ namespace Waher.Content.Markdown
 							this.AppendAnyText(Elements, Text);
 							Elements.AddLast(new HtmlEntity(this, "PlusMinus"));
 						}
-						else if (ch2 <= ' ' && ch2 > 0)
+						else if ((ch2 <= ' ' && ch2 > 0) || ch2 == 160)
 						{
 							if (State.IsFirstCharOnLine)
 							{
 								this.AppendAnyText(Elements, Text);
 
-								while ((ch2 = State.PeekNextCharSameRow()) <= ' ' && ch2 > 0)
+								while (((ch2 = State.PeekNextCharSameRow()) <= ' ' && ch2 > 0) || ch2 == 160)
 									State.NextCharSameRow();
 
 								UnnumberedItem Item;
 								List<string> Rows = new List<string>();
+								List<int> Positions = new List<int>()
+								{
+									State.CurrentPosition
+								};
+
 								Rows.Add(State.RestOfRow());
 
 								while (!State.EOF)
 								{
 									if ((ch2 = State.PeekNextCharSameRow()) == '*' || ch2 == '+' || ch2 == '-')
 									{
-										Item = new UnnumberedItem(this, ch + " ", new NestedBlock(this, this.ParseBlock(Rows.ToArray())));
+										Item = new UnnumberedItem(this, ch + " ", new NestedBlock(this, this.ParseBlock(Rows.ToArray(), Positions.ToArray())));
 
-										if (Elements.Last != null && Elements.Last.Value is BulletList)
-											((BulletList)Elements.Last.Value).AddChildren(Item);
+										if (Elements.Last != null && Elements.Last.Value is BulletList BulletList)
+											BulletList.AddChildren(Item);
 										else
 											Elements.AddLast(new BulletList(this, Item));
 
@@ -1999,21 +2186,26 @@ namespace Waher.Content.Markdown
 										State.SkipWhitespaceSameRow(3);
 
 										Rows.Clear();
+										Positions.Clear();
+
+										Positions.Add(State.CurrentPosition);
 										Rows.Add(State.RestOfRow());
 									}
 									else
 									{
 										State.SkipWhitespaceSameRow(4);
+
+										Positions.Add(State.CurrentPosition);
 										Rows.Add(State.RestOfRow());
 									}
 								}
 
 								if (Rows.Count > 0)
 								{
-									Item = new UnnumberedItem(this, ch + " ", new NestedBlock(this, this.ParseBlock(Rows.ToArray())));
+									Item = new UnnumberedItem(this, ch + " ", new NestedBlock(this, this.ParseBlock(Rows.ToArray(), Positions.ToArray())));
 
-									if (Elements.Last != null && Elements.Last.Value is BulletList)
-										((BulletList)Elements.Last.Value).AddChildren(Item);
+									if (Elements.Last != null && Elements.Last.Value is BulletList BulletList)
+										BulletList.AddChildren(Item);
 									else
 										Elements.AddLast(new BulletList(this, Item));
 								}
@@ -2030,15 +2222,20 @@ namespace Waher.Content.Markdown
 						{
 							State.NextCharSameRow();
 
-							if ((ch2 = State.PeekNextCharSameRow()) <= ' ' && ch2 > 0)
+							if (((ch2 = State.PeekNextCharSameRow()) <= ' ' && ch2 > 0) || ch2 == 160)
 							{
 								this.AppendAnyText(Elements, Text);
 
-								while ((ch2 = State.PeekNextCharSameRow()) <= ' ' && ch2 > 0)
+								while (((ch2 = State.PeekNextCharSameRow()) <= ' ' && ch2 > 0) || ch2 == 160)
 									State.NextCharSameRow();
 
 								UnnumberedItem Item;
 								List<string> Rows = new List<string>();
+								List<int> Positions = new List<int>()
+								{
+									State.CurrentPosition
+								};
+
 								Rows.Add(State.RestOfRow());
 
 								while (!State.EOF)
@@ -2048,10 +2245,10 @@ namespace Waher.Content.Markdown
 										State.NextCharSameRow();
 										if ((ch3 = State.PeekNextCharSameRow()) == '.')
 										{
-											Item = new UnnumberedItem(this, "#. ", new NestedBlock(this, this.ParseBlock(Rows.ToArray())));
+											Item = new UnnumberedItem(this, "#. ", new NestedBlock(this, this.ParseBlock(Rows.ToArray(), Positions.ToArray())));
 
-											if (Elements.Last != null && Elements.Last.Value is NumberedList)
-												((NumberedList)Elements.Last.Value).AddChildren(Item);
+											if (Elements.Last != null && Elements.Last.Value is NumberedList NumberedList)
+												NumberedList.AddChildren(Item);
 											else
 												Elements.AddLast(new NumberedList(this, Item));
 
@@ -2059,24 +2256,34 @@ namespace Waher.Content.Markdown
 											State.SkipWhitespaceSameRow(3);
 
 											Rows.Clear();
+											Positions.Clear();
+
+											Positions.Add(State.CurrentPosition);
 											Rows.Add(State.RestOfRow());
 										}
 										else
 										{
 											State.SkipWhitespaceSameRow(4);
+
+											Positions.Add(State.CurrentPosition - 1);
 											Rows.Add("#" + State.RestOfRow());
 										}
 									}
 									else
+									{
+										State.SkipWhitespaceSameRow(4);
+
+										Positions.Add(State.CurrentPosition);
 										Rows.Add(State.RestOfRow());
+									}
 								}
 
 								if (Rows.Count > 0)
 								{
-									Item = new UnnumberedItem(this, "#. ", new NestedBlock(this, this.ParseBlock(Rows.ToArray())));
+									Item = new UnnumberedItem(this, "#. ", new NestedBlock(this, this.ParseBlock(Rows.ToArray(), Positions.ToArray())));
 
-									if (Elements.Last != null && Elements.Last.Value is NumberedList)
-										((NumberedList)Elements.Last.Value).AddChildren(Item);
+									if (Elements.Last != null && Elements.Last.Value is NumberedList NumberedList)
+										NumberedList.AddChildren(Item);
 									else
 										Elements.AddLast(new NumberedList(this, Item));
 								}
@@ -2264,18 +2471,22 @@ namespace Waher.Content.Markdown
 
 							if (ch2 == '.')
 							{
-								int Index, Index2;
-
 								State.NextCharSameRow();
-								if ((ch2 = State.PeekNextCharSameRow()) <= ' ' && ch2 > 0 && int.TryParse(sb.ToString(), out Index))
+								if ((((ch2 = State.PeekNextCharSameRow()) <= ' ' && ch2 > 0) || ch2 == 160) &&
+									int.TryParse(sb.ToString(), out int Index))
 								{
 									this.AppendAnyText(Elements, Text);
 
-									while ((ch2 = State.PeekNextCharSameRow()) <= ' ' && ch2 > 0)
+									while (((ch2 = State.PeekNextCharSameRow()) <= ' ' && ch2 > 0) || ch2 == 160)
 										State.NextCharSameRow();
 
 									NumberedItem Item;
 									List<string> Rows = new List<string>();
+									List<int> Positions = new List<int>()
+									{
+										State.CurrentPosition
+									};
+
 									Rows.Add(State.RestOfRow());
 
 									while (!State.EOF)
@@ -2286,12 +2497,12 @@ namespace Waher.Content.Markdown
 											while ((ch2 = State.NextCharSameRow()) >= '0' && ch2 <= '9')
 												sb.Append(ch2);
 
-											if (ch2 == '.' && int.TryParse(sb.ToString(), out Index2))
+											if (ch2 == '.' && int.TryParse(sb.ToString(), out int Index2))
 											{
-												Item = new NumberedItem(this, Index, new NestedBlock(this, this.ParseBlock(Rows.ToArray())));
+												Item = new NumberedItem(this, Index, new NestedBlock(this, this.ParseBlock(Rows.ToArray(), Positions.ToArray())));
 
-												if (Elements.Last != null && Elements.Last.Value is NumberedList)
-													((NumberedList)Elements.Last.Value).AddChildren(Item);
+												if (Elements.Last != null && Elements.Last.Value is NumberedList NumberedList)
+													NumberedList.AddChildren(Item);
 												else
 													Elements.AddLast(new NumberedList(this, Item));
 
@@ -2299,25 +2510,36 @@ namespace Waher.Content.Markdown
 												State.SkipWhitespaceSameRow(3);
 
 												Rows.Clear();
+												Positions.Clear();
+
+												Positions.Add(State.CurrentPosition);
 												Rows.Add(State.RestOfRow());
 												Index = Index2;
 											}
 											else
 											{
 												State.SkipWhitespaceSameRow(4);
-												Rows.Add(sb.ToString() + ch2 + State.RestOfRow());
+
+												string s = sb.ToString();
+												Positions.Add(State.CurrentPosition - 1 - s.Length);
+												Rows.Add(s + ch2 + State.RestOfRow());
 											}
 										}
 										else
+										{
+											State.SkipWhitespaceSameRow(4);
+
+											Positions.Add(State.CurrentPosition);
 											Rows.Add(State.RestOfRow());
+										}
 									}
 
 									if (Rows.Count > 0)
 									{
-										Item = new NumberedItem(this, Index, new NestedBlock(this, this.ParseBlock(Rows.ToArray())));
+										Item = new NumberedItem(this, Index, new NestedBlock(this, this.ParseBlock(Rows.ToArray(), Positions.ToArray())));
 
-										if (Elements.Last != null && Elements.Last.Value is NumberedList)
-											((NumberedList)Elements.Last.Value).AddChildren(Item);
+										if (Elements.Last != null && Elements.Last.Value is NumberedList NumberedList)
+											NumberedList.AddChildren(Item);
 										else
 											Elements.AddLast(new NumberedList(this, Item));
 									}
@@ -2735,55 +2957,197 @@ namespace Waher.Content.Markdown
 
 					case '^':
 						ch2 = State.PeekNextCharSameRow();
-						if (ch2 == 'a' || ch2 == 'o' || (ch2 >= '0' && ch2 <= '3') || ch2 == 'T')
+						switch (ch2)
 						{
-							State.NextCharSameRow();
-							this.AppendAnyText(Elements, Text);
+							case 'a':
+								State.NextCharSameRow();
+								this.AppendAnyText(Elements, Text);
+								Elements.AddLast(new HtmlEntity(this, "ordf"));
+								break;
 
-							switch (ch2)
-							{
-								case 'a':
-									Elements.AddLast(new HtmlEntity(this, "ordf"));
-									break;
+							case 'o':
+								State.NextCharSameRow();
+								this.AppendAnyText(Elements, Text);
+								Elements.AddLast(new HtmlEntity(this, "ordm"));
+								break;
 
-								case 'o':
-									Elements.AddLast(new HtmlEntity(this, "ordm"));
-									break;
+							case '0':
+								State.NextCharSameRow();
+								this.AppendAnyText(Elements, Text);
+								Elements.AddLast(new HtmlEntity(this, "deg"));
+								break;
 
-								case '0':
-									Elements.AddLast(new HtmlEntity(this, "deg"));
-									break;
+							case '1':
+								State.NextCharSameRow();
+								this.AppendAnyText(Elements, Text);
+								Elements.AddLast(new HtmlEntityUnicode(this, 185));
+								break;
 
-								case '1':
-									Elements.AddLast(new HtmlEntityUnicode(this, 185));
-									break;
+							case '2':
+								State.NextCharSameRow();
+								this.AppendAnyText(Elements, Text);
+								Elements.AddLast(new HtmlEntityUnicode(this, 178));
+								break;
 
-								case '2':
-									Elements.AddLast(new HtmlEntityUnicode(this, 178));
-									break;
+							case '3':
+								State.NextCharSameRow();
+								this.AppendAnyText(Elements, Text);
+								Elements.AddLast(new HtmlEntityUnicode(this, 179));
+								break;
 
-								case '3':
-									Elements.AddLast(new HtmlEntityUnicode(this, 179));
-									break;
+							case '4':
+							case '5':
+							case '6':
+							case '7':
+							case '8':
+							case '9':
+							case 'b':
+							case 'c':
+							case 'd':
+							case 'e':
+							case 'f':
+							case 'g':
+							case 'h':
+							case 'i':
+							case 'j':
+							case 'k':
+							case 'l':
+							case 'm':
+							case 'p':
+							case 'q':
+							case 'u':
+							case 'v':
+							case 'w':
+							case 'x':
+							case 'y':
+							case 'z':
+							case 'A':
+							case 'B':
+							case 'C':
+							case 'D':
+							case 'E':
+							case 'F':
+							case 'G':
+							case 'H':
+							case 'I':
+							case 'J':
+							case 'K':
+							case 'L':
+							case 'M':
+							case 'N':
+							case 'O':
+							case 'P':
+							case 'Q':
+							case 'R':
+							case 'S':
+							case 'U':
+							case 'V':
+							case 'W':
+							case 'X':
+							case 'Y':
+							case 'Z':
+								State.NextCharSameRow();
+								this.AppendAnyText(Elements, Text);
+								Elements.AddLast(new SuperScript(this, new string(ch2, 1)));
+								break;
 
-								case 'T':
-									ch3 = State.PeekNextCharSameRow();
-									if (ch3 == 'M')
-									{
-										State.NextCharSameRow();
-										Elements.AddLast(new HtmlEntity(this, "trade"));
-									}
-									else
-										Text.Append("^T");
-									break;
-							}
+							case 'T':
+								State.NextCharSameRow();
+								this.AppendAnyText(Elements, Text);
+
+								if (State.PeekNextCharSameRow() == 'M')
+								{
+									State.NextCharSameRow();
+									Elements.AddLast(new HtmlEntity(this, "trade"));
+								}
+								else
+									Elements.AddLast(new SuperScript(this, "T"));
+								break;
+
+							case 's':
+								State.NextCharSameRow();
+								this.AppendAnyText(Elements, Text);
+
+								if (State.PeekNextCharSameRow() == 't')
+								{
+									State.NextCharSameRow();
+									Elements.AddLast(new SuperScript(this, "st"));
+								}
+								else
+									Elements.AddLast(new SuperScript(this, "s"));
+								break;
+
+							case 'n':
+								State.NextCharSameRow();
+								this.AppendAnyText(Elements, Text);
+
+								if (State.PeekNextCharSameRow() == 'd')
+								{
+									State.NextCharSameRow();
+									Elements.AddLast(new SuperScript(this, "nd"));
+								}
+								else
+									Elements.AddLast(new SuperScript(this, "n"));
+								break;
+
+							case 'r':
+								State.NextCharSameRow();
+								this.AppendAnyText(Elements, Text);
+
+								if (State.PeekNextCharSameRow() == 'd')
+								{
+									State.NextCharSameRow();
+									Elements.AddLast(new SuperScript(this, "rd"));
+								}
+								else
+									Elements.AddLast(new SuperScript(this, "r"));
+								break;
+
+							case 't':
+								State.NextCharSameRow();
+								this.AppendAnyText(Elements, Text);
+
+								if (State.PeekNextCharSameRow() == 'h')
+								{
+									State.NextCharSameRow();
+									Elements.AddLast(new SuperScript(this, "th"));
+								}
+								else
+									Elements.AddLast(new SuperScript(this, "t"));
+								break;
+
+							case '(':
+								State.NextCharSameRow();
+								this.AppendAnyText(Elements, Text);
+
+								ChildElements = new LinkedList<MarkdownElement>();
+
+								if (this.ParseBlock(State, ')', 1, ChildElements))
+									Elements.AddLast(new SuperScript(this, ChildElements));
+								else
+									this.FixSyntaxError(Elements, "^(", ChildElements);
+								break;
+
+							case '[':
+								State.NextCharSameRow();
+								this.AppendAnyText(Elements, Text);
+
+								ChildElements = new LinkedList<MarkdownElement>();
+
+								if (this.ParseBlock(State, ']', 1, ChildElements))
+									Elements.AddLast(new SuperScript(this, ChildElements));
+								else
+									this.FixSyntaxError(Elements, "^]", ChildElements);
+								break;
+
+							default:
+								Text.Append('^');
+								break;
 						}
-						else
-							Text.Append('^');
 						break;
 
 					case ':':
-						if ((ch2 = State.PeekNextCharSameRow()) <= ' ')
+						if ((ch2 = State.PeekNextCharSameRow()) <= ' ' || ch2 == 160)
 						{
 							if (State.IsFirstCharOnLine && ch2 > 0)
 							{
@@ -2794,7 +3158,7 @@ namespace Waher.Content.Markdown
 
 								for (i = State.Start; i < State.Current; i++)
 								{
-									Item = this.ParseBlock(State.Rows, i, i);
+									Item = this.ParseBlock(State.Rows, State.Positions, i, i);
 									if (Item.First == null)
 										continue;
 
@@ -2820,33 +3184,43 @@ namespace Waher.Content.Markdown
 								Elements.Clear();
 								Elements.AddLast(DefinitionList);
 
-								while ((ch2 = State.PeekNextCharSameRow()) <= ' ' && ch2 > 0)
+								while (((ch2 = State.PeekNextCharSameRow()) <= ' ' && ch2 > 0) || ch2 == 160)
 									State.NextCharSameRow();
 
 								List<string> Rows = new List<string>();
+								List<int> Positions = new List<int>()
+								{
+									State.CurrentPosition
+								};
+
 								Rows.Add(State.RestOfRow());
 
 								while (!State.EOF)
 								{
 									if ((ch2 = State.PeekNextCharSameRow()) == ':')
 									{
-										DefinitionList.AddChildren(new DefinitionDescriptions(this, new NestedBlock(this, this.ParseBlock(Rows.ToArray()))));
+										DefinitionList.AddChildren(new DefinitionDescriptions(this, new NestedBlock(this, this.ParseBlock(Rows.ToArray(), Positions.ToArray()))));
 
 										State.NextCharSameRow();
 										State.SkipWhitespaceSameRow(3);
 
 										Rows.Clear();
+										Positions.Clear();
+
+										Positions.Add(State.CurrentPosition);
 										Rows.Add(State.RestOfRow());
 									}
 									else
 									{
 										State.SkipWhitespaceSameRow(4);
+
+										Positions.Add(State.CurrentPosition);
 										Rows.Add(State.RestOfRow());
 									}
 								}
 
 								if (Rows.Count > 0)
-									DefinitionList.AddChildren(new DefinitionDescriptions(this, new NestedBlock(this, this.ParseBlock(Rows.ToArray()))));
+									DefinitionList.AddChildren(new DefinitionDescriptions(this, new NestedBlock(this, this.ParseBlock(Rows.ToArray(), Positions.ToArray()))));
 							}
 							else
 								Text.Append(ch);
@@ -2902,6 +3276,7 @@ namespace Waher.Content.Markdown
 											break;
 
 										default:
+											Text.Append(ch2);
 											ch2 = (char)0;
 											break;
 									}
@@ -2910,18 +3285,17 @@ namespace Waher.Content.Markdown
 										break;
 								}
 
-								while (char.IsLetter(ch2 = State.PeekNextCharSameRow()) || char.IsDigit(ch2) || ch2 == '_' || ch2 == '-')
+								while (char.IsLetter(ch3 = State.PeekNextCharSameRow()) || char.IsDigit(ch3) || ch3 == '_' || ch3 == '-')
 								{
 									State.NextCharSameRow();
-									Text.Append(ch2);
+									Text.Append(ch3);
 								}
 
-								if (ch2 == ':')
+								if (ch3 == ':')
 								{
 									Title = Text.ToString().ToLower();
-									EmojiInfo Emoji;
 
-									if (EmojiUtilities.TryGetEmoji(Title, out Emoji))
+									if (EmojiUtilities.TryGetEmoji(Title, out EmojiInfo Emoji))
 									{
 										State.NextCharSameRow();
 										Elements.AddLast(new EmojiReference(this, Emoji));
@@ -3412,6 +3786,65 @@ namespace Waher.Content.Markdown
 							Text.Append(ch);
 						break;
 
+					case 'h':
+						if (char.IsWhiteSpace(PrevChar) && State.PeekNextCharSameRow() == 't')
+						{
+							FirstCharOnLine = State.IsFirstCharOnLine;
+
+							chs = State.PeekNextChars(7);
+							if (chs[1] == 't' && chs[2] == 'p' &&
+								((chs[3] == ':' && chs[4] == '/' && chs[5] == '/') ||
+								(chs[3] == 's' && chs[4] == ':' && chs[5] == '/' && chs[6] == '/')))
+							{
+								this.AppendAnyText(Elements, Text);
+
+								Text.Clear();
+								Text.Append('h');
+
+								if (chs[3] == ':')
+									ch2 = (char)6;
+								else
+									ch2 = (char)7;
+
+								while (ch2 > 0)
+								{
+									Text.Append(State.NextChar());
+									ch2--;
+								}
+
+								while ((ch2 = State.PeekNextCharSameRow()) > ' ' && ch2 != 160)
+								{
+									Text.Append(ch2);
+									State.NextChar();
+								}
+
+								Url = Text.ToString();
+								Text.Clear();
+
+								if (FirstCharOnLine && State.PeekNextNonWhitespaceCharSameRow() == 0)
+								{
+									IMultimediaContent Handler = Multimedia.GetMultimediaHandler(Url);
+									if (Handler != null && Handler.EmbedInlineLink(Url))
+									{
+										ChildElements = new LinkedList<MarkdownElement>();
+										ChildElements.AddLast(new InlineText(this, Url));
+
+										Elements.AddLast(new Multimedia(this, ChildElements, true,
+											new MultimediaItem(this, Url, string.Empty, null, null)));
+
+										break;
+									}
+								}
+
+								Elements.AddLast(new AutomaticLinkUrl(this, Url));
+							}
+							else
+								Text.Append(ch);
+						}
+						else
+							Text.Append(ch);
+						break;
+
 					case '\\':
 						switch (ch2 = State.PeekNextCharSameRow())
 						{
@@ -3440,6 +3873,7 @@ namespace Waher.Content.Markdown
 							case '=':
 							case ':':
 							case '|':
+							case 'h':
 								Text.Append(ch2);
 								State.NextCharSameRow();
 								break;
@@ -3488,8 +3922,8 @@ namespace Waher.Content.Markdown
 
 		private bool IsLeftQuote(char PrevChar, char NextChar)
 		{
-			bool Left = (PrevChar <= ' ' || char.IsPunctuation(PrevChar) || char.IsSeparator(PrevChar));
-			bool Right = (NextChar <= ' ' || char.IsPunctuation(NextChar) || char.IsSeparator(NextChar));
+			bool Left = (PrevChar <= ' ' || PrevChar == 160 || char.IsPunctuation(PrevChar) || char.IsSeparator(PrevChar));
+			bool Right = (NextChar <= ' ' || NextChar == 160 || char.IsPunctuation(NextChar) || char.IsSeparator(NextChar));
 
 			if (Left && Right)
 			{
@@ -3517,7 +3951,6 @@ namespace Waher.Content.Markdown
 			if (ch >= '0' && ch <= '9')
 			{
 				StringBuilder Text = new StringBuilder();
-				int i;
 
 				Text.Append(ch);
 				State.NextCharSameRow();
@@ -3530,7 +3963,7 @@ namespace Waher.Content.Markdown
 					ch = State.PeekNextCharSameRow();
 				}
 
-				if (int.TryParse(Text.ToString(), out i))
+				if (int.TryParse(Text.ToString(), out int i))
 				{
 					Width = i;
 					Text.Clear();
@@ -3578,6 +4011,7 @@ namespace Waher.Content.Markdown
 		internal static bool IsPrefixedByNumber(string s, out int Numeral)
 		{
 			int i, c = s.Length;
+			char ch;
 
 			i = 0;
 			while (i < c && char.IsDigit(s[i]))
@@ -3593,7 +4027,7 @@ namespace Waher.Content.Markdown
 				return false;
 
 			i++;
-			if (i < c && s[i] > ' ')
+			if (i < c && (ch = s[i]) > ' ' && ch != 160)
 				return false;
 
 			return true;
@@ -3602,6 +4036,7 @@ namespace Waher.Content.Markdown
 		internal static bool IsPrefixedBy(string s, string Prefix, bool MustHaveWhiteSpaceAfter)
 		{
 			int i;
+			char ch;
 
 			if (!s.StartsWith(Prefix))
 				return false;
@@ -3611,7 +4046,7 @@ namespace Waher.Content.Markdown
 				if (s.Length == (i = Prefix.Length))
 					return false;
 
-				return s[i] <= ' ';
+				return (ch = s[i]) <= ' ' || ch == 160;
 			}
 			else
 				return true;
@@ -3643,7 +4078,7 @@ namespace Waher.Content.Markdown
 					Count++;
 					LastSpace = false;
 				}
-				else if (ch2 == ' ')
+				else if (ch2 == ' ' || ch2 == 160)
 				{
 					if (OnlyOneSpace && (!AllowSpaces || LastSpace))
 						return false;
@@ -3661,6 +4096,7 @@ namespace Waher.Content.Markdown
 		{
 			List<Block> Blocks = new List<Block>();
 			List<string> Rows = new List<string>();
+			List<int> Positions = new List<int>();
 			int FirstLineIndent = 0;
 			int LineIndent = 0;
 			int RowStart = 0;
@@ -3671,7 +4107,6 @@ namespace Waher.Content.Markdown
 			bool InRow = false;
 			bool NonWhitespaceInRow = false;
 
-			MarkdownText = MarkdownText.Replace("\r\n", "\n").Replace('\r', '\n');
 			Len = MarkdownText.Length;
 
 			for (Pos = 0; Pos < Len; Pos++)
@@ -3684,13 +4119,15 @@ namespace Waher.Content.Markdown
 					{
 						if (InRow && NonWhitespaceInRow)
 						{
+							Positions.Add(RowStart);
 							Rows.Add(MarkdownText.Substring(RowStart, RowEnd - RowStart + 1));
 							InRow = false;
 						}
 						else
 						{
-							Blocks.Add(new Block(Rows.ToArray(), FirstLineIndent / 4));
+							Blocks.Add(new Block(Rows.ToArray(), Positions.ToArray(), FirstLineIndent / 4));
 							Rows.Clear();
+							Positions.Clear();
 							InBlock = false;
 							InRow = false;
 							FirstLineIndent = 0;
@@ -3702,7 +4139,7 @@ namespace Waher.Content.Markdown
 					LineIndent = 0;
 					NonWhitespaceInRow = false;
 				}
-				else if (ch <= ' ')
+				else if (ch <= ' ' || ch == 160)
 				{
 					if (InBlock)
 					{
@@ -3718,13 +4155,13 @@ namespace Waher.Content.Markdown
 
 							if (ch == '\t')
 								LineIndent += 4;
-							else if (ch == ' ')
+							else if (ch == ' ' || ch == 160)
 								LineIndent++;
 						}
 					}
 					else if (ch == '\t')
 						FirstLineIndent += 4;
-					else if (ch == ' ')
+					else if (ch == ' ' || ch == 160)
 						FirstLineIndent++;
 				}
 				else
@@ -3744,9 +4181,12 @@ namespace Waher.Content.Markdown
 			if (InBlock)
 			{
 				if (InRow && NonWhitespaceInRow)
+				{
+					Positions.Add(RowStart);
 					Rows.Add(MarkdownText.Substring(RowStart, RowEnd - RowStart + 1));
+				}
 
-				Blocks.Add(new Block(Rows.ToArray(), FirstLineIndent / 4));
+				Blocks.Add(new Block(Rows.ToArray(), Positions.ToArray(), FirstLineIndent / 4));
 			}
 
 			return Blocks;
@@ -3769,9 +4209,7 @@ namespace Waher.Content.Markdown
 		/// <param name="Output">HTML will be output here.</param>
 		public void GenerateHTML(StringBuilder Output)
 		{
-			KeyValuePair<string, bool>[] Master;
-
-			if (!string.IsNullOrEmpty(this.fileName) && this.metaData.TryGetValue("MASTER", out Master) && Master.Length == 1)
+			if (!string.IsNullOrEmpty(this.fileName) && this.metaData.TryGetValue("MASTER", out KeyValuePair<string, bool>[] Master) && Master.Length == 1)
 			{
 				this.LoadMasterIfNotLoaded(Master[0].Key);
 				this.master.GenerateHTML(Output, false);
@@ -3784,30 +4222,36 @@ namespace Waher.Content.Markdown
 		{
 			if (this.master == null)
 			{
-				string FileName = Path.Combine(Path.GetDirectoryName(this.fileName), MasterMetaValue);
+				string FileName = this.settings.GetFileName(this.fileName, MasterMetaValue);
 				string MarkdownText = File.ReadAllText(FileName);
-				this.master = new MarkdownDocument(MarkdownText, this.settings);
-				this.master.fileName = FileName;
+				this.master = new MarkdownDocument(MarkdownText, this.settings)
+				{
+					fileName = FileName
+				};
+
 				this.master.syntaxHighlighting |= this.syntaxHighlighting;
 
 				if (this.master.metaData.ContainsKey("MASTER"))
 					throw new Exception("Master documents are not allowed to be embedded in other master documents.");
 
-				KeyValuePair<string, bool>[] Meta0;
-
-				foreach (KeyValuePair<string, KeyValuePair<string, bool>[]> Meta in this.metaData)
-				{
-					if (this.master.metaData.TryGetValue(Meta.Key, out Meta0))
-						this.master.metaData[Meta.Key] = this.Concat(Meta0, Meta.Value);
-					else
-						this.master.metaData[Meta.Key] = Meta.Value;
-				}
+				CopyMetaDataTags(this, this.master);
 
 				this.master.detail = this;
 			}
 		}
 
-		private KeyValuePair<string, bool>[] Concat(KeyValuePair<string, bool>[] Meta1, KeyValuePair<string, bool>[] Meta2)
+		internal static void CopyMetaDataTags(MarkdownDocument From, MarkdownDocument To)
+		{
+			foreach (KeyValuePair<string, KeyValuePair<string, bool>[]> Meta in From.metaData)
+			{
+				if (To.metaData.TryGetValue(Meta.Key, out KeyValuePair<string, bool>[] Meta0))
+					To.metaData[Meta.Key] = Concat(Meta0, Meta.Value);
+				else
+					To.metaData[Meta.Key] = Meta.Value;
+			}
+		}
+
+		private static KeyValuePair<string, bool>[] Concat(KeyValuePair<string, bool>[] Meta1, KeyValuePair<string, bool>[] Meta2)
 		{
 			int c = Meta1.Length;
 			int d = Meta2.Length;
@@ -3823,11 +4267,11 @@ namespace Waher.Content.Markdown
 		/// Generates HTML from the markdown text.
 		/// </summary>
 		/// <param name="Output">HTML will be output here.</param>
+		/// <param name="Inclusion">If the HTML is to be included in another document (true), or if it is a standalone document (false).</param>
 		internal void GenerateHTML(StringBuilder Output, bool Inclusion)
 		{
 			if (!Inclusion)
 			{
-				KeyValuePair<string, bool>[] Values;
 				StringBuilder sb = null;
 				string Description = string.Empty;
 				string Title = string.Empty;
@@ -3838,7 +4282,7 @@ namespace Waher.Content.Markdown
 				Output.AppendLine("<html itemscope itemtype=\"http://schema.org/WebPage\">");
 				Output.AppendLine("<head>");
 
-				if (this.metaData.TryGetValue("TITLE", out Values))
+				if (this.metaData.TryGetValue("TITLE", out KeyValuePair<string, bool>[] Values))
 				{
 					foreach (KeyValuePair<string, bool> P in Values)
 					{
@@ -3968,28 +4412,36 @@ namespace Waher.Content.Markdown
 				{
 					switch (MetaData.Key)
 					{
-						case "COPYRIGHT":
-						case "PREVIOUS":
-						case "PREV":
-						case "NEXT":
+						case "ACCESS-CONTROL-ALLOW-ORIGIN":
 						case "ALTERNATE":
-						case "HELP":
-						case "ICON":
+						case "AUDIOAUTOPLAY":
+						case "AUDIOCONTROLS":
+						case "CONTENT-SECURITY-POLICY":
+						case "COPYRIGHT":
+						case "CACHE-CONTROL":
 						case "CSS":
-						case "JAVASCRIPT":
-						case "SCRIPT":
-						case "TITLE":
-						case "SUBTITLE":
 						case "DATE":
 						case "DESCRIPTION":
+						case "HELP":
+						case "ICON":
+						case "JAVASCRIPT":
+						case "LOGIN":
 						case "MASTER":
-						case "CACHE-CONTROL":
-						case "VARY":
+						case "NEXT":
 						case "PARAMETER":
-						case "AUDIOCONTROLS":
-						case "AUDIOAUTOPLAY":
-						case "VIDEOCONTROLS":
+						case "PUBLIC-KEY-PINS":
+						case "PREV":
+						case "PREVIOUS":
+						case "PRIVILEGE":
+						case "SCRIPT":
+						case "STRICT-TRANSPORT-SECURITY":
+						case "SUBTITLE":
+						case "SUNSET":
+						case "TITLE":
+						case "USERVARIABLE":
+						case "VARY":
 						case "VIDEOAUTOPLAY":
+						case "VIDEOCONTROLS":
 							break;
 
 						case "KEYWORDS":
@@ -4170,16 +4622,13 @@ namespace Waher.Content.Markdown
 
 			if (this.footnoteOrder != null && this.footnoteOrder.Count > 0)
 			{
-				Footnote Footnote;
-				int Nr;
-
 				Output.AppendLine("<div class=\"footnotes\">");
 				Output.AppendLine("<hr />");
 				Output.AppendLine("<ol>");
 
 				foreach (string Key in this.footnoteOrder)
 				{
-					if (this.footnoteNumbers.TryGetValue(Key, out Nr) && this.footnotes.TryGetValue(Key, out Footnote))
+					if (this.footnoteNumbers.TryGetValue(Key, out int Nr) && this.footnotes.TryGetValue(Key, out Footnote Footnote))
 					{
 						Output.Append("<li id=\"fn-");
 						Output.Append(Nr.ToString());
@@ -4187,10 +4636,9 @@ namespace Waher.Content.Markdown
 
 						if (!footnoteBacklinksAdded)
 						{
-							Paragraph P = Footnote.LastChild as Paragraph;
 							InlineHTML Backlink = new InlineHTML(this, "<a href=\"#fnref-" + Nr.ToString() + "\" class=\"footnote-backref\">&#8617;</a>");
 
-							if (P != null)
+							if (Footnote.LastChild is Paragraph P)
 								P.AddChildren(Backlink);
 							else
 								Footnote.AddChildren(Backlink);
@@ -4246,9 +4694,7 @@ namespace Waher.Content.Markdown
 
 			if (IsRelative && !string.IsNullOrEmpty(URL))
 			{
-				Uri AbsoluteUri;
-
-				if (Uri.TryCreate(new Uri(URL), Url, out AbsoluteUri))
+				if (Uri.TryCreate(new Uri(URL), Url, out Uri AbsoluteUri))
 					Url = AbsoluteUri.ToString();
 			}
 
@@ -4277,15 +4723,12 @@ namespace Waher.Content.Markdown
 
 			if (this.footnoteOrder != null && this.footnoteOrder.Count > 0)
 			{
-				Footnote Footnote;
-				int Nr;
-
 				Output.AppendLine(new string('-', 80));
 				Output.AppendLine();
 
 				foreach (string Key in this.footnoteOrder)
 				{
-					if (this.footnoteNumbers.TryGetValue(Key, out Nr) && this.footnotes.TryGetValue(Key, out Footnote))
+					if (this.footnoteNumbers.TryGetValue(Key, out int Nr) && this.footnotes.TryGetValue(Key, out Footnote Footnote))
 					{
 						Output.Append('[');
 						Output.Append(Nr.ToString());
@@ -4397,6 +4840,7 @@ namespace Waher.Content.Markdown
 		/// </summary>
 		/// <param name="Output">XAML will be output here.</param>
 		/// <param name="Settings">XAML settings.</param>
+		/// <param name="Inclusion">If the HTML is to be included in another document (true), or if it is a standalone document (false).</param>
 		internal void GenerateXAML(XmlWriter Output, XamlSettings Settings, bool Inclusion)
 		{
 			if (!Inclusion)
@@ -4500,11 +4944,113 @@ namespace Waher.Content.Markdown
 			}
 		}
 
+		/// <summary>
+		/// Exports the parsed document to XML.
+		/// </summary>
+		/// <returns>XML String.</returns>
+		public string ExportXml()
+		{
+			StringBuilder Xml = new StringBuilder();
+			this.ExportXml(Xml);
+			return Xml.ToString();
+		}
+
+		/// <summary>
+		/// Exports the parsed document to XML.
+		/// </summary>
+		/// <param name="Xml">XML Output.</param>
+		public void ExportXml(StringBuilder Xml)
+		{
+			this.ExportXml(Xml, XML.WriterSettings(true, true));
+		}
+
+		/// <summary>
+		/// Exports the parsed document to XML.
+		/// </summary>
+		/// <param name="Xml">XML Output.</param>
+		/// <param name="Settings">XML Settings.</param>
+		public void ExportXml(StringBuilder Xml, XmlWriterSettings Settings)
+		{
+			using (XmlWriter w = XmlWriter.Create(Xml, Settings))
+			{
+				this.ExportXml(w);
+				w.Flush();
+			}
+		}
+
+		/// <summary>
+		/// Exports the parsed document to XML.
+		/// </summary>
+		/// <param name="Xml">XML Output.</param>
+		public void ExportXml(XmlWriter Xml)
+		{
+			Xml.WriteStartElement("parsedMakdown", "http://waher.se/Schema/Markdown.xsd");
+			Xml.WriteAttributeString("isDynamic", CommonTypes.Encode(this.isDynamic));
+
+			if (this.metaData != null)
+			{
+				Xml.WriteStartElement("metaData");
+
+				foreach (KeyValuePair<string, KeyValuePair<string, bool>[]> P in this.metaData)
+				{
+					Xml.WriteStartElement("tag", P.Key);
+
+					foreach (KeyValuePair<string, bool> P2 in P.Value)
+					{
+						Xml.WriteStartElement("value", P2.Key);
+						Xml.WriteAttributeString("lineBreak", CommonTypes.Encode(P2.Value));
+						Xml.WriteEndElement();
+					}
+
+					Xml.WriteEndElement();
+				}
+
+				Xml.WriteEndElement();
+			}
+
+			Xml.WriteStartElement("elements");
+
+			foreach (MarkdownElement E in this.elements)
+				E.Export(Xml);
+
+			Xml.WriteEndElement();
+
+			if (this.references != null)
+			{
+				Xml.WriteStartElement("references");
+
+				foreach (KeyValuePair<string, Multimedia> P in this.references)
+				{
+					Xml.WriteStartElement("reference");
+					Xml.WriteAttributeString("key", P.Key);
+
+					P.Value.Export(Xml);
+
+					Xml.WriteEndElement();
+				}
+
+				Xml.WriteEndElement();
+			}
+
+			if (this.footnoteOrder != null)
+			{
+				Xml.WriteStartElement("footnotes");
+
+				foreach (string s in this.footnoteOrder)
+				{
+					if (this.footnotes.TryGetValue(s, out Footnote F))
+						F.Export(Xml);
+				}
+
+				Xml.WriteEndElement();
+			}
+
+			Xml.WriteEndElement();
+		}
+
 		internal Multimedia GetReference(string Label)
 		{
-			Multimedia Result;
-
-			if (this.references.TryGetValue(Label.ToLower(), out Result))
+			if (this.references.TryGetValue(Label.ToLower(), out Multimedia Result))
 				return Result;
 			else
 				return null;
@@ -4544,9 +5090,7 @@ namespace Waher.Content.Markdown
 		/// <returns>Values for the given key, or an empty array if the key was not found.</returns>
 		public string[] GetMetaData(string Key)
 		{
-			KeyValuePair<string, bool>[] Value;
-
-			if (!this.metaData.TryGetValue(Key.ToUpper(), out Value))
+			if (!this.metaData.TryGetValue(Key.ToUpper(), out KeyValuePair<string, bool>[] Value))
 				return new string[0];
 
 			int i, c = Value.Length;
@@ -4572,18 +5116,7 @@ namespace Waher.Content.Markdown
 		}
 
 		/// <summary>
-		/// Address of author.
-		/// </summary>
-		public string[] Address
-		{
-			get
-			{
-				return this.GetMetaData("Address");
-			}
-		}
-
-		/// <summary>
-		/// Author
+		/// Author(s) of document.
 		/// </summary>
 		public string[] Author
 		{
@@ -4594,18 +5127,7 @@ namespace Waher.Content.Markdown
 		}
 
 		/// <summary>
-		/// Affiliation.
-		/// </summary>
-		public string[] Affiliation
-		{
-			get
-			{
-				return this.GetMetaData("Affiliation");
-			}
-		}
-
-		/// <summary>
-		/// URL to Copyright page.
+		/// Link to copyright statement.
 		/// </summary>
 		public string[] Copyright
 		{
@@ -4616,18 +5138,35 @@ namespace Waher.Content.Markdown
 		}
 
 		/// <summary>
-		/// URL to Previous page.
+		/// Link to previous document, in a paginated set of documents.
 		/// </summary>
 		public string[] Previous
 		{
 			get
 			{
-				return this.GetMetaData("Previous");
+				return this.Merge(this.GetMetaData("Previous"), this.GetMetaData("Prev"));
 			}
 		}
 
+		private string[] Merge(string[] L1, string[] L2)
+		{
+			int c1, c2;
+
+			if ((c1 = L1.Length) == 0)
+				return L2;
+			else if ((c2 = L2.Length) == 0)
+				return L1;
+
+			string[] L = new string[c1 + c2];
+
+			Array.Copy(L1, 0, L, 0, c1);
+			Array.Copy(L2, 0, L, c1, c2);
+
+			return L;
+		}
+
 		/// <summary>
-		/// URL to Next page.
+		/// Link to next document, in a paginated set of documents.
 		/// </summary>
 		public string[] Next
 		{
@@ -4638,7 +5177,7 @@ namespace Waher.Content.Markdown
 		}
 
 		/// <summary>
-		/// CSS.
+		/// Link(s) to Cascading Style Sheet(s) that should be used for visual formatting of the generated HTML page.
 		/// </summary>
 		public string[] CSS
 		{
@@ -4649,7 +5188,7 @@ namespace Waher.Content.Markdown
 		}
 
 		/// <summary>
-		/// JavaScript.
+		/// Link(s) to JavaScript files(s) that should be includedin the generated HTML page.
 		/// </summary>
 		public string[] JavaScript
 		{
@@ -4660,7 +5199,7 @@ namespace Waher.Content.Markdown
 		}
 
 		/// <summary>
-		/// Server-side Script.
+		/// Links to server-side script files that should be included before processing the page.
 		/// </summary>
 		public string[] Script
 		{
@@ -4671,7 +5210,7 @@ namespace Waher.Content.Markdown
 		}
 
 		/// <summary>
-		/// Parameters.
+		/// Name of a query parameter recognized by the page.
 		/// </summary>
 		public string[] Parameters
 		{
@@ -4682,7 +5221,7 @@ namespace Waher.Content.Markdown
 		}
 
 		/// <summary>
-		/// Date.
+		/// (Publication) date of document.
 		/// </summary>
 		public string[] Date
 		{
@@ -4693,7 +5232,7 @@ namespace Waher.Content.Markdown
 		}
 
 		/// <summary>
-		/// Description.
+		/// Description of document.
 		/// </summary>
 		public string[] Description
 		{
@@ -4704,18 +5243,7 @@ namespace Waher.Content.Markdown
 		}
 
 		/// <summary>
-		/// Email.
-		/// </summary>
-		public string[] Email
-		{
-			get
-			{
-				return this.GetMetaData("Email");
-			}
-		}
-
-		/// <summary>
-		/// Image.
+		/// Link to image for page.
 		/// </summary>
 		public string[] Image
 		{
@@ -4737,40 +5265,7 @@ namespace Waher.Content.Markdown
 		}
 
 		/// <summary>
-		/// Language.
-		/// </summary>
-		public string[] Language
-		{
-			get
-			{
-				return this.GetMetaData("Language");
-			}
-		}
-
-		/// <summary>
-		/// Phone.
-		/// </summary>
-		public string[] Phone
-		{
-			get
-			{
-				return this.GetMetaData("Phone");
-			}
-		}
-
-		/// <summary>
-		/// Revision.
-		/// </summary>
-		public string[] Revision
-		{
-			get
-			{
-				return this.GetMetaData("Revision");
-			}
-		}
-
-		/// <summary>
-		/// Subtitle.
+		/// Subtitle of document.
 		/// </summary>
 		public string[] Subtitle
 		{
@@ -4781,7 +5276,7 @@ namespace Waher.Content.Markdown
 		}
 
 		/// <summary>
-		/// Title.
+		/// Title of document.
 		/// </summary>
 		public string[] Title
 		{
@@ -4792,7 +5287,7 @@ namespace Waher.Content.Markdown
 		}
 
 		/// <summary>
-		/// Web.
+		/// Link to web page
 		/// </summary>
 		public string[] Web
 		{
@@ -4803,13 +5298,46 @@ namespace Waher.Content.Markdown
 		}
 
 		/// <summary>
-		/// Refresh.
+		/// Tells the browser to refresh the page after a given number of seconds.
 		/// </summary>
 		public string[] Refresh
 		{
 			get
 			{
 				return this.GetMetaData("Refresh");
+			}
+		}
+
+		/// <summary>
+		/// Name of the variable that will hold a reference to the IUser interface for the currently logged in user.
+		/// </summary>
+		public string[] UserVariable
+		{
+			get
+			{
+				return this.GetMetaData("UserVariable");
+			}
+		}
+
+		/// <summary>
+		/// Link to a login page. This page will be shown if the user variable does not contain a user.
+		/// </summary>
+		public string[] Login
+		{
+			get
+			{
+				return this.GetMetaData("Login");
+			}
+		}
+
+		/// <summary>
+		/// Requered user privileges to display page.
+		/// </summary>
+		public string[] Privileges
+		{
+			get
+			{
+				return this.GetMetaData("Privileges");
 			}
 		}
 
@@ -4877,45 +5405,8 @@ namespace Waher.Content.Markdown
 		/// <returns>Encoded string.</returns>
 		public static string Encode(string s)
 		{
-			int i = s.IndexOfAny(specialCharacters);
-
-			while (i >= 0)
-			{
-				s = s.Insert(i, new string('\\', 1));
-				i = s.IndexOfAny(specialCharacters, i + 2);
-			}
-
-			return s;
+			return Functions.MarkdownEncode.EscapeText(s);
 		}
-
-		private static readonly char[] specialCharacters = new char[]
-		{
-			'*',
-			'_',
-			'~',
-			'\\',
-			'`',
-			'{',
-			'}',
-			'[',
-			']',
-			'(',
-			')',
-			'<',
-			'>',
-			'#',
-			'+',
-			'-',
-			'.',
-			'!',
-			'\'',
-			'"',
-			'^',
-			'%',
-			'=',
-			':',
-			'|'
-		};
 
 		/// <summary>
 		/// If syntax highlighting is used in the document.
@@ -5039,17 +5530,29 @@ namespace Waher.Content.Markdown
 		/// <returns>Array of links found in the document.</returns>
 		public string[] FindLinks()
 		{
+			return this.FindLinks(true, true, true);
+		}
+
+		/// <summary>
+		/// Finds all links in the document.
+		/// </summary>
+		/// <param name="IncludeAutomaticLinks">If automatic links are to be included. (Default=true)</param>
+		/// <param name="IncludeLinks">If normal links are to be included. (Default=true)</param>
+		/// <param name="IncludeMultimedia">If Multimedia links are to be included. (Default=true)</param>
+		/// <returns>Array of links found in the document.</returns>
+		public string[] FindLinks(bool IncludeAutomaticLinks, bool IncludeLinks, bool IncludeMultimedia)
+		{
 			Dictionary<string, bool> Links = new Dictionary<string, bool>();
 
 			this.ForEach((E, Obj) =>
 			{
-				if (E is AutomaticLinkUrl)
-					Links[((AutomaticLinkUrl)E).URL] = true;
-				else if (E is Link)
-					Links[((Link)E).Url] = true;
-				else if (E is Multimedia)
+				if (E is AutomaticLinkUrl AutomaticLinkUrl)
+					Links[AutomaticLinkUrl.URL] = true;
+				else if (E is Link Link)
+					Links[Link.Url] = true;
+				else if (IncludeMultimedia && E is Multimedia Multimedia)
 				{
-					foreach (MultimediaItem Item in ((Multimedia)E).Items)
+					foreach (MultimediaItem Item in Multimedia.Items)
 						Links[Item.Url] = true;
 				}
 
@@ -5059,6 +5562,27 @@ namespace Waher.Content.Markdown
 			string[] Result = new string[Links.Count];
 			Links.Keys.CopyTo(Result, 0);
 			return Result;
+		}
+
+		/// <summary>
+		/// Gets an enumerator of root markdown elements in the document.
+		/// </summary>
+		public IEnumerator<MarkdownElement> GetEnumerator()
+		{
+			return this.elements.GetEnumerator();
+		}
+
+		IEnumerator IEnumerable.GetEnumerator()
+		{
+			return this.elements.GetEnumerator();
+		}
+
+		private class ReversePosition : IComparer<int>
+		{
+			public int Compare(int x, int y)
+			{
+				return y - x;
+			}
 		}
 
 		// TODO: Graphs.

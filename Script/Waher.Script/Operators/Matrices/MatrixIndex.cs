@@ -21,6 +21,7 @@ namespace Waher.Script.Operators.Matrices
 		/// <param name="Y">Y-coordinate operand.</param>
 		/// <param name="Start">Start position in script expression.</param>
 		/// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
 		public MatrixIndex(ScriptNode Left, ScriptNode X, ScriptNode Y, int Start, int Length, Expression Expression)
 			: base(Left, X, Y, Start, Length, Expression)
 		{
@@ -50,8 +51,7 @@ namespace Waher.Script.Operators.Matrices
         /// <returns>Result</returns>
         public static IElement EvaluateIndex(IElement Matrix, IElement IndexX, IElement IndexY, ScriptNode Node)
         {
-            IMatrix M = Matrix as IMatrix;
-            if (M != null)
+            if (Matrix is IMatrix M)
                 return EvaluateIndex(M, IndexX, IndexY, Node);
             else if (Matrix.IsScalar)
                 throw new ScriptRuntimeException("The index operator operates on matrices.", Node);
@@ -66,14 +66,15 @@ namespace Waher.Script.Operators.Matrices
             }
         }
 
-        /// <summary>
-        /// Evaluates the vector index operator.
-        /// </summary>
-        /// <param name="Matrix">Vector</param>
-        /// <param name="Index">Index</param>
-        /// <param name="Node">Node performing the operation.</param>
-        /// <returns>Result</returns>
-        public static IElement EvaluateIndex(IMatrix Matrix, IElement IndexX, IElement IndexY, ScriptNode Node)
+		/// <summary>
+		/// Evaluates the vector index operator.
+		/// </summary>
+		/// <param name="Matrix">Vector</param>
+		/// <param name="IndexX">X-Index</param>
+		/// <param name="IndexY">Y-Index</param>
+		/// <param name="Node">Node performing the operation.</param>
+		/// <returns>Result</returns>
+		public static IElement EvaluateIndex(IMatrix Matrix, IElement IndexX, IElement IndexY, ScriptNode Node)
         {
             DoubleNumber X = IndexX as DoubleNumber;
             DoubleNumber Y = IndexY as DoubleNumber;

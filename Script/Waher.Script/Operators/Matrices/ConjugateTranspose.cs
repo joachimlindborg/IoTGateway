@@ -17,6 +17,7 @@ namespace Waher.Script.Operators.Matrices
 		/// <param name="Operand">Operand.</param>
 		/// <param name="Start">Start position in script expression.</param>
 		/// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
 		public ConjugateTranspose(ScriptNode Operand, int Start, int Length, Expression Expression)
 			: base(Operand, Start, Length, Expression)
 		{
@@ -30,12 +31,10 @@ namespace Waher.Script.Operators.Matrices
 		public override IElement Evaluate(Variables Variables)
 		{
             IElement Operand = this.op.Evaluate(Variables);
-            IMatrix Matrix = Operand as IMatrix;
-            if (Matrix != null)
+            if (Operand is IMatrix Matrix)
                 return Matrix.ConjugateTranspose();
 
-            IVector Vector = Operand as IVector;
-            if (Vector != null)
+            if (Operand is IVector Vector)
                 return MatrixDefinition.Encapsulate(Vector.VectorElements, 1, Vector.Dimension, this).ConjugateTranspose();
 
             return Operand;

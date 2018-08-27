@@ -18,6 +18,7 @@ namespace Waher.Script.Functions.Scalar
         /// <param name="Argument">Argument.</param>
         /// <param name="Start">Start position in script expression.</param>
         /// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
         public Number(ScriptNode Argument, int Start, int Length, Expression Expression)
             : base(Argument, Start, Length, Expression)
         {
@@ -80,13 +81,11 @@ namespace Waher.Script.Functions.Scalar
         /// <returns>Function result.</returns>
         public override IElement EvaluateScalar(string Argument, Variables Variables)
         {
-            double d;
-
-            if (double.TryParse(Argument.Replace(".", System.Globalization.NumberFormatInfo.CurrentInfo.NumberDecimalSeparator), out d))
-                return new DoubleNumber(d);
-            else
-                throw new ScriptException("Not a number.");
-        }
+			if (double.TryParse(Argument.Replace(".", System.Globalization.NumberFormatInfo.CurrentInfo.NumberDecimalSeparator), out double d))
+				return new DoubleNumber(d);
+			else
+				throw new ScriptException("Not a number.");
+		}
 
         /// <summary>
         /// Evaluates the function on a scalar argument.

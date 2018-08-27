@@ -25,9 +25,10 @@ using Waher.Things.SensorData;
 using Waher.Networking;
 using Waher.Networking.Sniffers;
 using Waher.Networking.XMPP;
+using Waher.Networking.XMPP.BitsOfBinary;
 using Waher.Networking.XMPP.Chat;
 using Waher.Networking.XMPP.Control;
-using Waher.Networking.XMPP.Control.ParameterTypes;
+using Waher.Things.ControlParameters;
 using Waher.Networking.XMPP.Interoperability;
 using Waher.Networking.XMPP.Sensor;
 using Waher.Networking.XMPP.Provisioning;
@@ -100,14 +101,13 @@ namespace Waher.Mock.Lamp.UWP
 			this.StartActuator();
 		}
 
-		private const string FormSignatureKey = "";     // Form signature key, if form signatures (XEP-0348) is to be used during registration.
-		private const string FormSignatureSecret = "";  // Form signature secret, if form signatures (XEP-0348) is to be used during registration.
 		private const int MaxRecordsPerPeriod = 500;
 
 		private XmppClient xmppClient = null;
 		private Timer sampleTimer = null;
 		private SensorServer sensorServer = null;
 		private ControlServer controlServer = null;
+		private BobClient bobClient = null;
 		private ChatServer chatServer = null;
 		private InteroperabilityServer interoperabilityServer;
 		private ThingRegistryClient thingRegistryClient = null;
@@ -126,25 +126,24 @@ namespace Waher.Mock.Lamp.UWP
 			{
 				Log.Informational("Starting application.");
 
-				SimpleXmppConfiguration xmppConfiguration = SimpleXmppConfiguration.GetConfigUsingSimpleConsoleDialog("xmpp.config",
+				XmppCredentials Credentials = SimpleXmppConfiguration.GetConfigUsingSimpleConsoleDialog("xmpp.config",
 					Guid.NewGuid().ToString().Replace("-", string.Empty),   // Default user name.
 					Guid.NewGuid().ToString().Replace("-", string.Empty),   // Default password.
-					FormSignatureKey, FormSignatureSecret, typeof(App).GetTypeInfo().Assembly);
+					typeof(App).GetTypeInfo().Assembly);
 
 				Log.Informational("Connecting to XMPP server.");
 
-				xmppClient = xmppConfiguration.GetClient("en", typeof(App).GetTypeInfo().Assembly);
-				xmppClient.AllowRegistration(FormSignatureKey, FormSignatureSecret);
+				xmppClient = new XmppClient(Credentials, "en", typeof(App).GetTypeInfo().Assembly);
 
-				if (xmppConfiguration.Sniffer && MainPage.Sniffer != null)
+				if (Credentials.Sniffer && MainPage.Sniffer != null)
 					xmppClient.Add(MainPage.Sniffer);
 
-				if (!string.IsNullOrEmpty(xmppConfiguration.Events))
-					Log.Register(new XmppEventSink("XMPP Event Sink", xmppClient, xmppConfiguration.Events, false));
+				if (!string.IsNullOrEmpty(Credentials.Events))
+					Log.Register(new XmppEventSink("XMPP Event Sink", xmppClient, Credentials.Events, false));
 
-				if (!string.IsNullOrEmpty(xmppConfiguration.ThingRegistry))
+				if (!string.IsNullOrEmpty(Credentials.ThingRegistry))
 				{
-					thingRegistryClient = new ThingRegistryClient(xmppClient, xmppConfiguration.ThingRegistry);
+					thingRegistryClient = new ThingRegistryClient(xmppClient, Credentials.ThingRegistry);
 
 					thingRegistryClient.Claimed += (sender, e) =>
 					{
@@ -166,8 +165,8 @@ namespace Waher.Mock.Lamp.UWP
 					};
 				}
 
-				if (!string.IsNullOrEmpty(xmppConfiguration.Provisioning))
-					provisioningClient = new ProvisioningClient(xmppClient, xmppConfiguration.Provisioning);
+				if (!string.IsNullOrEmpty(Credentials.Provisioning))
+					provisioningClient = new ProvisioningClient(xmppClient, Credentials.Provisioning);
 
 				Timer ConnectionTimer = new Timer((P) =>
 				{
@@ -229,7 +228,7 @@ namespace Waher.Mock.Lamp.UWP
 
 				xmppClient.OnRosterItemUpdated += (sender, e) =>
 				{
-					if (e.State == SubscriptionState.None)
+					if (e.State == SubscriptionState.None && e.PendingSubscription != PendingSubscription.Subscribe)
 						xmppClient.RemoveRosterItem(e.BareJid);
 				};
 
@@ -255,13 +254,16 @@ namespace Waher.Mock.Lamp.UWP
 							UpdateMainWindow(SwitchOn);
 						}));
 
-				chatServer = new ChatServer(xmppClient, sensorServer, controlServer);
+				this.bobClient = new BobClient(this.xmppClient, Path.Combine(Path.GetTempPath(), "BitsOfBinary"));
+				this.chatServer = new ChatServer(xmppClient, this.bobClient, this.sensorServer, this.controlServer, this.provisioningClient);
 
 				interoperabilityServer = new InteroperabilityServer(xmppClient);
 				interoperabilityServer.OnGetInterfaces += (sender, e) =>
 				{
 					e.Add("XMPP.IoT.Actuator.Lamp");
 				};
+
+				xmppClient.Connect();
 			}
 			catch (Exception ex)
 			{
@@ -321,6 +323,12 @@ namespace Waher.Mock.Lamp.UWP
 				this.chatServer = null;
 			}
 
+			if (this.bobClient != null)
+			{
+				this.bobClient.Dispose();
+				this.bobClient = null;
+			}
+
 			if (this.controlServer != null)
 			{
 				this.controlServer.Dispose();
@@ -351,9 +359,7 @@ namespace Waher.Mock.Lamp.UWP
 				this.xmppClient = null;
 			}
 
-			Waher.Script.Types.Terminate();
-			Waher.Content.Markdown.Model.Multimedia.ImageContent.Terminate();
-			Waher.Events.Log.Terminate();
+			Log.Terminate();
 
 			deferral.Complete();
 		}

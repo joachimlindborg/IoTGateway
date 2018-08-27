@@ -1,42 +1,286 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-using System.Threading.Tasks;
-using Waher.Things;
+using System.Xml;
+using Waher.Content;
+using Waher.Content.Xml;
 using Waher.Things.SensorData;
 
 namespace Waher.Networking.XMPP.Provisioning
 {
 	/// <summary>
-	/// Event arguments for CanControl callback event arguments.
+	/// Delegate for CanControl callback methods.
 	/// </summary>
-	public class CanControlEventArgs : NodesEventArgs
+	/// <param name="Sender">Sender</param>
+	/// <param name="e">Event arguments.</param>
+	public delegate void CanControlEventHandler(object Sender, CanControlEventArgs e);
+
+	/// <summary>
+	/// Event arguments for CanControl events.
+	/// </summary>
+	public class CanControlEventArgs : NodeQuestionEventArgs
 	{
-		private bool canControl;
-		private string[] parameterNames;
+		private ProvisioningClient provisioningClient;
+		private string[] parameters;
 
-		internal CanControlEventArgs(IqResultEventArgs e, object State, string JID, bool CanControl, 
-			ThingReference[] Nodes, string[] ParameterNames)
-			: base(e, State, JID, Nodes)
+		/// <summary>
+		/// Event arguments for CanControl events.
+		/// </summary>
+		/// <param name="ProvisioningClient">XMPP Provisioning Client used.</param>
+		/// <param name="e">Message with request.</param>
+		public CanControlEventArgs(ProvisioningClient ProvisioningClient, MessageEventArgs e)
+			: base(ProvisioningClient, e)
 		{
-			this.canControl = CanControl;
-			this.parameterNames = ParameterNames;
+			this.provisioningClient = ProvisioningClient;
+			List<string> Parameters = null;
+
+			foreach (XmlNode N in e.Content.ChildNodes)
+			{
+				if (N is XmlElement E && E.LocalName == "p")
+				{
+					if (Parameters == null)
+						Parameters = new List<string>();
+
+					Parameters.Add(XML.Attribute(E, "n"));
+				}
+			}
+
+			if (Parameters != null)
+				this.parameters = Parameters.ToArray();
 		}
 
 		/// <summary>
-		/// If the control operation can be performed.
+		/// Any parameter name specifications of the original request.
 		/// </summary>
-		public bool CanControl
+		public string[] Parameters
 		{
-			get { return this.canControl; }
+			get { return this.parameters; }
 		}
 
 		/// <summary>
-		/// Fields allowed to read, as long as <see cref="CanRead"/> is true. If null, no field restrictions exist.
+		/// Accept control operations from this remote JID.
 		/// </summary>
-		public string[] ParameterNames
+		/// <param name="Callback">Callback method to call when response is received.</param>
+		/// <param name="State">State object to pass on to the callback method.</param>
+		/// <returns>If the response could be sent.</returns>
+		public bool AcceptAllFromJID(IqResultEventHandler Callback, object State)
 		{
-			get { return this.parameterNames; }
+			return this.Respond(true, "<fromJid/>", Callback, State);
 		}
+
+		/// <summary>
+		/// Accept control operations from all entities of the remote domain.
+		/// </summary>
+		/// <param name="Callback">Callback method to call when response is received.</param>
+		/// <param name="State">State object to pass on to the callback method.</param>
+		/// <returns>If the response could be sent.</returns>
+		public bool AcceptAllFromDomain(IqResultEventHandler Callback, object State)
+		{
+			return this.Respond(true, "<fromDomain/>", Callback, State);
+		}
+
+		/// <summary>
+		/// Accept control operations from this service.
+		/// </summary>
+		/// <param name="ServiceToken">Which service token is to be accepted.</param>
+		/// <param name="Callback">Callback method to call when response is received.</param>
+		/// <param name="State">State object to pass on to the callback method.</param>
+		/// <returns>If the response could be sent.</returns>
+		public bool AcceptAllFromService(string ServiceToken, IqResultEventHandler Callback, object State)
+		{
+			return this.Respond(true, "<fromService token='" +XML.Encode(ServiceToken) + "'/>", Callback, State);
+		}
+
+		/// <summary>
+		/// Accept control operations from this device.
+		/// </summary>
+		/// <param name="DeviceToken">Which device token is to be accepted.</param>
+		/// <param name="Callback">Callback method to call when response is received.</param>
+		/// <param name="State">State object to pass on to the callback method.</param>
+		/// <returns>If the response could be sent.</returns>
+		public bool AcceptAllFromDevice(string DeviceToken, IqResultEventHandler Callback, object State)
+		{
+			return this.Respond(true, "<fromDevice token='" + XML.Encode(DeviceToken) + "'/>", Callback, State);
+		}
+
+		/// <summary>
+		/// Accept control operations from this user.
+		/// </summary>
+		/// <param name="UserToken">Which user token is to be accepted.</param>
+		/// <param name="Callback">Callback method to call when response is received.</param>
+		/// <param name="State">State object to pass on to the callback method.</param>
+		/// <returns>If the response could be sent.</returns>
+		public bool AcceptAllFromUser(string UserToken, IqResultEventHandler Callback, object State)
+		{
+			return this.Respond(true, "<fromUser token='" + XML.Encode(UserToken) + "'/>", Callback, State);
+		}
+
+		/// <summary>
+		/// Accept partial control operations from this remote JID.
+		/// </summary>
+		/// <param name="Parameters">Parameters that can be controlled.</param>
+		/// <param name="Callback">Callback method to call when response is received.</param>
+		/// <param name="State">State object to pass on to the callback method.</param>
+		/// <returns>If the response could be sent.</returns>
+		public bool AcceptPartialFromJID(string[] Parameters, IqResultEventHandler Callback, object State)
+		{
+			return this.Respond(true, this.PartialParameters(Parameters) + "<fromJid/>", Callback, State);
+		}
+
+		/// <summary>
+		/// Accept partial control operations from all entities of the remote domain.
+		/// </summary>
+		/// <param name="Parameters">Parameters that can be controlled.</param>
+		/// <param name="Callback">Callback method to call when response is received.</param>
+		/// <param name="State">State object to pass on to the callback method.</param>
+		/// <returns>If the response could be sent.</returns>
+		public bool AcceptPartialFromDomain(string[] Parameters, IqResultEventHandler Callback, object State)
+		{
+			return this.Respond(true, this.PartialParameters(Parameters) + "<fromDomain/>", Callback, State);
+		}
+
+		/// <summary>
+		/// Accept partial control operations from this service.
+		/// </summary>
+		/// <param name="Parameters">Parameters that can be controlled.</param>
+		/// <param name="ServiceToken">Which service token is to be accepted.</param>
+		/// <param name="Callback">Callback method to call when response is received.</param>
+		/// <param name="State">State object to pass on to the callback method.</param>
+		/// <returns>If the response could be sent.</returns>
+		public bool AcceptPartialFromService(string[] Parameters, string ServiceToken, IqResultEventHandler Callback, object State)
+		{
+			return this.Respond(true, this.PartialParameters(Parameters) + "<fromService token='" + XML.Encode(ServiceToken) + "'/>", Callback, State);
+		}
+
+		/// <summary>
+		/// Accept partial control operations from this device.
+		/// </summary>
+		/// <param name="Parameters">Parameters that can be controlled.</param>
+		/// <param name="DeviceToken">Which device token is to be accepted.</param>
+		/// <param name="Callback">Callback method to call when response is received.</param>
+		/// <param name="State">State object to pass on to the callback method.</param>
+		/// <returns>If the response could be sent.</returns>
+		public bool AcceptPartialFromDevice(string[] Parameters, string DeviceToken, IqResultEventHandler Callback, object State)
+		{
+			return this.Respond(true, this.PartialParameters(Parameters) + "<fromDevice token='" + XML.Encode(DeviceToken) + "'/>", Callback, State);
+		}
+
+		/// <summary>
+		/// Accept partial control operations from this user.
+		/// </summary>
+		/// <param name="Parameters">Parameters that can be controlled.</param>
+		/// <param name="UserToken">Which user token is to be accepted.</param>
+		/// <param name="Callback">Callback method to call when response is received.</param>
+		/// <param name="State">State object to pass on to the callback method.</param>
+		/// <returns>If the response could be sent.</returns>
+		public bool AcceptPartialFromUser(string[] Parameters, string UserToken, IqResultEventHandler Callback, object State)
+		{
+			return this.Respond(true, this.PartialParameters(Parameters) + "<fromUser token='" + XML.Encode(UserToken) + "'/>", Callback, State);
+		}
+
+		private string PartialParameters(string[] Names)
+		{
+			StringBuilder Xml = new StringBuilder();
+
+			Xml.Append("<partial>");
+
+			foreach (string Name in Names)
+			{
+				Xml.Append("<p n='");
+				Xml.Append(XML.Encode(Name));
+				Xml.Append("</p>");
+			}
+
+			Xml.Append("</partial>");
+
+			return Xml.ToString();
+		}
+
+		/// <summary>
+		/// Reject control operations from this remote JID.
+		/// </summary>
+		/// <param name="Callback">Callback method to call when response is received.</param>
+		/// <param name="State">State object to pass on to the callback method.</param>
+		/// <returns>If the response could be sent.</returns>
+		public bool RejectAllFromJID(IqResultEventHandler Callback, object State)
+		{
+			return this.Respond(false, "<fromJid/>", Callback, State);
+		}
+
+		/// <summary>
+		/// Reject control operations from all entities of the remote domain.
+		/// </summary>
+		/// <param name="Callback">Callback method to call when response is received.</param>
+		/// <param name="State">State object to pass on to the callback method.</param>
+		/// <returns>If the response could be sent.</returns>
+		public bool RejectAllFromDomain(IqResultEventHandler Callback, object State)
+		{
+			return this.Respond(false, "<fromDomain/>", Callback, State);
+		}
+
+		/// <summary>
+		/// Reject control operations from this service.
+		/// </summary>
+		/// <param name="ServiceToken">Which service token is to be rejected.</param>
+		/// <param name="Callback">Callback method to call when response is received.</param>
+		/// <param name="State">State object to pass on to the callback method.</param>
+		/// <returns>If the response could be sent.</returns>
+		public bool RejectAllFromService(string ServiceToken, IqResultEventHandler Callback, object State)
+		{
+			return this.Respond(false, "<fromService token='" + XML.Encode(ServiceToken) + "'/>", Callback, State);
+		}
+
+		/// <summary>
+		/// Reject control operations from this device.
+		/// </summary>
+		/// <param name="DeviceToken">Which device token is to be rejected.</param>
+		/// <param name="Callback">Callback method to call when response is received.</param>
+		/// <param name="State">State object to pass on to the callback method.</param>
+		/// <returns>If the response could be sent.</returns>
+		public bool RejectAllFromDevice(string DeviceToken, IqResultEventHandler Callback, object State)
+		{
+			return this.Respond(false, "<fromDevice token='" + XML.Encode(DeviceToken) + "'/>", Callback, State);
+		}
+
+		/// <summary>
+		/// Reject control operations from this user.
+		/// </summary>
+		/// <param name="UserToken">Which user token is to be rejected.</param>
+		/// <param name="Callback">Callback method to call when response is received.</param>
+		/// <param name="State">State object to pass on to the callback method.</param>
+		/// <returns>If the response could be sent.</returns>
+		public bool RejectAllFromUser(string UserToken, IqResultEventHandler Callback, object State)
+		{
+			return this.Respond(false, "<fromUser token='" + XML.Encode(UserToken) + "'/>", Callback, State);
+		}
+
+		private bool Respond(bool CanControl, string RuleXml, IqResultEventHandler Callback, object State)
+		{
+			StringBuilder Xml = new StringBuilder();
+
+			Xml.Append("<canControlRule xmlns='");
+			Xml.Append(ProvisioningClient.NamespaceProvisioningOwner);
+			Xml.Append("' jid='");
+			Xml.Append(XML.Encode(this.JID));
+			Xml.Append("' remoteJid='");
+			Xml.Append(XML.Encode(this.RemoteJID));
+			Xml.Append("' key='");
+			Xml.Append(XML.Encode(this.Key));
+			Xml.Append("' result='");
+			Xml.Append(CommonTypes.Encode(CanControl));
+			Xml.Append("'>");
+			Xml.Append(RuleXml);
+			Xml.Append("</canControlRule>");
+
+			RosterItem Item = this.Client.Client[this.FromBareJID];
+			if (Item.HasLastPresence && Item.LastPresence.IsOnline)
+			{
+				this.Client.Client.SendIqSet(Item.LastPresenceFullJid, Xml.ToString(), Callback, State);
+				return true;
+			}
+			else
+				return false;
+		}
+
 	}
 }

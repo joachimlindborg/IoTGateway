@@ -59,7 +59,7 @@ namespace Waher.Script.Objects
 		}
 
 		/// <summary>
-		/// <see cref="Type.Equals"/>
+		/// <see cref="Type.Equals(object)"/>
 		/// </summary>
 		public override bool Equals(object obj)
 		{
@@ -89,12 +89,19 @@ namespace Waher.Script.Objects
         /// <returns>If conversion was possible.</returns>
         public override bool TryConvertTo(Type DesiredType, out object Value)
         {
-            if (DesiredType.IsAssignableFrom(typeof(Type)))
+			TypeInfo TI = DesiredType.GetTypeInfo();
+
+			if (TI.IsAssignableFrom(typeof(Type).GetTypeInfo()))
             {
                 Value = this.value;
                 return true;
             }
-            else if (DesiredType.IsAssignableFrom(typeof(TypeValue)))
+			else if (DesiredType.GetTypeInfo().IsAssignableFrom(typeof(Type).GetTypeInfo()))
+			{
+				Value = this.value;
+				return true;
+			}
+			else if (TI.IsAssignableFrom(typeof(TypeValue).GetTypeInfo()))
             {
                 Value = this;
                 return true;

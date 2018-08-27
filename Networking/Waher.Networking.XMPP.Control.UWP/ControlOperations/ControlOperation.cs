@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
 using Waher.Things;
+using Waher.Things.ControlParameters;
 
 namespace Waher.Networking.XMPP.Control.ControlOperations
 {
@@ -11,7 +12,7 @@ namespace Waher.Networking.XMPP.Control.ControlOperations
 	/// </summary>
 	public abstract class ControlOperation
 	{
-		private ThingReference node;
+		private IThingReference node;
 		private IqEventArgs request;
 		private string parameterName;
 
@@ -21,7 +22,7 @@ namespace Waher.Networking.XMPP.Control.ControlOperations
 		/// <param name="Node">Node on which operation is to be performed.</param>
 		/// <param name="Request">Original request.</param>
 		/// <param name="Parameter">Control parameter.</param>
-		public ControlOperation(ThingReference Node, IqEventArgs Request, ControlParameter Parameter)
+		public ControlOperation(IThingReference Node, IqEventArgs Request, ControlParameter Parameter)
 		{
 			this.node = Node;
 			this.request = Request;
@@ -31,7 +32,7 @@ namespace Waher.Networking.XMPP.Control.ControlOperations
 		/// <summary>
 		/// Node on which operation is to be performed.
 		/// </summary>
-		public ThingReference Node
+		public IThingReference Node
 		{
 			get { return this.node; }
 		}

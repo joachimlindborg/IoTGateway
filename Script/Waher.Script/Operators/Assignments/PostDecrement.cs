@@ -21,6 +21,7 @@ namespace Waher.Script.Operators.Assignments
 		/// <param name="VariableName">Variable name..</param>
 		/// <param name="Start">Start position in script expression.</param>
 		/// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
 		public PostDecrement(string VariableName, int Start, int Length, Expression Expression)
 			: base(Start, Length, Expression)
 		{
@@ -42,16 +43,13 @@ namespace Waher.Script.Operators.Assignments
 		/// <returns>Result.</returns>
 		public override IElement Evaluate(Variables Variables)
 		{
-			Variable v;
-
-			if (!Variables.TryGetVariable(this.variableName, out v))
+			if (!Variables.TryGetVariable(this.variableName, out Variable v))
 				throw new ScriptRuntimeException("Variable not found: " + this.variableName, this);
 
 			IElement Value = v.ValueElement;
 			IElement Value2;
-			DoubleNumber n = Value as DoubleNumber;
 
-			if (n != null)
+			if (Value is DoubleNumber n)
 				Value2 = new DoubleNumber(n.Value - 1);
 			else
 				Value2 = PreDecrement.Decrement(Value, this);

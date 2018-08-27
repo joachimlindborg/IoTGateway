@@ -1,11 +1,10 @@
 ﻿using System;
 using System.IO;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using Waher.Content;
+using Waher.Content.Xml;
 using Waher.Networking.HTTP;
 
 namespace Waher.Networking.XMPP.HTTPX
@@ -17,6 +16,8 @@ namespace Waher.Networking.XMPP.HTTPX
 		private StringBuilder response = new StringBuilder();
 		private XmppClient client;
 		private IEndToEndEncryption e2e;
+		private InBandBytestreams.IbbClient ibbClient;
+		private P2P.SOCKS5.Socks5Proxy socks5Proxy;
 		private string id;
 		private string to;
 		private string from;
@@ -25,14 +26,18 @@ namespace Waher.Networking.XMPP.HTTPX
 		private int nr = 0;
 		private string streamId = null;
 		private byte[] chunk = null;
+		private InBandBytestreams.OutgoingStream ibbOutput = null;
+		private P2P.SOCKS5.OutgoingStream socks5Output = null;
 		private int pos;
 		private bool cancelled = false;
 
-		public HttpxResponse(XmppClient Client, IEndToEndEncryption E2e, string Id, string To, string From,
-			int MaxChunkSize) : base()
+		public HttpxResponse(XmppClient Client, IEndToEndEncryption E2e, string Id, string To, string From, int MaxChunkSize,
+			InBandBytestreams.IbbClient IbbClient, P2P.SOCKS5.Socks5Proxy Socks5Proxy) : base()
 		{
 			this.client = Client;
 			this.e2e = E2e;
+			this.ibbClient = IbbClient;
+			this.socks5Proxy = Socks5Proxy;
 			this.id = Id;
 			this.to = To;
 			this.from = From;
@@ -83,23 +88,64 @@ namespace Waher.Networking.XMPP.HTTPX
 				if (this.chunked.Value)
 				{
 					this.streamId = Guid.NewGuid().ToString().Replace("-", string.Empty);
-					this.chunk = new byte[this.maxChunkSize];
+
+					if (this.socks5Proxy != null)
+					{
+						this.response.Append("<data><s5 sid='");
+						this.response.Append(this.streamId);
+						this.response.Append("' e2e='");
+						this.response.Append(CommonTypes.Encode(this.e2e != null));
+						this.response.Append("'/></data>");
+						this.ReturnResponse();
+
+						this.socks5Output = new P2P.SOCKS5.OutgoingStream(this.client, XmppClient.GetBareJID(this.to), 49152, this.e2e);
+						this.socks5Output.OnAbort += this.IbbOutput_OnAbort;
+
+						this.socks5Proxy.InitiateSession(this.to, this.streamId, this.InitiationCallback, null);
+					}
+					else if (this.ibbClient != null)
+					{
+						this.response.Append("<data><ibb sid='");
+						this.response.Append(this.streamId);
+						this.response.Append("'/></data>");
+						this.ReturnResponse();
+
+						this.ibbOutput = this.ibbClient.OpenStream(this.to, this.maxChunkSize, this.streamId, this.e2e);
+						this.ibbOutput.OnAbort += this.IbbOutput_OnAbort;
+					}
+					else
+					{
+						this.chunk = new byte[this.maxChunkSize];
+
+						this.response.Append("<data><chunkedBase64 streamId='");
+						this.response.Append(this.streamId);
+						this.response.Append("'/></data>");
+						this.ReturnResponse();
+					}
 
 					lock (activeStreams)
 					{
 						activeStreams[this.from + " " + this.streamId] = this;
 					}
-
-					this.response.Append("<data><chunkedBase64 streamId='");
-					this.response.Append(this.streamId);
-					this.response.Append("'/></data>");
-					this.ReturnResponse();
 				}
 				else
 					this.response.Append("<data><base64>");
 			}
 			else
 				this.ReturnResponse();
+		}
+
+		private void InitiationCallback(object Sender, P2P.SOCKS5.StreamEventArgs e)
+		{
+			if (e.Ok)
+				this.socks5Output.Opened(e.Stream);
+			else
+				this.IbbOutput_OnAbort(null, new EventArgs());
+		}
+
+		private void IbbOutput_OnAbort(object sender, EventArgs e)
+		{
+			this.Cancel();
 		}
 
 		public override void ContentSent()
@@ -113,7 +159,12 @@ namespace Waher.Networking.XMPP.HTTPX
 					activeStreams.Remove(this.from + " " + this.streamId);
 				}
 
-				this.SendChunk(true);
+				if (this.socks5Output != null)
+					this.socks5Output.Close();
+				else if (this.ibbOutput != null)
+					this.ibbOutput.Close();
+				else
+					this.SendChunk(true);
 			}
 		}
 
@@ -123,17 +174,18 @@ namespace Waher.Networking.XMPP.HTTPX
 
 			if (this.response != null)
 			{
-				if (this.chunked.HasValue && !this.chunked.Value)
-					this.response.Append("</base64></data>");
+				StringBuilder Resp = this.response;
+				this.response = null;
 
-				this.response.Append("</resp>");
+				if (this.chunked.HasValue && !this.chunked.Value)
+					Resp.Append("</base64></data>");
+
+				Resp.Append("</resp>");
 
 				if (this.e2e != null)
-					this.e2e.SendIqResult(this.client, E2ETransmission.IgnoreIfNotE2E, this.id, this.to, this.response.ToString());
+					this.e2e.SendIqResult(this.client, E2ETransmission.IgnoreIfNotE2E, this.id, this.to, Resp.ToString());
 				else
-					this.client.SendIqResult(this.id, this.to, this.response.ToString());
-
-				this.response = null;
+					this.client.SendIqResult(this.id, this.to, Resp.ToString());
 			}
 		}
 
@@ -148,36 +200,46 @@ namespace Waher.Networking.XMPP.HTTPX
 
 			if (this.chunked.Value)
 			{
-				int NrLeft = this.maxChunkSize - this.pos;
-
-				while (NrBytes > 0)
+				if (this.socks5Output != null)
+					this.socks5Output.Write(Data, Offset, NrBytes);
+				else if (this.ibbOutput != null)
+					this.ibbOutput.Write(Data, Offset, NrBytes);
+				else
 				{
-					if (NrBytes <= NrLeft)
-					{
-						Array.Copy(Data, Offset, this.chunk, this.pos, NrBytes);
-						this.pos += NrBytes;
-						NrBytes = 0;
+					int NrLeft = this.maxChunkSize - this.pos;
 
-						if (this.pos >= this.maxChunkSize)
-							this.SendChunk(false);
-					}
-					else
+					while (NrBytes > 0)
 					{
-						Array.Copy(Data, Offset, this.chunk, this.pos, NrLeft);
-						this.pos += NrLeft;
-						Offset += NrLeft;
-						NrBytes -= NrLeft;
-						this.SendChunk(false);
-						NrLeft = this.maxChunkSize;
+						if (NrBytes <= NrLeft)
+						{
+							Array.Copy(Data, Offset, this.chunk, this.pos, NrBytes);
+							this.pos += NrBytes;
+							NrBytes = 0;
+
+							if (this.pos >= this.maxChunkSize)
+								this.SendChunk(false);
+						}
+						else
+						{
+							Array.Copy(Data, Offset, this.chunk, this.pos, NrLeft);
+							this.pos += NrLeft;
+							Offset += NrLeft;
+							NrBytes -= NrLeft;
+							this.SendChunk(false);
+							NrLeft = this.maxChunkSize;
+						}
 					}
 				}
 			}
 			else
-				this.response.Append(Convert.ToBase64String(Data, Offset, NrBytes, Base64FormattingOptions.None));
+				this.response.Append(Convert.ToBase64String(Data, Offset, NrBytes));
 		}
 
 		private void SendChunk(bool Last)
 		{
+			if (this.client.State != XmppState.Connected)
+				this.Cancel();
+
 			this.AssertNotCancelled();
 
 			StringBuilder Xml = new StringBuilder();
@@ -202,31 +264,34 @@ namespace Waher.Networking.XMPP.HTTPX
 			Xml.Append("'>");
 
 			if (this.pos > 0)
-				Xml.Append(Convert.ToBase64String(this.chunk, 0, this.pos, Base64FormattingOptions.None));
+				Xml.Append(Convert.ToBase64String(this.chunk, 0, this.pos));
 
 			Xml.Append("</chunk>");
 
 			ManualResetEvent ChunkSent = new ManualResetEvent(false);
 
 			this.client.SendMessage(QoSLevel.Unacknowledged, MessageType.Normal, this.to, Xml.ToString(), string.Empty, string.Empty, string.Empty,
-				string.Empty, string.Empty, (sender, e) =>
-				{
-					try
-					{
-						ChunkSent.Set();
-					}
-					catch (Exception)
-					{
-						// Ignore.
-					}
-				}, null);
-
+				string.Empty, string.Empty, this.ChunkSentCallback, ChunkSent);
 
 			ChunkSent.WaitOne(1000);    // Limit read speed to rate at which messages can be sent to the network.
-			ChunkSent.Close();
+			ChunkSent.Dispose();
 
 			this.nr++;
 			this.pos = 0;
+		}
+
+		private void ChunkSentCallback(object Sender, DeliveryEventArgs e)
+		{
+			ManualResetEvent ChunkSent = (ManualResetEvent)e.State;
+
+			try
+			{
+				ChunkSent.Set();
+			}
+			catch (Exception)
+			{
+				// Ignore.
+			}
 		}
 
 		public override void Flush()
@@ -252,12 +317,11 @@ namespace Waher.Networking.XMPP.HTTPX
 
 		public static void CancelChunkedTransfer(string To, string From, string StreamId)
 		{
-			HttpxResponse Response;
 			string Key = From + " " + StreamId;
 
 			lock (activeStreams)
 			{
-				if (activeStreams.TryGetValue(Key, out Response))
+				if (activeStreams.TryGetValue(Key, out HttpxResponse Response))
 				{
 					if (Response.to == To)
 					{

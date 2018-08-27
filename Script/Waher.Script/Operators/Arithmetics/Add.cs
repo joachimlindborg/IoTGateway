@@ -12,7 +12,7 @@ namespace Waher.Script.Operators.Arithmetics
 	/// <summary>
 	/// Addition operator.
 	/// </summary>
-	public class Add : BinaryOperator 
+	public class Add : BinaryOperator, IDifferentiable
 	{
 		/// <summary>
 		/// Addition operator.
@@ -21,6 +21,7 @@ namespace Waher.Script.Operators.Arithmetics
 		/// <param name="Right">Right operand.</param>
 		/// <param name="Start">Start position in script expression.</param>
 		/// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
 		public Add(ScriptNode Left, ScriptNode Right, int Start, int Length, Expression Expression)
 			: base(Left, Right, Start, Length, Expression)
 		{
@@ -48,11 +49,10 @@ namespace Waher.Script.Operators.Arithmetics
 		/// <returns>Result</returns>
 		public static IElement EvaluateAddition(IElement Left, IElement Right, ScriptNode Node)
 		{
-			ISemiGroupElement LE = Left as ISemiGroupElement;
 			ISemiGroupElement RE = Right as ISemiGroupElement;
 			IElement Result;
 
-			if (LE != null && RE != null)
+			if (Left is ISemiGroupElement LE && RE != null)
 			{
 				Result = LE.AddRight(RE);
 				if (Result != null)
@@ -154,6 +154,26 @@ namespace Waher.Script.Operators.Arithmetics
 					}
 				}
 			}
+		}
+
+		/// <summary>
+		/// Differentiates a script node, if possible.
+		/// </summary>
+		/// <param name="VariableName">Name of variable to differentiate on.</param>
+		/// <param name="Variables">Collection of variables.</param>
+		/// <returns>Differentiated node.</returns>
+		public ScriptNode Differentiate(string VariableName, Variables Variables)
+		{
+			if (this.left is IDifferentiable Left &&
+				this.right is IDifferentiable Right)
+			{
+				return new Add(
+					Left.Differentiate(VariableName, Variables),
+					Right.Differentiate(VariableName, Variables),
+					this.Start, this.Length, this.Expression);
+			}
+			else
+				throw new ScriptRuntimeException("Terms not differentiable.", this);
 		}
 
 	}

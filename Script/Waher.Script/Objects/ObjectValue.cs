@@ -38,10 +38,10 @@ namespace Waher.Script.Objects
 		/// </summary>
 		public override string ToString()
         {
-            if (this.value == null)
-                return "null";
-            else
-                return this.value.ToString();
+			if (this.value == null)
+				return "null";
+			else
+				return Expression.ToString(this.value);
         }
 
         /// <summary>
@@ -61,19 +61,25 @@ namespace Waher.Script.Objects
         }
 
         /// <summary>
-        /// <see cref="Object.Equals"/>
+        /// <see cref="Object.Equals(object)"/>
         /// </summary>
         public override bool Equals(object obj)
         {
-            ObjectValue E = obj as ObjectValue;
-            if (E == null)
-                return false;
-            else
-                return this.value.Equals(E.value);
+			if (obj is ObjectValue E)
+			{
+				if (this.value == null)
+					return E.value == null;
+				else if (E.value == null)
+					return false;
+				else
+					return this.value.Equals(E.value);
+			}
+			else
+				return false;
         }
 
         /// <summary>
-        /// <see cref="Object.GetHashCode"/>
+        /// <see cref="Object.GetHashCode()"/>
         /// </summary>
         public override int GetHashCode()
         {
@@ -96,26 +102,31 @@ namespace Waher.Script.Objects
         /// <returns>If conversion was possible.</returns>
         public override bool TryConvertTo(Type DesiredType, out object Value)
         {
-            if (this.value == null)
-            {
-                Value = null;
-                return true;
-            }
-            else if (this.value.GetType() == DesiredType)
-            {
-                Value = this.value;
-                return true;
-            }
-            else if (DesiredType.IsAssignableFrom(typeof(ObjectValue)))
-            {
-                Value = this;
-                return true;
-            }
-            else
-            {
-                Value = null;
-                return false;
-            }
+			if (this.value == null)
+			{
+				Value = null;
+				return true;
+			}
+			else
+			{
+				TypeInfo TI = DesiredType.GetTypeInfo();
+
+				if (TI.IsAssignableFrom(this.value.GetType().GetTypeInfo()))
+				{
+					Value = this.value;
+					return true;
+				}
+				else if (TI.IsAssignableFrom(typeof(ObjectValue).GetTypeInfo()))
+				{
+					Value = this;
+					return true;
+				}
+				else
+				{
+					Value = null;
+					return false;
+				}
+			}
         }
     }
 }

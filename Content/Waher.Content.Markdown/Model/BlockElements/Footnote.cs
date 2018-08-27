@@ -17,7 +17,7 @@ namespace Waher.Content.Markdown.Model.BlockElements
 		/// </summary>
 		/// <param name="Document">Markdown document.</param>
 		/// <param name="Key">Meta-data key.</param>
-		/// <param name="ChildElements">Child elements.</param>
+		/// <param name="Children">Child elements.</param>
 		public Footnote(MarkdownDocument Document, string Key, IEnumerable<MarkdownElement> Children)
 			: base(Document, Children)
 		{
@@ -29,7 +29,7 @@ namespace Waher.Content.Markdown.Model.BlockElements
 		/// </summary>
 		/// <param name="Document">Markdown document.</param>
 		/// <param name="Key">Meta-data key.</param>
-		/// <param name="ChildElements">Child elements.</param>
+		/// <param name="Children">Child elements.</param>
 		public Footnote(MarkdownDocument Document, string Key, params MarkdownElement[] Children)
 			: base(Document, Children)
 		{
@@ -89,13 +89,30 @@ namespace Waher.Content.Markdown.Model.BlockElements
 		/// </summary>
 		internal override bool InlineSpanElement
 		{
-			get 
+			get
 			{
 				if (this.HasOneChild)
 					return this.FirstChild.InlineSpanElement;
 				else
 					return false;
 			}
+		}
+
+		/// <summary>
+		/// Exports the element to XML.
+		/// </summary>
+		/// <param name="Output">XML Output.</param>
+		public override void Export(XmlWriter Output)
+		{
+			Output.WriteStartElement("Footnote");
+
+			if (this.Document.TryGetFootnoteNumber(this.key, out int Nr))
+				Output.WriteAttributeString("nr", Nr.ToString());
+			else
+				Output.WriteAttributeString("key", this.key);
+
+			this.ExportChildren(Output);
+			Output.WriteEndElement();
 		}
 	}
 }

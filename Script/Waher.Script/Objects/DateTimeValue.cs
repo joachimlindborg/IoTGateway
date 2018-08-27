@@ -1,6 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Reflection;
 using Waher.Script.Abstraction.Sets;
 using Waher.Script.Abstraction.Elements;
 
@@ -38,7 +37,7 @@ namespace Waher.Script.Objects
 		/// </summary>
 		public override string ToString()
 		{
-			return this.value.ToString();
+			return Expression.ToString(this.value);
 		}
 
 		/// <summary>
@@ -58,7 +57,7 @@ namespace Waher.Script.Objects
 		}
 
 		/// <summary>
-		/// <see cref="Object.Equals"/>
+		/// <see cref="Object.Equals(object)"/>
 		/// </summary>
 		public override bool Equals(object obj)
 		{
@@ -70,7 +69,7 @@ namespace Waher.Script.Objects
 		}
 
 		/// <summary>
-		/// <see cref="Object.GetHashCode"/>
+		/// <see cref="Object.GetHashCode()"/>
 		/// </summary>
 		public override int GetHashCode()
 		{
@@ -100,8 +99,13 @@ namespace Waher.Script.Objects
                 Value = this;
                 return true;
             }
-            else
-            {
+			else if (DesiredType.GetTypeInfo().IsAssignableFrom(typeof(DateTime).GetTypeInfo()))
+			{
+				Value = this.value;
+				return true;
+			}
+			else
+			{
                 Value = null;
                 return false;
             }

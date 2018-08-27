@@ -26,6 +26,7 @@ namespace Waher.Script.Model
 		/// <param name="Right">Right operand.</param>
 		/// <param name="Start">Start position in script expression.</param>
 		/// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
 		public BinaryOperator(ScriptNode Left, ScriptNode Right, int Start, int Length, Expression Expression)
 			: base(Start, Length, Expression)
 		{
@@ -47,6 +48,29 @@ namespace Waher.Script.Model
 		public ScriptNode RightOperand
 		{
 			get { return this.right; }
+		}
+
+		/// <summary>
+		/// Default variable name, if any, null otherwise.
+		/// </summary>
+		public virtual string DefaultVariableName
+		{
+			get
+			{
+				if (this.left is IDifferentiable Left &&
+					this.right is IDifferentiable Right)
+				{
+					string s = Left.DefaultVariableName;
+					if (s == null)
+						return null;
+					else if (s == Right.DefaultVariableName)
+						return s;
+					else
+						return null;
+				}
+				else
+					return null;
+			}
 		}
 
 	}

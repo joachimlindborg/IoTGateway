@@ -13,7 +13,7 @@ namespace Waher.Script.Operators.Membership
 	/// </summary>
 	public class NamedMember : UnaryOperator
 	{
-		private string name;
+		private readonly string name;
 
 		/// <summary>
 		/// Named member operator
@@ -22,6 +22,7 @@ namespace Waher.Script.Operators.Membership
 		/// <param name="Name">Name</param>
 		/// <param name="Start">Start position in script expression.</param>
 		/// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
 		public NamedMember(ScriptNode Operand, string Name, int Start, int Length, Expression Expression)
 			: base(Operand, Start, Length, Expression)
 		{
@@ -62,7 +63,7 @@ namespace Waher.Script.Operators.Membership
 				if (T != this.type)
 				{
 					this.type = T;
-					this.property = T.GetProperty(this.name);
+					this.property = T.GetRuntimeProperty(this.name);
 					if (this.property != null)
 					{
 						this.field = null;
@@ -70,16 +71,12 @@ namespace Waher.Script.Operators.Membership
 					}
 					else
 					{
-						this.field = T.GetField(this.name);
+						this.field = T.GetRuntimeField(this.name);
 						if (this.field != null)
 							this.nameIndex = null;
 						else
 						{
-#if WINDOWS_UWP
-							this.property = T.GetProperty("Item", typeof(object), stringType);
-#else
-							this.property = T.GetProperty("Item", stringType);
-#endif
+							this.property = T.GetRuntimeProperty("Item");
 							if (this.property == null)
 								this.nameIndex = null;
 							else if (this.nameIndex == null)
@@ -98,7 +95,7 @@ namespace Waher.Script.Operators.Membership
 				else if (this.field != null)
 					return Expression.Encapsulate(this.field.GetValue(Instance));
 				else if (Operand.IsScalar)
-					throw new ScriptRuntimeException("Member not found.", this);
+					throw new ScriptRuntimeException("Member '" + this.name + "' not found on type '" + T.FullName + "'.", this);
 			}
 
 			LinkedList<IElement> Elements = new LinkedList<IElement>();
@@ -113,7 +110,7 @@ namespace Waher.Script.Operators.Membership
 		private PropertyInfo property = null;
 		private FieldInfo field = null;
 		private string[] nameIndex = null;
-		private object synchObject = new object();
+		private readonly object synchObject = new object();
 
 		internal static readonly Type[] stringType = new Type[] { typeof(string) };
 
@@ -139,24 +136,20 @@ namespace Waher.Script.Operators.Membership
 			else
 				Instance = null;
 
-			PropertyInfo Property = T.GetProperty(Name);
+			PropertyInfo Property = T.GetRuntimeProperty(Name);
 			if (Property != null)
 				return Expression.Encapsulate(Property.GetValue(Instance, null));
 
-			FieldInfo Field = T.GetField(Name);
+			FieldInfo Field = T.GetRuntimeField(Name);
 			if (Field != null)
 				return Expression.Encapsulate(Field.GetValue(Instance));
 
-#if WINDOWS_UWP
-			Property = T.GetProperty("Item", typeof(object), stringType);
-#else
-			Property = T.GetProperty("Item", stringType);
-#endif
+			Property = T.GetRuntimeProperty("Item");
 			if (Property != null)
 				return Expression.Encapsulate(Property.GetValue(Instance, new string[] { Name }));
 
 			if (Operand.IsScalar)
-				throw new ScriptRuntimeException("Member not found.", Node);
+				throw new ScriptRuntimeException("Member '" + Name + "' not found on type '" + T.FullName + "'.", Node);
 
 			LinkedList<IElement> Elements = new LinkedList<IElement>();
 

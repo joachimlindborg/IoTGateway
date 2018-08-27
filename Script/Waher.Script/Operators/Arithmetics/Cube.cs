@@ -11,7 +11,7 @@ namespace Waher.Script.Operators.Arithmetics
 	/// <summary>
 	/// Cube operator.
 	/// </summary>
-	public class Cube : UnaryOperator 
+	public class Cube : UnaryOperator, IDifferentiable
 	{
 		/// <summary>
 		/// Cube operator.
@@ -19,6 +19,7 @@ namespace Waher.Script.Operators.Arithmetics
 		/// <param name="Operand">Operand.</param>
 		/// <param name="Start">Start position in script expression.</param>
 		/// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
 		public Cube(ScriptNode Operand, int Start, int Length, Expression Expression)
 			: base(Operand, Start, Length, Expression)
 		{
@@ -65,6 +66,25 @@ namespace Waher.Script.Operators.Arithmetics
 				Result.AddLast(this.Evaluate(Child));
 
 			return Operand.Encapsulate(Result, this);
+		}
+
+		/// <summary>
+		/// Differentiates a script node, if possible.
+		/// </summary>
+		/// <param name="VariableName">Name of variable to differentiate on.</param>
+		/// <param name="Variables">Collection of variables.</param>
+		/// <returns>Differentiated node.</returns>
+		public ScriptNode Differentiate(string VariableName, Variables Variables)
+		{
+			int Start = this.Start;
+			int Len = this.Length;
+			Expression Expression = this.Expression;
+
+			return this.DifferentiationChainRule(VariableName, Variables, this.op,
+				new Multiply(
+					new ConstantElement(DoubleNumber.ThreeElement, Start, Len, Expression),
+					new Square(this.op, Start, Len, Expression),
+					Start, Len, Expression));
 		}
 
 	}

@@ -38,3 +38,13 @@ I get 10 times more traffic from [Google][] than from
 I get 10 times more traffic from [Google](http://google.com/ "Google")
 than from [Yahoo](http://search.yahoo.com/ "Yahoo Search") or
 [MSN](http://search.msn.com/ "MSN Search").
+
+You can also write links, such as http://littlesister.se/ inline.
+
+Or on separate paragraphs:
+
+http://littlesister.se/
+
+Recognized multi-media content put on separate rows are automatically handled as multi-media:
+
+https://www.youtube.com/watch?v=whBPLc8m4SU

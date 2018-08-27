@@ -1,6 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
+using Waher.Runtime.Inventory;
 using Waher.Script.Abstraction.Sets;
 using Waher.Script.Abstraction.Elements;
 using Waher.Script.Exceptions;
@@ -34,7 +33,7 @@ namespace Waher.Script.Objects
         }
 
         /// <summary>
-        /// <see cref="Object.ToNamespace()"/>
+        /// <see cref="Object.ToString()"/>
         /// </summary>
         public override string ToString()
         {
@@ -58,19 +57,18 @@ namespace Waher.Script.Objects
         }
 
         /// <summary>
-        /// <see cref="Object.Equals"/>
+        /// <see cref="Object.Equals(object)"/>
         /// </summary>
         public override bool Equals(object obj)
         {
-            Namespace E = obj as Namespace;
-            if (E == null)
-                return false;
-            else
-                return this.value == E.value;
-        }
+			if (!(obj is Namespace E))
+				return false;
+			else
+				return this.value == E.value;
+		}
 
         /// <summary>
-        /// <see cref="Object.GetHashCode"/>
+        /// <see cref="Object.GetHashCode()"/>
         /// </summary>
         public override int GetHashCode()
         {

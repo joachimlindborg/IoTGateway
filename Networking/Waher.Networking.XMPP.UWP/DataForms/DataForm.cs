@@ -3,14 +3,19 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using System.Text;
 using System.Xml;
-using Waher.Content;
+using Waher.Content.Xml;
+using Waher.Networking.XMPP.BitsOfBinary;
 using Waher.Networking.XMPP.DataForms.DataTypes;
 using Waher.Networking.XMPP.DataForms.FieldTypes;
 using Waher.Networking.XMPP.DataForms.ValidationMethods;
 using Waher.Networking.XMPP.DataForms.Layout;
+using Waher.Security;
 
 namespace Waher.Networking.XMPP.DataForms
 {
+	/// <summary>
+	/// Type of data form.
+	/// </summary>
 	public enum FormType
 	{
 		/// <summary>
@@ -50,7 +55,7 @@ namespace Waher.Networking.XMPP.DataForms
 	/// Data form IQ result callback method delegate.
 	/// </summary>
 	/// <param name="Sender">Sender of event.</param>
-	/// <param name="Form">Event arguments.</param>
+	/// <param name="e">Event arguments.</param>
 	public delegate void DataFormResultEventHandler(object Sender, DataFormEventArgs e);
 
 	/// <summary>
@@ -82,7 +87,7 @@ namespace Waher.Networking.XMPP.DataForms
 		private Dictionary<string, Field> fieldsByVar = new Dictionary<string, Field>();
 		private DataFormEventHandler onSubmit;
 		private DataFormEventHandler onCancel;
-		private XmppClient client;
+		private readonly XmppClient client;
 		private FormType type;
 		private Field[] fields;
 		private Field[] header;
@@ -91,10 +96,11 @@ namespace Waher.Networking.XMPP.DataForms
 		private string[] instructions;
 		private string title = string.Empty;
 		private object state = null;
-		private string from;
-		private string to;
-		private bool containsPostBackFields = false;
-		private bool hasPages = false;
+		private readonly string from;
+		private readonly string to;
+		private readonly bool containsPostBackFields = false;
+		private readonly bool hasPages = false;
+		private bool hasMedia = false;
 
 		/// <summary>
 		/// Implements support for data forms. Data Forms are defined in the following XEPs:
@@ -175,7 +181,7 @@ namespace Waher.Networking.XMPP.DataForms
 						break;
 
 					case "field":
-						Field Field = this.ParseField((XmlElement)N);
+						Field Field = this.ParseField((XmlElement)N, out Media Media);
 						Fields.Add(Field);
 
 						if (Field.PostBack)
@@ -183,6 +189,15 @@ namespace Waher.Networking.XMPP.DataForms
 
 						if (!string.IsNullOrEmpty(Field.Var))
 							this.fieldsByVar[Field.Var] = Field;
+
+						if (Media != null)
+						{
+							Field = new MediaField(this, Guid.NewGuid().ToString(), string.Empty, false,
+								null, null, string.Empty, new StringDataType(), new BasicValidation(), Media, string.Empty, false, true, false);
+							Fields.Add(Field);
+							this.fieldsByVar[Field.Var] = Field;
+							this.hasMedia = true;
+						}
 						break;
 
 					case "reported":
@@ -192,7 +207,7 @@ namespace Waher.Networking.XMPP.DataForms
 						{
 							if (N2.LocalName == "field")
 							{
-								Field = this.ParseField((XmlElement)N2);
+								Field = this.ParseField((XmlElement)N2, out Media);
 								Header.Add(Field);
 							}
 						}
@@ -207,7 +222,7 @@ namespace Waher.Networking.XMPP.DataForms
 						{
 							if (N2.LocalName == "field")
 							{
-								Field = this.ParseField((XmlElement)N2);
+								Field = this.ParseField((XmlElement)N2, out Media);
 								Record.Add(Field);
 							}
 						}
@@ -219,7 +234,7 @@ namespace Waher.Networking.XMPP.DataForms
 						if (Pages == null)
 							Pages = new List<Page>();
 
-						Pages.Add(new Page((XmlElement)N));
+						Pages.Add(new Page(this, (XmlElement)N));
 						break;
 				}
 			}
@@ -234,9 +249,77 @@ namespace Waher.Networking.XMPP.DataForms
 			if (this.hasPages = (Pages != null))
 				this.pages = Pages.ToArray();
 			else if (this.fields.Length > 0)
-				this.pages = new Page[] { new Page(this.title, this.fields) };
+				this.pages = new Page[] { new Page(this, this.title, this.fields) };
 			else
-				this.pages = new Page[] { new Page(this.title, new ReportedReference()) };
+				this.pages = new Page[] { new Page(this, this.title, new ReportedReference(this)) };
+
+			if (this.hasMedia)
+			{
+				Dictionary<string, byte[]> Bob = new Dictionary<string, byte[]>(StringComparer.CurrentCultureIgnoreCase);
+
+				foreach (XmlNode N in X.ParentNode.ChildNodes)
+				{
+					if (N is XmlElement E && E.LocalName == "data" && E.NamespaceURI == BobClient.Namespace)
+					{
+						string Cid = XML.Attribute(E, "cid");
+						byte[] Bin = Convert.FromBase64String(E.InnerText);
+
+						Bob["cid:" + Cid] = Bin;
+					}
+				}
+
+				foreach (Field F in this.fields)
+				{
+					if (F is MediaField MediaField && MediaField.Media != null)
+					{
+						foreach (KeyValuePair<string, Uri> Uri in MediaField.Media.URIs)
+						{
+							switch (Uri.Value.Scheme.ToLower())
+							{
+								case "cid":
+									if (Bob.TryGetValue(Uri.Value.ToString(), out byte[] Bin))
+										MediaField.Media.Binary = Bin;
+									break;
+
+								case "data":
+									string s = Uri.Value.ToString();
+									string ContentType;
+
+									int i = s.IndexOf(':');
+									if (i > 0)
+										s = s.Substring(i + 1);
+
+									i = s.IndexOf(';');
+									if (i < 0)
+										ContentType = Uri.Key;
+									else
+									{
+										ContentType = s.Substring(0, i);
+										s = s.Substring(i + 1);
+									}
+
+									i = s.IndexOf(',');
+									if (i < 0)
+										break;
+
+									if (s.Substring(0, i) != "base64")
+										break;
+
+									s = s.Substring(i + 1);
+
+									Bin = Convert.FromBase64String(s);
+									MediaField.Media.Binary = Bin;
+									break;
+
+								case "http":
+								case "https":
+									MediaField.Media.URL = Uri.Value.ToString();
+									break;
+							}
+						}
+					}
+				}
+			}
 		}
 
 		/// <summary>
@@ -264,16 +347,55 @@ namespace Waher.Networking.XMPP.DataForms
 		/// http://xmpp.org/extensions/xep-0348.html
 		/// </summary>
 		/// <param name="Client">XMPP Client.</param>
-		/// <param name="X">Data Form definition.</param>
+		/// <param name="Type">Type of data form.</param>
+		/// <param name="From">From where the form came.</param>
+		/// <param name="To">To where the form was sent.</param>
+		/// <param name="Fields">Data form fields.</param>
+		public DataForm(XmppClient Client, FormType Type, string From, string To, params Field[] Fields)
+			: this(Client, Type, null, null, From, To, Fields)
+		{
+		}
+
+		/// <summary>
+		/// Implements support for data forms. Data Forms are defined in the following XEPs:
+		/// 
+		/// XEP-0004: Data Forms:
+		/// http://xmpp.org/extensions/xep-0004.html
+		/// 
+		/// XEP-0122: Data Forms Validation:
+		/// http://xmpp.org/extensions/xep-0122.html
+		/// 
+		/// XEP-0141: Data Forms Layout
+		/// http://xmpp.org/extensions/xep-0141.html
+		/// 
+		/// XEP-0221: Data Forms Media Element
+		/// http://xmpp.org/extensions/xep-0221.html
+		/// 
+		/// XEP-0331: Data Forms - Color Field Types
+		/// http://xmpp.org/extensions/xep-0331.html
+		/// 
+		/// XEP-0336: Data Forms - Dynamic Forms
+		/// http://xmpp.org/extensions/xep-0336.html
+		/// 
+		/// XEP-0348: Signing Forms: 
+		/// http://xmpp.org/extensions/xep-0348.html
+		/// </summary>
+		/// <param name="Client">XMPP Client.</param>
 		/// <param name="OnSubmit">Method called when the form is submitted.</param>
 		/// <param name="OnCancel">Method called when the form is cancelled.</param>
 		/// <param name="From">From where the form came.</param>
 		/// <param name="To">To where the form was sent.</param>
-		public DataForm(XmppClient Client, FormType Type, string From, string To, params Field[] Fields)
+		/// <param name="Fields">Data form fields.</param>
+		public DataForm(XmppClient Client, DataFormEventHandler OnSubmit, DataFormEventHandler OnCancel, string From, string To, params Field[] Fields)
+			: this(Client, FormType.Form, OnSubmit, OnCancel, From, To, Fields)
+		{
+		}
+
+		private DataForm(XmppClient Client, FormType Type, DataFormEventHandler OnSubmit, DataFormEventHandler OnCancel, string From, string To, params Field[] Fields)
 		{
 			this.client = Client;
-			this.onSubmit = null;
-			this.onCancel = null;
+			this.onSubmit = OnSubmit;
+			this.onCancel = OnCancel;
 			this.type = Type;
 			this.from = From;
 			this.to = To;
@@ -292,10 +414,10 @@ namespace Waher.Networking.XMPP.DataForms
 			this.records = new Field[0][];
 			this.header = new Field[0];
 			this.hasPages = false;
-			this.pages = new Page[] { new Page(this.title, this.fields) };
+			this.pages = new Page[] { new Page(this, this.title, this.fields) };
 		}
 
-		private Field ParseField(XmlElement E)
+		private Field ParseField(XmlElement E, out Media Media)
 		{
 			string Label = XML.Attribute(E, "label");
 			string Type = XML.Attribute(E, "type");
@@ -306,13 +428,14 @@ namespace Waher.Networking.XMPP.DataForms
 			string DataTypeName = null;
 			DataType DataType = null;
 			ValidationMethod ValidationMethod = null;
-			Media Media = null;
 			Field Field;
 			string Error = null;
 			bool Required = false;
 			bool PostBack = false;
 			bool ReadOnly = false;
 			bool NotSame = false;
+
+			Media = null;
 
 			foreach (XmlNode N2 in E.ChildNodes)
 			{
@@ -423,68 +546,68 @@ namespace Waher.Networking.XMPP.DataForms
 			switch (DataTypeName.ToLower())
 			{
 				case "xs:boolean":
-					DataType = new BooleanDataType(DataTypeName);
+					DataType = BooleanDataType.Instance;
 					break;
 
 				case "xs:string":
 				default:
-					DataType = new StringDataType(DataTypeName);
+					DataType = StringDataType.Instance;
 					break;
 
-				case "anyURI":
-					DataType = new AnyUriDataType(DataTypeName);
+				case "xs:anyuri":
+					DataType = AnyUriDataType.Instance;
 					break;
 
 				case "xs:byte":
-					DataType = new ByteDataType(DataTypeName);
+					DataType = ByteDataType.Instance;
 					break;
 
 				case "xs:date":
-					DataType = new DateDataType(DataTypeName);
+					DataType = DateDataType.Instance;
 					break;
 
-				case "xs:dateTime":
-					DataType = new DateTimeDataType(DataTypeName);
+				case "xs:datetime":
+					DataType = DateTimeDataType.Instance;
 					break;
 
 				case "xs:decimal":
-					DataType = new DecimalDataType(DataTypeName);
+					DataType = DecimalDataType.Instance;
 					break;
 
 				case "xs:double":
-					DataType = new DoubleDataType(DataTypeName);
+					DataType = DoubleDataType.Instance;
 					break;
 
 				case "xs:int":
-					DataType = new IntDataType(DataTypeName);
+					DataType = IntDataType.Instance;
 					break;
 
 				case "xs:integer":
-					DataType = new IntegerDataType(DataTypeName);
+					DataType = IntegerDataType.Instance;
 					break;
 
 				case "xs:language":
-					DataType = new LanguageDataType(DataTypeName);
+					DataType = LanguageDataType.Instance;
 					break;
 
 				case "xs:long":
-					DataType = new LongDataType(DataTypeName);
+					DataType = LongDataType.Instance;
 					break;
 
 				case "xs:short":
-					DataType = new ShortDataType(DataTypeName);
+					DataType = ShortDataType.Instance;
 					break;
 
 				case "xs:time":
-					DataType = new TimeDataType(DataTypeName);
+					DataType = TimeDataType.Instance;
 					break;
 
 				case "xdc:Color":
-					DataType = new ColorDataType(DataTypeName);
+					DataType = ColorDataType.Instance;
 					break;
 
 				case "xdc:ColorAlpha":
-					DataType = new ColorAlphaDataType(DataTypeName);
+					DataType = ColorAlphaDataType.Instance;
 					break;
 			}
 
@@ -495,71 +618,61 @@ namespace Waher.Networking.XMPP.DataForms
 			{
 				case "boolean":
 					Field = new BooleanField(this, Var, Label, Required,
-						ValueStrings == null ? null : ValueStrings.ToArray(),
-						OptionStrings == null ? null : OptionStrings.ToArray(),
+						ValueStrings?.ToArray(), OptionStrings?.ToArray(),
 						Description, DataType, ValidationMethod, Error, PostBack, ReadOnly, NotSame);
 					break;
 
 				case "fixed":
 					Field = new FixedField(this, Var, Label, Required,
-						ValueStrings == null ? null : ValueStrings.ToArray(),
-						OptionStrings == null ? null : OptionStrings.ToArray(),
+						ValueStrings?.ToArray(), OptionStrings?.ToArray(),
 						Description, DataType, ValidationMethod, Error, PostBack, ReadOnly, NotSame);
 					break;
 
 				case "hidden":
 					Field = new HiddenField(this, Var, Label, Required,
-						ValueStrings == null ? null : ValueStrings.ToArray(),
-						OptionStrings == null ? null : OptionStrings.ToArray(),
+						ValueStrings?.ToArray(), OptionStrings?.ToArray(),
 						Description, DataType, ValidationMethod, Error, PostBack, ReadOnly, NotSame);
 					break;
 
 				case "jid-multi":
 					Field = new JidMultiField(this, Var, Label, Required,
-						ValueStrings == null ? null : ValueStrings.ToArray(),
-						OptionStrings == null ? null : OptionStrings.ToArray(),
+						ValueStrings?.ToArray(), OptionStrings?.ToArray(),
 						Description, DataType, ValidationMethod, Error, PostBack, ReadOnly, NotSame);
 					break;
 
 				case "jid-single":
 					Field = new JidSingleField(this, Var, Label, Required,
-						ValueStrings == null ? null : ValueStrings.ToArray(),
-						OptionStrings == null ? null : OptionStrings.ToArray(),
+						ValueStrings?.ToArray(), OptionStrings?.ToArray(),
 						Description, DataType, ValidationMethod, Error, PostBack, ReadOnly, NotSame);
 					break;
 
 				case "list-multi":
 					Field = new ListMultiField(this, Var, Label, Required,
-						ValueStrings == null ? null : ValueStrings.ToArray(),
-						OptionStrings == null ? null : OptionStrings.ToArray(),
+						ValueStrings?.ToArray(), OptionStrings?.ToArray(),
 						Description, DataType, ValidationMethod, Error, PostBack, ReadOnly, NotSame);
 					break;
 
 				case "list-single":
 					Field = new ListSingleField(this, Var, Label, Required,
-						ValueStrings == null ? null : ValueStrings.ToArray(),
-						OptionStrings == null ? null : OptionStrings.ToArray(),
+						ValueStrings?.ToArray(), OptionStrings?.ToArray(),
 						Description, DataType, ValidationMethod, Error, PostBack, ReadOnly, NotSame);
 					break;
 
 				case "text-multi":
 					Field = new TextMultiField(this, Var, Label, Required,
-						ValueStrings == null ? null : ValueStrings.ToArray(),
-						OptionStrings == null ? null : OptionStrings.ToArray(),
+						ValueStrings?.ToArray(), OptionStrings?.ToArray(),
 						Description, DataType, ValidationMethod, Error, PostBack, ReadOnly, NotSame);
 					break;
 
 				case "text-private":
 					Field = new TextPrivateField(this, Var, Label, Required,
-						ValueStrings == null ? null : ValueStrings.ToArray(),
-						OptionStrings == null ? null : OptionStrings.ToArray(),
+						ValueStrings?.ToArray(), OptionStrings?.ToArray(),
 						Description, DataType, ValidationMethod, Error, PostBack, ReadOnly, NotSame);
 					break;
 
 				case "text-single":
 					Field = new TextSingleField(this, Var, Label, Required,
-						ValueStrings == null ? null : ValueStrings.ToArray(),
-						OptionStrings == null ? null : OptionStrings.ToArray(),
+						ValueStrings?.ToArray(), OptionStrings?.ToArray(),
 						Description, DataType, ValidationMethod, Error, PostBack, ReadOnly, NotSame);
 					break;
 
@@ -567,16 +680,17 @@ namespace Waher.Networking.XMPP.DataForms
 					if (Media == null)
 					{
 						Field = new TextSingleField(this, Var, Label, Required,
-							ValueStrings == null ? null : ValueStrings.ToArray(),
-							OptionStrings == null ? null : OptionStrings.ToArray(),
+							ValueStrings?.ToArray(), OptionStrings?.ToArray(),
 							Description, DataType, ValidationMethod, Error, PostBack, ReadOnly, NotSame);
 					}
 					else
 					{
 						Field = new MediaField(this, Var, Label, Required,
-							ValueStrings == null ? null : ValueStrings.ToArray(),
-							OptionStrings == null ? null : OptionStrings.ToArray(),
+							ValueStrings?.ToArray(), OptionStrings?.ToArray(),
 							Description, DataType, ValidationMethod, Media, Error, PostBack, ReadOnly, NotSame);
+
+						Media = null;
+						this.hasMedia = true;
 					}
 					break;
 			}
@@ -593,9 +707,7 @@ namespace Waher.Networking.XMPP.DataForms
 		{
 			get
 			{
-				Field Result;
-
-				if (this.fieldsByVar.TryGetValue(Var, out Result))
+				if (this.fieldsByVar.TryGetValue(Var, out Field Result))
 					return Result;
 				else
 					return null;
@@ -615,17 +727,36 @@ namespace Waher.Networking.XMPP.DataForms
 		/// <summary>
 		/// Fields in the form.
 		/// </summary>
-		public Field[] Fields { get { return this.fields; } }
+		public Field[] Fields
+		{
+			get { return this.fields; }
+			set
+			{
+				this.fieldsByVar.Clear();
+				this.fields = value;
+
+				foreach (Field F in value)
+					this.fieldsByVar[F.Var] = F;
+			}
+		}
 
 		/// <summary>
 		/// Form Instructions
 		/// </summary>
-		public string[] Instructions { get { return this.instructions; } }
+		public string[] Instructions
+		{
+			get { return this.instructions; }
+			set { this.instructions = value; }
+		}
 
 		/// <summary>
 		/// Title of the form.
 		/// </summary>
-		public string Title { get { return this.title; } }
+		public string Title
+		{
+			get { return this.title; }
+			set { this.title = value; }
+		}
 
 		/// <summary>
 		/// Header fields in a report result form.
@@ -645,7 +776,11 @@ namespace Waher.Networking.XMPP.DataForms
 		/// <summary>
 		/// Pages in form.
 		/// </summary>
-		public Page[] Pages { get { return this.pages; } }
+		public Page[] Pages
+		{
+			get { return this.pages; }
+			set { this.pages = value; }
+		}
 
 		/// <summary>
 		/// From where the form was sent.
@@ -661,6 +796,14 @@ namespace Waher.Networking.XMPP.DataForms
 		/// If the form contains post-back fields.
 		/// </summary>
 		public bool ContainsPostBackFields { get { return this.containsPostBackFields; } }
+
+		/// <summary>
+		/// If the form contains media.
+		/// </summary>
+		public bool HasMedia
+		{
+			get { return this.hasMedia; }
+		}
 
 		/// <summary>
 		/// Submits the form.
@@ -704,7 +847,7 @@ namespace Waher.Networking.XMPP.DataForms
 				Xml.Append("<cancel xmlns='");
 				Xml.Append(XmppClient.NamespaceDynamicForms);
 				Xml.Append("'>");
-				this.ExportXml(Xml, "submit", true);
+				this.ExportXml(Xml, "submit", true, false);
 				Xml.Append("</cancel>");
 
 				this.client.SendIqSet(this.from, Xml.ToString(), null, null);
@@ -759,7 +902,17 @@ namespace Waher.Networking.XMPP.DataForms
 		/// <returns>Number of fields exported.</returns>
 		public int SerializeSubmit(StringBuilder Output)
 		{
-			return this.ExportXml(Output, "submit", true);
+			return this.ExportXml(Output, "submit", true, false);
+		}
+
+		/// <summary>
+		/// Serializes the form as a result submission.
+		/// </summary>
+		/// <param name="Output">Output to serialize the form to.</param>
+		/// <returns>Number of fields exported.</returns>
+		public int SerializeResult(StringBuilder Output)
+		{
+			return this.ExportXml(Output, "result", true, true);
 		}
 
 		/// <summary>
@@ -769,10 +922,20 @@ namespace Waher.Networking.XMPP.DataForms
 		/// <returns>Number of fields exported.</returns>
 		public int SerializeCancel(StringBuilder Output)
 		{
-			return this.ExportXml(Output, "cancel", true);
+			return this.ExportXml(Output, "cancel", true, false);
 		}
 
-		internal int ExportXml(StringBuilder Output, string Type, bool ValuesOnly)
+		/// <summary>
+		/// Serializes the form as an editable form.
+		/// </summary>
+		/// <param name="Output">Output to serialize the form to.</param>
+		/// <returns>Number of fields exported.</returns>
+		public int SerializeForm(StringBuilder Output)
+		{
+			return this.ExportXml(Output, "form", false, true);
+		}
+
+		internal int ExportXml(StringBuilder Output, string Type, bool ValuesOnly, bool IncludeLabels)
 		{
 			int NrFieldsExported = 0;
 
@@ -810,11 +973,20 @@ namespace Waher.Networking.XMPP.DataForms
 					Output.Append(XML.Encode(this.title));
 					Output.Append("</title>");
 				}
+
+				if (this.pages != null)
+				{
+					foreach (Page Page in this.pages)
+						Page.Serialize(Output);
+				}
 			}
 
 			foreach (Field Field in this.fields)
 			{
-				if (Field.Serialize(Output, ValuesOnly))
+				if (Field.Exclude)
+					continue;
+
+				if (Field.Serialize(Output, ValuesOnly, IncludeLabels))
 					NrFieldsExported++;
 			}
 
@@ -823,7 +995,7 @@ namespace Waher.Networking.XMPP.DataForms
 				Output.Append("<reported>");
 
 				foreach (Field Field in this.header)
-					Field.Serialize(Output, false);
+					Field.Serialize(Output, false, true);
 
 				Output.Append("</reported>");
 			}
@@ -833,7 +1005,7 @@ namespace Waher.Networking.XMPP.DataForms
 				Output.Append("<item>");
 
 				foreach (Field Field in Record)
-					Field.Serialize(Output, true);
+					Field.Serialize(Output, true, false);
 
 				Output.Append("</item>");
 			}
@@ -872,7 +1044,7 @@ namespace Waher.Networking.XMPP.DataForms
 				DateTime Now = DateTime.Now.ToUniversalTime();
 				TimeSpan Span = Now - OAuthFirstDay;
 				long TotalSeconds = (long)Span.TotalSeconds;
-				string Nonce = Guid.NewGuid().ToString().Replace("-", string.Empty);
+				string Nonce = Hashes.BinaryToString(XmppClient.GetRandomBytes(16));
 				string TokenSecret = oauth_token_secret.ValueString;
 
 				oauth_consumer_key.SetValue(FormSignatureKey);
@@ -904,11 +1076,11 @@ namespace Waher.Networking.XMPP.DataForms
 
 				StringBuilder BStr = new StringBuilder();
 
-				BStr.Append("submit&&");	// No to-field.
+				BStr.Append("submit&&");    // No to-field.
 				BStr.Append(OAuthEncode(PStr.ToString()));
 
-				byte[] Key = System.Text.Encoding.ASCII.GetBytes(OAuthEncode(FormSignatureSecret) + "&" + OAuthEncode(TokenSecret));
-				byte[] Hash = Hashes.ComputeHMACSHA1Hash(Key, System.Text.Encoding.ASCII.GetBytes(BStr.ToString()));
+				byte[] Key = Encoding.ASCII.GetBytes(OAuthEncode(FormSignatureSecret) + "&" + OAuthEncode(TokenSecret));
+				byte[] Hash = Hashes.ComputeHMACSHA1Hash(Key, Encoding.ASCII.GetBytes(BStr.ToString()));
 
 				oauth_signature.SetValue(OAuthEncode(Convert.ToBase64String(Hash)));
 			}
@@ -944,7 +1116,6 @@ namespace Waher.Networking.XMPP.DataForms
 		public void Join(DataForm NewForm)
 		{
 			Field[] OldFields = this.fields;
-			Field NewField;
 
 			this.fieldsByVar = NewForm.fieldsByVar;
 			this.type = NewForm.type;
@@ -957,7 +1128,7 @@ namespace Waher.Networking.XMPP.DataForms
 
 			foreach (Field OldField in OldFields)
 			{
-				if (!this.fieldsByVar.TryGetValue(OldField.Var, out NewField))
+				if (!this.fieldsByVar.TryGetValue(OldField.Var, out Field NewField))
 					continue;
 
 				if (!OldField.Edited)
@@ -985,6 +1156,49 @@ namespace Waher.Networking.XMPP.DataForms
 		/// but other properties might have changed, new fields have been added, others removed, layout changed, etc.
 		/// </summary>
 		public event DataFormEventHandler OnRemoteUpdate = null;
+
+		/// <summary>
+		/// Removes excluded fields.
+		/// </summary>
+		public void RemoveExcluded()
+		{
+			bool HasExcluded = false;
+
+			foreach (Field F in this.fields)
+			{
+				if (F.Exclude)
+				{
+					HasExcluded = true;
+					break;
+				}
+			}
+
+			if (HasExcluded)
+			{
+				List<Field> NewFields = new List<DataForms.Field>();
+
+				foreach (Field F in this.fields)
+				{
+					if (!F.Exclude)
+						NewFields.Add(F);
+				}
+
+				this.Fields = NewFields.ToArray();
+
+				if (this.pages != null)
+				{
+					List<Page> NewPages = new List<Page>();
+
+					foreach (Page P in this.pages)
+					{
+						if (!P.RemoveExcluded())
+							NewPages.Add(P);
+					}
+
+					this.pages = NewPages.ToArray();
+				}
+			}
+		}
 
 	}
 }

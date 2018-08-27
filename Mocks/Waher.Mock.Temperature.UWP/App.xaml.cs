@@ -21,6 +21,7 @@ using Windows.UI.Xaml.Navigation;
 using Waher.Events;
 using Waher.Events.XMPP;
 using Waher.Networking.XMPP;
+using Waher.Networking.XMPP.BitsOfBinary;
 using Waher.Networking.XMPP.Chat;
 using Waher.Networking.XMPP.Interoperability;
 using Waher.Networking.XMPP.Sensor;
@@ -96,13 +97,12 @@ namespace Waher.Mock.Temperature.UWP
 			this.StartSensor();
 		}
 
-		private const string FormSignatureKey = "";     // Form signature key, if form signatures (XEP-0348) is to be used during registration.
-		private const string FormSignatureSecret = "";  // Form signature secret, if form signatures (XEP-0348) is to be used during registration.
 		private const int MaxRecordsPerPeriod = 500;
 
 		private XmppClient xmppClient = null;
 		private Timer sampleTimer = null;
 		private SensorServer sensorServer = null;
+		private BobClient bobClient = null;
 		private ChatServer chatServer = null;
 		private InteroperabilityServer interoperabilityServer;
 		private ThingRegistryClient thingRegistryClient = null;
@@ -121,48 +121,47 @@ namespace Waher.Mock.Temperature.UWP
 			{
 				Log.Informational("Starting application.");
 
-				SimpleXmppConfiguration xmppConfiguration = SimpleXmppConfiguration.GetConfigUsingSimpleConsoleDialog("xmpp.config",
+				XmppCredentials Credentials = SimpleXmppConfiguration.GetConfigUsingSimpleConsoleDialog("xmpp.config",
 					Guid.NewGuid().ToString().Replace("-", string.Empty),   // Default user name.
 					Guid.NewGuid().ToString().Replace("-", string.Empty),   // Default password.
-					FormSignatureKey, FormSignatureSecret, typeof(App).GetTypeInfo().Assembly);
+					typeof(App).GetTypeInfo().Assembly);
 
 				Log.Informational("Connecting to XMPP server.");
 
-				xmppClient = xmppConfiguration.GetClient("en", typeof(App).GetTypeInfo().Assembly);
-				xmppClient.AllowRegistration(FormSignatureKey, FormSignatureSecret);
+				xmppClient = new XmppClient(Credentials, "en", typeof(App).GetTypeInfo().Assembly);
 
-				if (xmppConfiguration.Sniffer && MainPage.Sniffer != null)
+				if (Credentials.Sniffer && MainPage.Sniffer != null)
 					xmppClient.Add(MainPage.Sniffer);
-
-				if (!string.IsNullOrEmpty(xmppConfiguration.Events))
-					Log.Register(new XmppEventSink("XMPP Event Sink", xmppClient, xmppConfiguration.Events, false));
-
-				if (!string.IsNullOrEmpty(xmppConfiguration.ThingRegistry))
+				
+				if (!string.IsNullOrEmpty(Credentials.Events))
+					Log.Register(new XmppEventSink("XMPP Event Sink", xmppClient, Credentials.Events, false));
+				
+				if (!string.IsNullOrEmpty(Credentials.ThingRegistry))
 				{
-					thingRegistryClient = new ThingRegistryClient(xmppClient, xmppConfiguration.ThingRegistry);
-
+					thingRegistryClient = new ThingRegistryClient(xmppClient, Credentials.ThingRegistry);
+				
 					thingRegistryClient.Claimed += (sender, e) =>
 					{
 						ownerJid = e.JID;
 						Log.Informational("Thing has been claimed.", ownerJid, new KeyValuePair<string, object>("Public", e.IsPublic));
 						this.RaiseOwnershipChanged();
 					};
-
+				
 					thingRegistryClient.Disowned += (sender, e) =>
 					{
 						Log.Informational("Thing has been disowned.", ownerJid);
 						ownerJid = string.Empty;
 						this.Register();    // Will call this.OwnershipChanged() after successful registration.
 					};
-
+				
 					thingRegistryClient.Removed += (sender, e) =>
 					{
 						Log.Informational("Thing has been removed from the public registry.", ownerJid);
 					};
 				}
-
-				if (!string.IsNullOrEmpty(xmppConfiguration.Provisioning))
-					provisioningClient = new ProvisioningClient(xmppClient, xmppConfiguration.Provisioning);
+				
+				if (!string.IsNullOrEmpty(Credentials.Provisioning))
+					provisioningClient = new ProvisioningClient(xmppClient, Credentials.Provisioning);
 
 				Timer ConnectionTimer = new Timer((P) =>
 				{
@@ -224,7 +223,7 @@ namespace Waher.Mock.Temperature.UWP
 
 				xmppClient.OnRosterItemUpdated += (sender, e) =>
 				{
-					if (e.State == SubscriptionState.None)
+					if (e.State == SubscriptionState.None && e.PendingSubscription != PendingSubscription.Subscribe)
 						xmppClient.RemoveRosterItem(e.BareJid);
 				};
 
@@ -262,7 +261,7 @@ namespace Waher.Mock.Temperature.UWP
 							else
 								DayHistoricalValues.RemoveLast();
 
-								// TODO: Persistence
+							// TODO: Persistence
 
 							PeriodStart = Now.Date;
 							SumTemp = 0;
@@ -282,8 +281,8 @@ namespace Waher.Mock.Temperature.UWP
 							else
 								MinuteHistoricalValues.RemoveLast();
 
-								// TODO: Persistence
-							}
+							// TODO: Persistence
+						}
 
 						SampleTime = Now;
 
@@ -355,7 +354,7 @@ namespace Waher.Mock.Temperature.UWP
 								FieldType.Computed, FieldQoS.AutomaticReadout));
 						}
 
-						if (Request.IsIncluded(FieldType.HistoricalDay))
+						if (Request.IsIncluded(FieldType.Historical))
 						{
 							foreach (DayHistoryRecord Rec in DayHistoricalValues)
 							{
@@ -373,26 +372,23 @@ namespace Waher.Mock.Temperature.UWP
 									if (IncludeTempMin)
 									{
 										Fields.Add(new QuantityField(ThingReference.Empty, Rec.PeriodStart, "Temperature, Min", Rec.MinTemperature, 1, "°C",
-											FieldType.Peak | FieldType.HistoricalDay, FieldQoS.AutomaticReadout));
+											FieldType.Peak | FieldType.Historical, FieldQoS.AutomaticReadout));
 									}
 
 									if (IncludeTempMax)
 									{
 										Fields.Add(new QuantityField(ThingReference.Empty, Rec.PeriodStart, "Temperature, Max", Rec.MaxTemperature, 1, "°C",
-											FieldType.Peak | FieldType.HistoricalDay, FieldQoS.AutomaticReadout));
+											FieldType.Peak | FieldType.Historical, FieldQoS.AutomaticReadout));
 									}
 								}
 
 								if (IncludeTempAvg && IncludeComputed)
 								{
 									Fields.Add(new QuantityField(ThingReference.Empty, Rec.PeriodStart, "Temperature, Average", Rec.AverageTemperature, 1, "°C",
-										FieldType.Computed | FieldType.HistoricalDay, FieldQoS.AutomaticReadout));
+										FieldType.Computed | FieldType.Historical, FieldQoS.AutomaticReadout));
 								}
 							}
-						}
 
-						if (Request.IsIncluded(FieldType.HistoricalMinute))
-						{
 							foreach (MinuteHistoryRecord Rec in MinuteHistoricalValues)
 							{
 								if (!Request.IsIncluded(Rec.Timestamp))
@@ -407,7 +403,7 @@ namespace Waher.Mock.Temperature.UWP
 									}
 
 									Fields.Add(new QuantityField(ThingReference.Empty, Rec.Timestamp, "Temperature", Rec.Temperature, 1, "°C",
-										FieldType.HistoricalMinute, FieldQoS.AutomaticReadout));
+										FieldType.Historical, FieldQoS.AutomaticReadout));
 								}
 							}
 						}
@@ -417,7 +413,8 @@ namespace Waher.Mock.Temperature.UWP
 					Request.ReportFields(true, Fields);
 				};
 
-				this.chatServer = new ChatServer(xmppClient, this.sensorServer);
+				this.bobClient = new BobClient(this.xmppClient, Path.Combine(Path.GetTempPath(), "BitsOfBinary"));
+				this.chatServer = new ChatServer(this.xmppClient, this.bobClient, this.sensorServer, this.provisioningClient);
 
 				this.interoperabilityServer = new InteroperabilityServer(xmppClient);
 				this.interoperabilityServer.OnGetInterfaces += (sender, e) =>
@@ -431,6 +428,8 @@ namespace Waher.Mock.Temperature.UWP
 						"XMPP.IoT.Sensor.Temperature.Max",
 						"XMPP.IoT.Sensor.Temperature.Max.History");
 				};
+
+				xmppClient.Connect();
 			}
 			catch (Exception ex)
 			{
@@ -507,10 +506,16 @@ namespace Waher.Mock.Temperature.UWP
 				this.chatServer = null;
 			}
 
+			if (this.bobClient != null)
+			{
+				this.bobClient.Dispose();
+				this.bobClient = null;
+			}
+
 			if (this.sensorServer != null)
 			{
 				this.sensorServer.Dispose();
-				this.sensorServer= null;
+				this.sensorServer = null;
 			}
 
 			if (this.provisioningClient != null)
@@ -531,9 +536,7 @@ namespace Waher.Mock.Temperature.UWP
 				this.xmppClient = null;
 			}
 
-			Waher.Script.Types.Terminate();
-			Waher.Content.Markdown.Model.Multimedia.ImageContent.Terminate();
-			Waher.Events.Log.Terminate();
+			Log.Terminate();
 
 			deferral.Complete();
 		}

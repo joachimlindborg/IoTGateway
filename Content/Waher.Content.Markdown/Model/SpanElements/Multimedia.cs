@@ -4,7 +4,7 @@ using System.Reflection;
 using System.Collections.Generic;
 using System.Text;
 using System.Xml;
-using Waher.Script;
+using Waher.Runtime.Inventory;
 using Waher.Events;
 
 namespace Waher.Content.Markdown.Model.SpanElements
@@ -66,6 +66,9 @@ namespace Waher.Content.Markdown.Model.SpanElements
 			this.MultimediaHandler.GeneratePlainText(Output, this.items, this.Children, this.aloneInParagraph, this.Document);
 		}
 
+		/// <summary>
+		/// Multimedia handler.
+		/// </summary>
 		public IMultimediaContent MultimediaHandler
 		{
 			get
@@ -123,6 +126,9 @@ namespace Waher.Content.Markdown.Model.SpanElements
 			return Best;	// Will allways be != null, since Multimedia.LinkContent will be chosen by default if no better is found.
 		}
 
+		/// <summary>
+		/// Multimedia handlers.
+		/// </summary>
 		public static IMultimediaContent[] Handlers
 		{
 			get
@@ -133,24 +139,17 @@ namespace Waher.Content.Markdown.Model.SpanElements
 					{
 						List<IMultimediaContent> Handlers = new List<IMultimediaContent>();
 						IMultimediaContent Handler;
-						ConstructorInfo CI;
+						TypeInfo TI;
 
 						foreach (Type Type in Types.GetTypesImplementingInterface(typeof(IMultimediaContent)))
 						{
-#if WINDOWS_UWP
-							if (Type.GetTypeInfo().IsAbstract)
-#else
-							if (Type.IsAbstract)
-#endif
-								continue;
-
-							CI = Type.GetConstructor(Types.NoTypes);
-							if (CI == null)
+							TI = Type.GetTypeInfo();
+							if (TI.IsAbstract || TI.IsGenericTypeDefinition)
 								continue;
 
 							try
 							{
-								Handler = (IMultimediaContent)CI.Invoke(Types.NoParameters);
+								Handler = (IMultimediaContent)Activator.CreateInstance(Type);
 							}
 							catch (Exception ex)
 							{
@@ -205,6 +204,22 @@ namespace Waher.Content.Markdown.Model.SpanElements
 		internal override bool InlineSpanElement
 		{
 			get { return true; }
+		}
+
+		/// <summary>
+		/// Exports the element to XML.
+		/// </summary>
+		/// <param name="Output">XML Output.</param>
+		public override void Export(XmlWriter Output)
+		{
+			Output.WriteStartElement("Multimedia");
+			Output.WriteAttributeString("aloneInParagraph", CommonTypes.Encode(this.aloneInParagraph));
+			this.ExportChildren(Output);
+
+			foreach (MultimediaItem Item in this.items)
+				Item.Export(Output);
+
+			Output.WriteEndElement();
 		}
 	}
 }

@@ -25,6 +25,11 @@ namespace Waher.Networking.XMPP
 		StreamNegotiation,
 
 		/// <summary>
+		/// Stream Opened.
+		/// </summary>
+		StreamOpened,
+
+		/// <summary>
 		/// Switching to encrypted channel
 		/// </summary>
 		StartingEncryption,
@@ -33,6 +38,11 @@ namespace Waher.Networking.XMPP
 		/// Performing user authentication.
 		/// </summary>
 		Authenticating,
+
+		/// <summary>
+		/// Account is being registered on the broker.
+		/// </summary>
+		Registering,
 
 		/// <summary>
 		/// Performing session binding.

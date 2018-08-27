@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Drawing;
+using SkiaSharp;
 using Waher.Script.Abstraction.Elements;
 using Waher.Script.Exceptions;
 using Waher.Script.Model;
@@ -8,13 +8,26 @@ using Waher.Script.Objects;
 
 namespace Waher.Script.Graphs.Functions.Colors
 {
+	/// <summary>
+	/// Converts a color into grayscale.
+	/// </summary>
 	public class GrayScale : FunctionOneScalarVariable
 	{
+		/// <summary>
+		/// Converts a color into grayscale.
+		/// </summary>
+		/// <param name="Color">Color to convert.</param>
+		/// <param name="Start">Start position in script expression.</param>
+		/// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
 		public GrayScale(ScriptNode Color, int Start, int Length, Expression Expression)
 			: base(Color, Start, Length, Expression)
 		{
 		}
 
+		/// <summary>
+		/// Default Argument names
+		/// </summary>
 		public override string[] DefaultArgumentNames
 		{
 			get
@@ -23,6 +36,9 @@ namespace Waher.Script.Graphs.Functions.Colors
 			}
 		}
 
+		/// <summary>
+		/// Name of the function
+		/// </summary>
 		public override string FunctionName
 		{
 			get
@@ -31,12 +47,39 @@ namespace Waher.Script.Graphs.Functions.Colors
 			}
 		}
 
+		/// <summary>
+		/// Evaluates the function on a scalar argument.
+		/// </summary>
+		/// <param name="Argument">Function argument.</param>
+		/// <param name="Variables">Variables collection.</param>
+		/// <returns>Function result.</returns>
 		public override IElement EvaluateScalar(IElement Argument, Variables Variables)
 		{
-			Color Color = Graph.ToColor(Argument.AssociatedObjectValue);
-			int Intensity = (int)(0.3 * Color.R + 0.59 * Color.G + 0.11 * Color.B + 0.5);
+			SKColor Color = Graph.ToColor(Argument.AssociatedObjectValue);
+			return new ObjectValue(ToGrayScale(Color));
+		}
 
-			return new ObjectValue(Color.FromArgb(Color.A, Intensity, Intensity, Intensity));
+		/// <summary>
+		/// Converts a color to grayscale.
+		/// </summary>
+		/// <param name="Color">Color</param>
+		/// <returns>Grayscale.</returns>
+		public static SKColor ToGrayScale(SKColor Color)
+		{
+			byte Intensity = (byte)(0.3 * Color.Red + 0.59 * Color.Green + 0.11 * Color.Blue + 0.5);
+			return new SKColor(Intensity, Intensity, Intensity, Color.Alpha);
+		}
+
+		/// <summary>
+		/// Evaluates the function on a scalar argument.
+		/// </summary>
+		/// <param name="Argument">Function argument.</param>
+		/// <param name="Variables">Variables collection.</param>
+		/// <returns>Function result.</returns>
+		public override IElement EvaluateScalar(string Argument, Variables Variables)
+		{
+			SKColor Color = Graph.ToColor(Argument);
+			return new ObjectValue(ToGrayScale(Color));
 		}
 	}
 }

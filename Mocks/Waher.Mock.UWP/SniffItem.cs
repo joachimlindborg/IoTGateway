@@ -6,15 +6,49 @@ using Waher.Events;
 
 namespace Waher.Mock
 {
+	/// <summary>
+	/// Sniff item type.
+	/// </summary>
 	public enum SniffItemType
 	{
+		/// <summary>
+		/// Data received.
+		/// </summary>
 		DataReceived,
+
+		/// <summary>
+		/// Data transmitted.
+		/// </summary>
 		DataTransmitted,
+
+		/// <summary>
+		/// Text received.
+		/// </summary>
 		TextReceived,
+
+		/// <summary>
+		/// Text transmitted.
+		/// </summary>
 		TextTransmitted,
+
+		/// <summary>
+		/// Information.
+		/// </summary>
 		Information,
+
+		/// <summary>
+		/// Warning.
+		/// </summary>
 		Warning,
+
+		/// <summary>
+		/// Error.
+		/// </summary>
 		Error,
+
+		/// <summary>
+		/// Exception.
+		/// </summary>
 		Exception
 	}
 
@@ -58,7 +92,7 @@ namespace Waher.Mock
 		/// <summary>
 		/// Time of day of event, as a string.
 		/// </summary>
-		public string Time { get { return this.timestamp.ToLongTimeString(); } }
+		public string Time { get { return this.timestamp.ToString("T"); } }
 
 		/// <summary>
 		/// Message

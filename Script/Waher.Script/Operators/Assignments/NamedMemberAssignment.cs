@@ -14,7 +14,7 @@ namespace Waher.Script.Operators.Assignments
     /// </summary>
     public class NamedMemberAssignment : BinaryOperator
     {
-        private string name;
+        private readonly string name;
 
         /// <summary>
         /// Named member Assignment operator.
@@ -23,6 +23,7 @@ namespace Waher.Script.Operators.Assignments
         /// <param name="Operand">Operand.</param>
         /// <param name="Start">Start position in script expression.</param>
         /// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
         public NamedMemberAssignment(NamedMember NamedMember, ScriptNode Operand, int Start, int Length, Expression Expression)
             : base(NamedMember.Operand, Operand, Start, Length, Expression)
         {
@@ -54,7 +55,7 @@ namespace Waher.Script.Operators.Assignments
                 if (Type != this.type)
                 {
                     this.type = Type;
-                    this.property = Type.GetProperty(this.name);
+                    this.property = Type.GetRuntimeProperty(this.name);
                     if (this.property != null)
                     {
                         this.field = null;
@@ -62,16 +63,12 @@ namespace Waher.Script.Operators.Assignments
                     }
                     else
                     {
-                        this.field = Type.GetField(this.name);
+                        this.field = Type.GetRuntimeField(this.name);
                         if (this.field != null)
                             this.nameIndex = null;
                         else
                         {
-#if WINDOWS_UWP
-							this.property = Type.GetProperty("Item", typeof(object), NamedMember.stringType);
-#else
-							this.property = Type.GetProperty("Item", NamedMember.stringType);
-#endif
+							this.property = Type.GetRuntimeProperty("Item");
 							if (this.property == null)
                                 this.nameIndex = null;
                             else if (this.nameIndex == null)
@@ -83,7 +80,7 @@ namespace Waher.Script.Operators.Assignments
                 if (this.property != null)
                 {
                     Type = this.property.PropertyType;
-                    if (!Type.IsAssignableFrom(Right.GetType()))
+                    if (!Type.GetTypeInfo().IsAssignableFrom(Right.GetType().GetTypeInfo()))
                         this.property.SetValue(LeftValue, Expression.ConvertTo(Right, Type, this), this.nameIndex);
                     else
                         this.property.SetValue(LeftValue, Right, this.nameIndex);
@@ -91,13 +88,13 @@ namespace Waher.Script.Operators.Assignments
                 else if (this.field != null)
                 {
                     Type = this.field.FieldType;
-                    if (!Type.IsAssignableFrom(Right.GetType()))
+                    if (!Type.GetTypeInfo().IsAssignableFrom(Right.GetType().GetTypeInfo()))
                         this.field.SetValue(Left, Expression.ConvertTo(Right, Type, this));
                     else
                         this.field.SetValue(Left, Right);
                 }
                 else
-                    throw new ScriptRuntimeException("Member not found.", this);
+					throw new ScriptRuntimeException("Member '" + this.name + "' not found on type '" + Type.FullName + "'.", this);
             }
 
             return Right;
@@ -107,9 +104,7 @@ namespace Waher.Script.Operators.Assignments
         private PropertyInfo property = null;
         private FieldInfo field = null;
         private string[] nameIndex = null;
-        private object synchObject = new object();
-
-
+        private readonly object synchObject = new object();
 
     }
 }

@@ -9,18 +9,20 @@ namespace Waher.Content.Markdown.Model
 	internal class Block
 	{
 		private string[] rows;
+		private int[] positions;
 		private int indent;
 		private int start;
 		private int end;
 
-		public Block(string[] Rows, int Indent)
-			: this(Rows, Indent, 0, Rows.Length - 1)
+		public Block(string[] Rows, int[] Positions, int Indent)
+			: this(Rows, Positions, Indent, 0, Rows.Length - 1)
 		{
 		}
 
-		public Block(string[] Rows, int Indent, int Start, int End)
+		public Block(string[] Rows, int[] Positions, int Indent, int Start, int End)
 		{
 			this.rows = Rows;
+			this.positions = Positions;
 			this.indent = Indent;
 			this.start = Start;
 			this.end = End;
@@ -29,6 +31,11 @@ namespace Waher.Content.Markdown.Model
 		public string[] Rows
 		{
 			get { return this.rows; }
+		}
+
+		public int[] Positions
+		{
+			get { return this.positions; }
 		}
 
 		public int Indent
@@ -61,19 +68,23 @@ namespace Waher.Content.Markdown.Model
 		{
 			List<Block> Result = new List<Block>();
 			List<string> Rows = new List<string>();
+			List<int> Positions = new List<int>();
 			string s;
 			int Indent = 0;
 			int i, j, k;
 			int d = Prefix.Length;
+			int Pos;
 			bool FirstRow = true;
 
 			for (i = this.start; i <= this.end; i++)
 			{
 				s = this.rows[i];
+				Pos = this.positions[i];
 
 				if (s.StartsWith(Prefix))
 				{
 					s = s.Substring(d);
+					Pos += d;
 					j = d;
 				}
 				else
@@ -82,28 +93,33 @@ namespace Waher.Content.Markdown.Model
 				k = 0;
 				foreach (char ch in s)
 				{
-					if (ch > ' ')
+					if (ch > ' ' && ch != 160)
 						break;
-					else
-					{
-						k++;
 
-						if (ch == ' ')
-							j++;
-						else if (ch == '\t')
-							j += 4;
-					}
+					k++;
+
+					if (ch == ' ' || ch == 160)
+						j++;
+					else if (ch == '\t')
+						j += 4;
+
+					if (!FirstRow && j >= NrCharacters)
+						break;
 				}
 
 				if (k > 0)
+				{
 					s = s.Substring(k);
+					Pos += k;
+				}
 
 				if (string.IsNullOrEmpty(s))
 				{
 					if (!FirstRow)
 					{
-						Result.Add(new Block(Rows.ToArray(), Indent));
+						Result.Add(new Block(Rows.ToArray(), Positions.ToArray(), Indent));
 						Rows.Clear();
+						Positions.Clear();
 						Indent = 0;
 						FirstRow = true;
 					}
@@ -117,11 +133,12 @@ namespace Waher.Content.Markdown.Model
 					}
 
 					Rows.Add(s);
+					Positions.Add(Pos);
 				}
 			}
 
 			if (!FirstRow)
-				Result.Add(new Block(Rows.ToArray(), Indent));
+				Result.Add(new Block(Rows.ToArray(), Positions.ToArray(), Indent));
 
 			return Result;
 		}
@@ -133,6 +150,7 @@ namespace Waher.Content.Markdown.Model
 			string Caption = string.Empty;
 			string Id = string.Empty;
 			string s;
+			int Pos;
 			int Columns = 0;
 			int UnderlineRow = -1;
 			int i, j;
@@ -148,6 +166,7 @@ namespace Waher.Content.Markdown.Model
 				IsUnderline = true;
 
 				s = this.rows[i];
+				Pos = this.positions[i];
 
 				if (i == End && (M = caption.Match(s)).Success)
 				{
@@ -158,18 +177,22 @@ namespace Waher.Content.Markdown.Model
 				else
 				{
 					if (s.StartsWith("|"))
+					{
 						s = s.TrimEnd().Substring(1);
+						Pos++;
+					}
 
 					if (s.EndsWith("|"))
 						s = s.Substring(0, s.Length - 1);
 
 					this.rows[i] = s;
+					this.positions[i] = Pos;
 
 					foreach (char ch in s)
 					{
 						if (ch == '|')
 							j++;
-						else if (ch != '-' && ch != ':' && ch > ' ')
+						else if (ch != '-' && ch != ':' && ch > ' ' && ch != 160)
 							IsUnderline = false;
 					}
 
@@ -189,15 +212,28 @@ namespace Waher.Content.Markdown.Model
 				return false;
 
 			s = this.rows[UnderlineRow];
+			Pos = this.positions[UnderlineRow];
+
 			string[] Parts = s.Split('|');
+			int[] PartPositions = new int[Columns];
 
 			TextAlignment[] Alignments = new TextAlignment[Columns];
 			bool Left;
 			bool Right;
+			int Diff;
 
 			for (j = 0; j < Columns; j++)
 			{
-				s = Parts[j].Trim();
+				s = Parts[j];
+				PartPositions[j] = Pos;
+
+				Pos += s.Length + 1;
+
+				s = s.TrimEnd();
+				Diff = s.Length;
+				s = s.TrimStart();
+				Diff -= s.Length;
+				PartPositions[j] += Diff;
 
 				Left = s.StartsWith(":");
 				Right = s.EndsWith(":");
@@ -227,7 +263,9 @@ namespace Waher.Content.Markdown.Model
 			TableInformation.NrHeaderRows = (UnderlineRow - this.start);
 			TableInformation.NrDataRows = End - UnderlineRow;
 			TableInformation.Headers = new string[TableInformation.NrHeaderRows][];
+			TableInformation.HeaderPositions = new int[TableInformation.NrHeaderRows][];
 			TableInformation.Rows = new string[TableInformation.NrDataRows][];
+			TableInformation.RowPositions = new int[TableInformation.NrDataRows][];
 			TableInformation.Alignments = Alignments;
 			TableInformation.Caption = Caption;
 			TableInformation.Id = Id;
@@ -235,13 +273,25 @@ namespace Waher.Content.Markdown.Model
 			for (i = 0; i < TableInformation.NrHeaderRows; i++)
 			{
 				TableInformation.Headers[i] = this.rows[this.start + i].Split('|');
+				TableInformation.HeaderPositions[i] = new int[Columns];
+
+				Pos = this.positions[this.start + i];
 				for (j = 0; j < Columns; j++)
 				{
 					s = TableInformation.Headers[i][j];
+					TableInformation.HeaderPositions[i][j] = Pos;
+					Pos += s.Length + 1;
+
 					if (string.IsNullOrEmpty(s))
 						s = null;
 					else
-						s = s.Trim();
+					{
+						s = s.TrimEnd();
+						Diff = s.Length;
+						s = s.TrimStart();
+						Diff -= s.Length;
+						TableInformation.HeaderPositions[i][j] += Diff;
+					}
 
 					TableInformation.Headers[i][j] = s;
 				}
@@ -250,13 +300,25 @@ namespace Waher.Content.Markdown.Model
 			for (i = 0; i < TableInformation.NrDataRows; i++)
 			{
 				TableInformation.Rows[i] = this.rows[UnderlineRow + i + 1].Split('|');
+				TableInformation.RowPositions[i] = new int[Columns];
+
+				Pos = this.positions[UnderlineRow + i + 1];
 				for (j = 0; j < Columns; j++)
 				{
 					s = TableInformation.Rows[i][j];
+					TableInformation.RowPositions[i][j] = Pos;
+					Pos += s.Length + 1;
+
 					if (string.IsNullOrEmpty(s))
 						s = null;
 					else
-						s = s.Trim();
+					{
+						s = s.TrimEnd();
+						Diff = s.Length;
+						s = s.TrimStart();
+						Diff -= s.Length;
+						TableInformation.RowPositions[i][j] += Diff;
+					}
 
 					TableInformation.Rows[i][j] = s;
 				}
@@ -287,11 +349,11 @@ namespace Waher.Content.Markdown.Model
 			j = 0;
 			c = s.Length;
 
-			while (i < c && j < 3 && (ch = s[i]) <= ' ')
+			while (i < c && j < 3 && ((ch = s[i]) <= ' ' || ch == 160))
 			{
 				i++;
 
-				if (ch == ' ')
+				if (ch == ' ' || ch == 160)
 					j++;
 				else if (ch == '\t')
 					j += 4;

@@ -16,7 +16,7 @@ namespace Waher.Content.Markdown.Model.SpanElements
 		/// Represents an HTML entity in Unicode format.
 		/// </summary>
 		/// <param name="Document">Markdown document.</param>
-		/// <param name="Entity">HTML Entity.</param>
+		/// <param name="Code">HTML Entity.</param>
 		public HtmlEntityUnicode(MarkdownDocument Document, int Code)
 			: base(Document)
 		{
@@ -76,6 +76,15 @@ namespace Waher.Content.Markdown.Model.SpanElements
 		internal override bool InlineSpanElement
 		{
 			get { return true; }
+		}
+
+		/// <summary>
+		/// Exports the element to XML.
+		/// </summary>
+		/// <param name="Output">XML Output.</param>
+		public override void Export(XmlWriter Output)
+		{
+			Output.WriteElementString("HtmlEntityUnicode", this.code.ToString());
 		}
 	}
 }

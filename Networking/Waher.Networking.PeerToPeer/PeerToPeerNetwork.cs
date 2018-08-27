@@ -3,10 +3,12 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Collections.Generic;
-using System.Text;
+using System.Threading.Tasks;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using Waher.Events;
+using Waher.Networking.Sniffers;
 using Waher.Networking.UPnP;
 using Waher.Networking.UPnP.Services;
 
@@ -67,13 +69,21 @@ namespace Waher.Networking.PeerToPeer
 	/// </summary>
 	public class PeerToPeerNetwork : IDisposable
 	{
-		private const int defaultPort = 0;
-		private const int defaultBacklog = 10;
+		/// <summary>
+		/// Default desired port number. (0 = any port number.)
+		/// </summary>
+		public const int DefaultPort = 0;
 
+		/// <summary>
+		/// Default connection backlog (10).
+		/// </summary>
+		public const int DefaultBacklog = 10;
+
+		private LinkedList<KeyValuePair<IPEndPoint, byte[]>> writeQueue = new LinkedList<KeyValuePair<IPEndPoint, byte[]>>();
 		private Dictionary<IPAddress, bool> ipAddressesFound = new Dictionary<IPAddress, bool>();
 		private TcpListener tcpListener;
 		private UdpClient udpClient;
-		private UPnPClient upnpClient;
+		private UPnPClient upnpClient = null;
 		private WANIPConnectionV1 serviceWANIPConnectionV1;
 		private IPAddress localAddress;
 		private IPAddress externalAddress;
@@ -83,12 +93,16 @@ namespace Waher.Networking.PeerToPeer
 		private ManualResetEvent ready = new ManualResetEvent(false);
 		private ManualResetEvent error = new ManualResetEvent(false);
 		private Exception exception = null;
+		private ISniffer[] sniffers;
 		private string applicationName;
-		private int desiredPort;
+		private int desiredLocalPort;
+		private int desiredExternalPort;
 		private int backlog;
 		private bool tcpMappingAdded = false;
 		private bool udpMappingAdded = false;
 		private bool encapsulatePackets = true;
+		private bool isWriting = false;
+		private bool disposed = false;
 
 		/// <summary>
 		/// Manages a peer-to-peer network that can receive connections from outside of a NAT-enabled firewall.
@@ -96,8 +110,9 @@ namespace Waher.Networking.PeerToPeer
 		/// <param name="ApplicationName">Name of Peer-to-Peer application. Any NAT port mappings in the firewall
 		/// having the same name and pointing to the same machine will be removed. To allow multiple port mappings on
 		/// the same machine, each mapping needs a unique name.</param>
-		public PeerToPeerNetwork(string ApplicationName)
-			: this(ApplicationName, defaultPort, defaultBacklog)
+		/// <param name="Sniffers">Sniffers</param>
+		public PeerToPeerNetwork(string ApplicationName, params ISniffer[] Sniffers)
+			: this(ApplicationName, DefaultPort, DefaultPort, DefaultBacklog, Sniffers)
 		{
 		}
 
@@ -107,9 +122,11 @@ namespace Waher.Networking.PeerToPeer
 		/// <param name="ApplicationName">Name of Peer-to-Peer application. Any NAT port mappings in the firewall
 		/// having the same name and pointing to the same machine will be removed. To allow multiple port mappings on
 		/// the same machine, each mapping needs a unique name.</param>
-		/// <param name="Port">Desired port number. If 0, a dynamic port number will be assigned.</param>
-		public PeerToPeerNetwork(string ApplicationName, int Port)
-			: this(ApplicationName, Port, defaultBacklog)
+		/// <param name="LocalPort">Desired local port number. If 0, a dynamic port number will be assigned.</param>
+		/// <param name="ExternalPort">Desired external port number. If 0, a dynamic port number will be assigned.</param>
+		/// <param name="Sniffers">Sniffers</param>
+		public PeerToPeerNetwork(string ApplicationName, int LocalPort, int ExternalPort, params ISniffer[] Sniffers)
+			: this(ApplicationName, LocalPort, ExternalPort, DefaultBacklog, Sniffers)
 		{
 		}
 
@@ -119,13 +136,17 @@ namespace Waher.Networking.PeerToPeer
 		/// <param name="ApplicationName">Name of Peer-to-Peer application. Any NAT port mappings in the firewall
 		/// having the same name and pointing to the same machine will be removed. To allow multiple port mappings on
 		/// the same machine, each mapping needs a unique name.</param>
-		/// <param name="Port">Desired port number. If 0, a dynamic port number will be assigned.</param>
+		/// <param name="LocalPort">Desired local port number. If 0, a dynamic port number will be assigned.</param>
+		/// <param name="ExternalPort">Desired external port number. If 0, a dynamic port number will be assigned.</param>
 		/// <param name="Backlog">Connection backlog.</param>
-		public PeerToPeerNetwork(string ApplicationName, int Port, int Backlog)
+		/// <param name="Sniffers">Sniffers</param>
+		public PeerToPeerNetwork(string ApplicationName, int LocalPort, int ExternalPort, int Backlog, params ISniffer[] Sniffers)
 		{
 			this.applicationName = ApplicationName;
-			this.desiredPort = Port;
+			this.desiredLocalPort = LocalPort;
+			this.desiredExternalPort = ExternalPort;
 			this.backlog = Backlog;
+			this.sniffers = Sniffers;
 
 			this.tcpListener = null;
 			this.udpClient = null;
@@ -135,23 +156,23 @@ namespace Waher.Networking.PeerToPeer
 				try
 				{
 					this.localAddress = this.externalAddress;
-					ushort LocalPort;
+					ushort PublicPort;
 
-					this.tcpListener = new TcpListener(this.localAddress, this.desiredPort);
+					this.tcpListener = new TcpListener(this.localAddress, this.desiredExternalPort);
 					this.tcpListener.Start(this.backlog);
 
-					LocalPort = (ushort)((IPEndPoint)this.tcpListener.LocalEndpoint).Port;
+					PublicPort = (ushort)((IPEndPoint)this.tcpListener.LocalEndpoint).Port;
 
-					this.localEndpoint = new IPEndPoint(this.localAddress, LocalPort);
-					this.externalEndpoint = new IPEndPoint(this.externalAddress, LocalPort);
+					this.localEndpoint = new IPEndPoint(this.localAddress, PublicPort);
+					this.externalEndpoint = new IPEndPoint(this.externalAddress, PublicPort);
 
 					this.udpClient = new UdpClient(this.localEndpoint.AddressFamily);
 					this.udpClient.Client.Bind(this.localEndpoint);
 
 					this.State = PeerToPeerNetworkState.Ready;
 
-					this.tcpListener.BeginAcceptTcpClient(this.EndAcceptTcpClient, null);
-					this.udpClient.BeginReceive(this.EndReceiveUdp, null);
+					this.AcceptTcpClients();
+					this.BeginReceiveUdp();
 				}
 				catch (Exception ex)
 				{
@@ -166,13 +187,47 @@ namespace Waher.Networking.PeerToPeer
 
 					if (this.udpClient != null)
 					{
-						this.udpClient.Close();
+						this.udpClient.Dispose();
 						this.udpClient = null;
 					}
 				}
 			}
 			else
-				this.StartSearch();
+				this.SearchGateways();
+		}
+
+		private async void AcceptTcpClients()
+		{
+			try
+			{
+				while (!this.disposed)
+				{
+					TcpClient Client = await this.tcpListener.AcceptTcpClientAsync();
+					if (Client != null)
+					{
+						try
+						{
+							PeerConnection Connection = new PeerConnection(Client, this,
+								(IPEndPoint)Client.Client.RemoteEndPoint, this.encapsulatePackets);
+
+							this.State = PeerToPeerNetworkState.Ready;
+
+							this.PeerConnected(Connection);
+
+							Connection.Start();
+						}
+						catch (Exception)
+						{
+							if (this.state != PeerToPeerNetworkState.Closed)
+								this.State = PeerToPeerNetworkState.Error;
+						}
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				Log.Critical(ex);
+			}
 		}
 
 		private bool OnPublicNetwork()
@@ -186,40 +241,84 @@ namespace Waher.Networking.PeerToPeer
 
 				foreach (UnicastIPAddressInformation UnicastAddress in Properties.UnicastAddresses)
 				{
-					if (UnicastAddress.Address.AddressFamily == AddressFamily.InterNetwork && Socket.OSSupportsIPv4)
-					{
-						byte[] Addr = UnicastAddress.Address.GetAddressBytes();
+					if (!IsPublicAddress(UnicastAddress.Address))
+						continue;
 
-						if (Addr[0] == 127)
-							continue;	// Loopback address range: 127.0.0.0 - 127.255.255.55
-
-						else if (Addr[0] == 10)
-							continue;	// Private address range: 10.0.0.0 - 10.255.255.55
-
-						else if (Addr[0] == 172 && Addr[1] >= 16 && Addr[1] <= 31)
-							continue;	// Private address range: 172.16.0.0 - 172.31.255.255
-
-						else if (Addr[0] == 192 && Addr[1] == 168)
-							continue;	// Private address range: 192.168.0.0 - 192.168.255.255
-
-						else if (Addr[0] == 169 && Addr[1] == 254)
-							continue;	// Link-local address range: 169.254.0.0 - 169.254.255.255
-
-						this.externalAddress = UnicastAddress.Address;
-						return true;
-					}
+					this.externalAddress = UnicastAddress.Address;
+					return true;
 				}
 			}
 
 			return false;
 		}
 
-		private void StartSearch()
+		/// <summary>
+		/// Checks if an IPv4 address is public.
+		/// </summary>
+		/// <param name="Address">IPv4 address.</param>
+		/// <returns>If address is public.</returns>
+		public static bool IsPublicAddress(IPAddress Address)
+		{
+			if (Address.AddressFamily == AddressFamily.InterNetwork && Socket.OSSupportsIPv4)
+			{
+				byte[] Addr = Address.GetAddressBytes();
+
+				if (Addr[0] == 127)
+					return false;   // Loopback address range: 127.0.0.0 - 127.255.255.55
+
+				else if (Addr[0] == 10)
+					return false;   // Private address range: 10.0.0.0 - 10.255.255.55
+
+				else if (Addr[0] == 172 && Addr[1] >= 16 && Addr[1] <= 31)
+					return false;   // Private address range: 172.16.0.0 - 172.31.255.255
+
+				else if (Addr[0] == 192 && Addr[1] == 168)
+					return false;   // Private address range: 192.168.0.0 - 192.168.255.255
+
+				else if (Addr[0] == 169 && Addr[1] == 254)
+					return false;   // Link-local address range: 169.254.0.0 - 169.254.255.255
+
+				return true;
+			}
+			else
+				return false;
+		}
+
+		/// <summary>
+		/// Desired local port number. If 0, a dynamic port number will be assigned.
+		/// </summary>
+		public int DesiredLocalPort
+		{
+			get { return this.desiredLocalPort; }
+			set { this.desiredLocalPort = value; }
+		}
+
+		/// <summary>
+		/// Desired external port number. If 0, a dynamic port number will be assigned.
+		/// </summary>
+		public int DesiredExternalPort
+		{
+			get { return this.desiredExternalPort; }
+			set { this.desiredExternalPort = value; }
+		}
+
+		/// <summary>
+		/// Searches for Internet Gateways in the network.
+		/// </summary>
+		public void SearchGateways()
 		{
 			try
 			{
-				this.upnpClient = new UPnPClient();
-				this.upnpClient.OnDeviceFound += new UPnPDeviceLocationEventHandler(upnpClient_OnDeviceFound);
+				if (this.upnpClient == null)
+				{
+					this.upnpClient = new UPnPClient(this.sniffers);
+					this.upnpClient.OnDeviceFound += new UPnPDeviceLocationEventHandler(UpnpClient_OnDeviceFound);
+				}
+
+				lock (this.ipAddressesFound)
+				{
+					this.ipAddressesFound.Clear();
+				}
 
 				this.State = PeerToPeerNetworkState.SearchingForGateway;
 
@@ -233,7 +332,7 @@ namespace Waher.Networking.PeerToPeer
 			}
 		}
 
-		private void upnpClient_OnDeviceFound(object Sender, DeviceLocationEventArgs e)
+		private async void UpnpClient_OnDeviceFound(object Sender, DeviceLocationEventArgs e)
 		{
 			try
 			{
@@ -245,30 +344,19 @@ namespace Waher.Networking.PeerToPeer
 					this.ipAddressesFound[e.RemoteEndPoint.Address] = true;
 				}
 
-				e.Location.StartGetDevice(this.DeviceRetrieved, e);
-			}
-			catch (Exception ex)
-			{
-				this.exception = ex;
-				this.State = PeerToPeerNetworkState.Error;
-			}
-		}
-
-		private void DeviceRetrieved(object Sender, DeviceDescriptionEventArgs e)
-		{
-			try
-			{
-				if (e.DeviceDescriptionDocument != null)
+				DeviceDescriptionDocument Doc = await e.Location.GetDeviceAsync();
+				if (Doc != null)
 				{
-					UPnPService Service = e.DeviceDescriptionDocument.GetService("urn:schemas-upnp-org:service:WANIPConnection:1");
+					UPnPService Service = Doc.GetService("urn:schemas-upnp-org:service:WANIPConnection:1");
 					if (Service == null)
 					{
-						Service = e.DeviceDescriptionDocument.GetService("urn:schemas-upnp-org:service:WANIPConnection:2");
+						Service = Doc.GetService("urn:schemas-upnp-org:service:WANIPConnection:2");
 						if (Service == null)
 							return;
 					}
 
-					Service.StartGetService(this.ServiceRetrieved, e.State);
+					ServiceDescriptionDocument Scpd = await Service.GetServiceAsync();
+					this.ServiceRetrieved(Scpd, e.LocalEndPoint);
 				}
 			}
 			catch (Exception ex)
@@ -278,29 +366,24 @@ namespace Waher.Networking.PeerToPeer
 			}
 		}
 
-		private void ServiceRetrieved(object Sender, ServiceDescriptionEventArgs e)
+		private void ServiceRetrieved(ServiceDescriptionDocument Scpd, IPEndPoint LocalEndPoint)
 		{
 			try
 			{
-				DeviceLocationEventArgs e2 = (DeviceLocationEventArgs)e.State;
 				Dictionary<ushort, bool> TcpPortMapped = new Dictionary<ushort, bool>();
 				Dictionary<ushort, bool> UdpPortMapped = new Dictionary<ushort, bool>();
-				string NewExternalIPAddress;
 				ushort PortMappingIndex;
-				string NewRemoteHost;
-				ushort NewExternalPort;
-				string NewProtocol;
-				ushort NewInternalPort;
-				string NewInternalClient;
-				bool NewEnabled;
-				string NewPortMappingDescription;
-				uint NewLeaseDuration;
+				bool TcpAlreadyRegistered = false;
+				bool UdpAlreadyRegistered = false;
 
-				this.serviceWANIPConnectionV1 = new WANIPConnectionV1(e.ServiceDescriptionDocument);
+				this.serviceWANIPConnectionV1 = new WANIPConnectionV1(Scpd);
 				this.State = PeerToPeerNetworkState.RegisteringApplicationInGateway;
 
-				this.serviceWANIPConnectionV1.GetExternalIPAddress(out NewExternalIPAddress);
+				this.serviceWANIPConnectionV1.GetExternalIPAddress(out string NewExternalIPAddress);
 				this.externalAddress = IPAddress.Parse(NewExternalIPAddress);
+
+				if (!IsPublicAddress(this.externalAddress))
+					return;     // TODO: Handle multiple layers of gateways.
 
 				PortMappingIndex = 0;
 
@@ -308,12 +391,30 @@ namespace Waher.Networking.PeerToPeer
 				{
 					while (true)
 					{
-						this.serviceWANIPConnectionV1.GetGenericPortMappingEntry(PortMappingIndex, out NewRemoteHost,
-							out NewExternalPort, out NewProtocol, out NewInternalPort, out NewInternalClient,
-							out NewEnabled, out NewPortMappingDescription, out NewLeaseDuration);
+						this.serviceWANIPConnectionV1.GetGenericPortMappingEntry(PortMappingIndex, out string NewRemoteHost,
+							out ushort NewExternalPort, out string NewProtocol, out ushort NewInternalPort, out string NewInternalClient,
+							out bool NewEnabled, out string NewPortMappingDescription, out uint NewLeaseDuration);
 
-						if (NewPortMappingDescription == this.applicationName && NewInternalClient == e2.LocalEndPoint.Address.ToString())
+						if (NewPortMappingDescription == this.applicationName && NewInternalClient == LocalEndPoint.Address.ToString())
+						{
+							if (NewExternalPort == this.desiredExternalPort && this.desiredExternalPort != 0)
+							{
+								if (NewProtocol == "TCP")
+								{
+									TcpAlreadyRegistered = true;
+									PortMappingIndex++;
+									continue;
+								}
+								else if (NewProtocol == "UDP")
+								{
+									UdpAlreadyRegistered = true;
+									PortMappingIndex++;
+									continue;
+								}
+							}
+
 							this.serviceWANIPConnectionV1.DeletePortMapping(NewRemoteHost, NewExternalPort, NewProtocol);
+						}
 						else
 						{
 							switch (NewProtocol)
@@ -331,29 +432,35 @@ namespace Waher.Networking.PeerToPeer
 						}
 					}
 				}
+				catch (AggregateException ex)
+				{
+					if (!(ex.InnerException is UPnPException))
+						throw;
+				}
 				catch (UPnPException)
 				{
 					// No more entries.
 				}
 
-				this.localAddress = e2.LocalEndPoint.Address;
-				ushort LocalPort;
+				this.localAddress = LocalEndPoint.Address;
+				ushort LocalPort, ExternalPort;
 				int i;
 
 				do
 				{
-					this.tcpListener = new TcpListener(this.localAddress, this.desiredPort);
+					this.tcpListener = new TcpListener(this.localAddress, this.desiredLocalPort);
 					this.tcpListener.Start(this.backlog);
 
 					i = ((IPEndPoint)this.tcpListener.LocalEndpoint).Port;
 					LocalPort = (ushort)(i);
-					if (i < 0 || i > ushort.MaxValue || TcpPortMapped.ContainsKey(LocalPort) || UdpPortMapped.ContainsKey(LocalPort))
+					ExternalPort = this.desiredExternalPort == 0 ? LocalPort : (ushort)this.desiredExternalPort;
+
+					if (i < 0 || i > ushort.MaxValue || TcpPortMapped.ContainsKey(ExternalPort) || UdpPortMapped.ContainsKey(ExternalPort))
 					{
 						this.tcpListener.Stop();
 						this.tcpListener = null;
 
-						if (this.desiredPort != 0)
-							throw new ArgumentException("Port already assigned to another application in the network.", "Port");
+						throw new ArgumentException("Port already assigned to another application in the network.", nameof(ExternalPort));
 					}
 					else
 					{
@@ -373,47 +480,32 @@ namespace Waher.Networking.PeerToPeer
 
 				this.localEndpoint = new IPEndPoint(this.localAddress, LocalPort);
 
-				this.serviceWANIPConnectionV1.AddPortMapping(string.Empty, LocalPort, "TCP", LocalPort, LocalAddress.ToString(), true, this.applicationName, 0);
+				if (!TcpAlreadyRegistered)
+				{
+					this.serviceWANIPConnectionV1.AddPortMapping(string.Empty, ExternalPort,
+						"TCP", LocalPort, LocalAddress.ToString(), true, this.applicationName, 0);
+				}
+
 				this.tcpMappingAdded = true;
 
-				this.serviceWANIPConnectionV1.AddPortMapping(string.Empty, LocalPort, "UDP", LocalPort, LocalAddress.ToString(), true, this.applicationName, 0);
+				if (!UdpAlreadyRegistered)
+				{
+					this.serviceWANIPConnectionV1.AddPortMapping(string.Empty, ExternalPort,
+						"UDP", LocalPort, LocalAddress.ToString(), true, this.applicationName, 0);
+				}
+
 				this.udpMappingAdded = true;
 
-				this.externalEndpoint = new IPEndPoint(this.externalAddress, LocalPort);
+				this.externalEndpoint = new IPEndPoint(this.externalAddress, ExternalPort);
 				this.State = PeerToPeerNetworkState.Ready;
 
-				this.tcpListener.BeginAcceptTcpClient(this.EndAcceptTcpClient, null);
-				this.udpClient.BeginReceive(this.EndReceiveUdp, null);
+				this.AcceptTcpClients();
+				this.BeginReceiveUdp();
 			}
 			catch (Exception ex)
 			{
 				this.exception = ex;
 				this.State = PeerToPeerNetworkState.Error;
-			}
-		}
-
-		private void EndAcceptTcpClient(IAsyncResult ar)
-		{
-			if (this.tcpListener != null)
-			{
-				try
-				{
-					TcpClient Client = this.tcpListener.EndAcceptTcpClient(ar);
-					PeerConnection Connection = new PeerConnection(Client, this, 
-						(IPEndPoint)Client.Client.RemoteEndPoint, this.encapsulatePackets);
-
-					this.tcpListener.BeginAcceptTcpClient(this.EndAcceptTcpClient, null);
-					this.State = PeerToPeerNetworkState.Ready;
-
-					this.PeerConnected(Connection);
-
-					Connection.Start();
-				}
-				catch (Exception)
-				{
-					if (this.state != PeerToPeerNetworkState.Closed)
-						this.State = PeerToPeerNetworkState.Error;
-				}
 			}
 		}
 
@@ -432,7 +524,7 @@ namespace Waher.Networking.PeerToPeer
 				}
 				catch (Exception ex)
 				{
-					Events.Log.Critical(ex);
+					Log.Critical(ex);
 				}
 			}
 		}
@@ -482,7 +574,7 @@ namespace Waher.Networking.PeerToPeer
 						}
 						catch (Exception ex)
 						{
-							Events.Log.Critical(ex);
+							Log.Critical(ex);
 						}
 					}
 				}
@@ -576,6 +668,7 @@ namespace Waher.Networking.PeerToPeer
 		/// </summary>
 		public void Dispose()
 		{
+			this.disposed = true;
 			this.State = PeerToPeerNetworkState.Closed;
 
 			if (this.tcpListener != null)
@@ -626,13 +719,13 @@ namespace Waher.Networking.PeerToPeer
 
 			if (this.ready != null)
 			{
-				this.ready.Close();
+				this.ready.Dispose();
 				this.ready = null;
 			}
 
 			if (this.error != null)
 			{
-				this.error.Close();
+				this.error.Dispose();
 				this.error = null;
 			}
 		}
@@ -643,39 +736,33 @@ namespace Waher.Networking.PeerToPeer
 		/// </summary>
 		/// <param name="RemoteEndPoint">Remote End-point.</param>
 		/// <returns>Peer connection</returns>
-		public PeerConnection ConnectToPeer(IPEndPoint RemoteEndPoint)
+		public async Task<PeerConnection> ConnectToPeer(IPEndPoint RemoteEndPoint)
 		{
 			if (this.state != PeerToPeerNetworkState.Ready)
 				throw new IOException("Peer-to-peer network not ready.");
 
-			TcpClient Client = new TcpClient(new IPEndPoint(this.localAddress, 0));
+			TcpClient Client = new TcpClient();
 			IPEndPoint RemoteEndPoint2;
 
 			try
 			{
 				if (IPAddress.Equals(RemoteEndPoint.Address, this.externalAddress))
 				{
-					ushort InternalPort;
-					string InternalClient;
-					string PortMappingDescription;
-					uint LeaseDuration;
-					bool Enabled;
-
 					this.serviceWANIPConnectionV1.GetSpecificPortMappingEntry(string.Empty, (ushort)RemoteEndPoint.Port, "TCP",
-						out InternalPort, out InternalClient, out Enabled, out PortMappingDescription, out LeaseDuration);
+						out ushort InternalPort, out string InternalClient, out bool Enabled, out string PortMappingDescription, out uint LeaseDuration);
 
 					RemoteEndPoint2 = new IPEndPoint(IPAddress.Parse(InternalClient), InternalPort);
-					Client.Connect(RemoteEndPoint2);
+					await Client.ConnectAsync(RemoteEndPoint2.Address, RemoteEndPoint2.Port);
 				}
 				else
 				{
 					RemoteEndPoint2 = RemoteEndPoint;
-					Client.Connect(RemoteEndPoint);
+					await Client.ConnectAsync(RemoteEndPoint.Address, RemoteEndPoint.Port);
 				}
 			}
 			catch (Exception)
 			{
-				Client.Close();
+				Client.Dispose();
 				throw;
 			}
 
@@ -686,37 +773,33 @@ namespace Waher.Networking.PeerToPeer
 			return Result;
 		}
 
-		private void EndReceiveUdp(IAsyncResult ar)
+		private async void BeginReceiveUdp()
 		{
 			try
 			{
-				if (this.udpClient != null)
+				while (!this.disposed)
 				{
-					IPEndPoint RemoteEndpoint = null;
-
-					byte[] Data = this.udpClient.EndReceive(ar, ref RemoteEndpoint);
-					if (RemoteEndpoint != null && Data != null)
+					UdpReceiveResult Data = await this.udpClient.ReceiveAsync();
+					if (!this.disposed)
 					{
 						UdpDatagramEvent h = this.OnUdpDatagramReceived;
 						if (h != null)
 						{
 							try
 							{
-								h(this, new UdpDatagramEventArgs(RemoteEndpoint, Data));
+								h(this, new UdpDatagramEventArgs(Data.RemoteEndPoint, Data.Buffer));
 							}
 							catch (Exception ex)
 							{
-								Events.Log.Critical(ex);
+								Log.Critical(ex);
 							}
 						}
 					}
-
-					this.udpClient.BeginReceive(this.EndReceiveUdp, null);
 				}
 			}
 			catch (Exception ex)
 			{
-				Events.Log.Critical(ex);
+				Log.Critical(ex);
 			}
 		}
 
@@ -730,40 +813,37 @@ namespace Waher.Networking.PeerToPeer
 		/// </summary>
 		/// <param name="RemoteEndpoint">Remote endpoint of destination.</param>
 		/// <param name="Datagram">UDP Datagram to send.</param>
-		public void SendUdp(IPEndPoint RemoteEndpoint, byte[] Datagram)
+		public async void SendUdp(IPEndPoint RemoteEndpoint, byte[] Datagram)
 		{
 			lock (this.writeQueue)
 			{
 				if (this.isWriting)
-					this.writeQueue.AddLast(new KeyValuePair<IPEndPoint, byte[]>(RemoteEndpoint, Datagram));
-				else
 				{
-					this.isWriting = true;
-					try
-					{
-						this.udpClient.BeginSend(Datagram, Datagram.Length, RemoteEndpoint, this.EndSend, new UdpDatagramEventArgs(RemoteEndpoint, Datagram));
-					}
-					catch (Exception)
-					{
-						this.isWriting = false;
-						this.writeQueue.Clear();
-						throw;
-					}
+					this.writeQueue.AddLast(new KeyValuePair<IPEndPoint, byte[]>(RemoteEndpoint, Datagram));
+					return;
 				}
+				else
+					this.isWriting = true;
 			}
-		}
 
-		private bool isWriting = false;
-		private LinkedList<KeyValuePair<IPEndPoint, byte[]>> writeQueue = new LinkedList<KeyValuePair<IPEndPoint, byte[]>>();
-
-		private void EndSend(IAsyncResult ar)
-		{
 			try
 			{
-				if (this.udpClient != null)
+				while (!this.disposed && Datagram != null)
 				{
-					UdpDatagramEventArgs e = (UdpDatagramEventArgs)ar.AsyncState;
-					this.udpClient.EndSend(ar);
+					await this.udpClient.SendAsync(Datagram, Datagram.Length, RemoteEndpoint);
+
+					UdpDatagramEvent h = this.OnUdpDatagramSent;
+					if (h != null)
+					{
+						try
+						{
+							h(this, new UdpDatagramEventArgs(RemoteEndpoint, Datagram));
+						}
+						catch (Exception ex)
+						{
+							Log.Critical(ex);
+						}
+					}
 
 					lock (this.writeQueue)
 					{
@@ -772,22 +852,13 @@ namespace Waher.Networking.PeerToPeer
 							KeyValuePair<IPEndPoint, byte[]> Rec = this.writeQueue.First.Value;
 							this.writeQueue.RemoveFirst();
 
-							this.udpClient.BeginSend(Rec.Value, Rec.Value.Length, Rec.Key, this.EndSend, new UdpDatagramEventArgs(Rec.Key, Rec.Value));
+							RemoteEndpoint = Rec.Key;
+							Datagram = Rec.Value;
 						}
 						else
+						{
 							this.isWriting = false;
-					}
-
-					UdpDatagramEvent h = this.OnUdpDatagramSent;
-					if (h != null)
-					{
-						try
-						{
-							h(this, e);
-						}
-						catch (Exception ex)
-						{
-							Events.Log.Critical(ex);
+							Datagram = null;
 						}
 					}
 				}
@@ -800,7 +871,7 @@ namespace Waher.Networking.PeerToPeer
 					this.writeQueue.Clear();
 				}
 
-				Events.Log.Critical(ex);
+				Log.Critical(ex);
 			}
 		}
 

@@ -116,6 +116,7 @@ namespace Waher.Script.Objects
 				return new ComplexNumber(this.value + E.value);
 		}
 
+		/// <summary>
 		/// Negates the element.
 		/// </summary>
 		/// <returns>Negation of current element.</returns>
@@ -125,7 +126,7 @@ namespace Waher.Script.Objects
 		}
 
 		/// <summary>
-		/// <see cref="Object.Equals"/>
+		/// <see cref="Object.Equals(object)"/>
 		/// </summary>
 		public override bool Equals(object obj)
 		{
@@ -143,7 +144,7 @@ namespace Waher.Script.Objects
 		}
 
 		/// <summary>
-		/// <see cref="Object.GetHashCode"/>
+		/// <see cref="Object.GetHashCode()"/>
 		/// </summary>
 		public override int GetHashCode()
 		{
@@ -174,7 +175,7 @@ namespace Waher.Script.Objects
 		/// <returns>If conversion was possible.</returns>
 		public override bool TryConvertTo(Type DesiredType, out object Value)
 		{
-			if (DesiredType.IsAssignableFrom(typeof(Complex)))
+			if (DesiredType.GetTypeInfo().IsAssignableFrom(typeof(Complex).GetTypeInfo()))
 			{
 				Value = this.value;
 				return true;
@@ -183,7 +184,6 @@ namespace Waher.Script.Objects
 			{
 				double d = this.value.Real;
 
-#if WINDOWS_UWP
 				if (DesiredType == typeof(byte))
 				{
 					if (d >= byte.MinValue && d <= byte.MaxValue)
@@ -263,107 +263,16 @@ namespace Waher.Script.Objects
 						return true;
 					}
 				}
+				else if (DesiredType.GetTypeInfo().IsAssignableFrom(typeof(Complex).GetTypeInfo()))
+				{
+					Value = this.value;
+					return true;
+				}
 				else if (DesiredType == typeof(ComplexNumber))
 				{
 					Value = this;
 					return true;
 				}
-#else
-				switch (Type.GetTypeCode(DesiredType))
-                {
-                    case TypeCode.Byte:
-                        if (d >= byte.MinValue && d <= byte.MaxValue)
-                        {
-                            Value = (byte)d;
-                            return true;
-                        }
-                        else
-                            break;
-
-                    case TypeCode.Decimal:
-                        Value = (decimal)d;
-                        return true;
-
-                    case TypeCode.Double:
-                        Value = (double)d;
-                        return true;
-
-                    case TypeCode.Int16:
-                        if (d >= short.MinValue && d <= short.MaxValue)
-                        {
-                            Value = (short)d;
-                            return true;
-                        }
-                        else
-                            break;
-
-                    case TypeCode.Int32:
-                        if (d >= int.MinValue && d <= int.MaxValue)
-                        {
-                            Value = (int)d;
-                            return true;
-                        }
-                        else
-                            break;
-
-                    case TypeCode.Int64:
-                        if (d >= long.MinValue && d <= long.MaxValue)
-                        {
-                            Value = (long)d;
-                            return true;
-                        }
-                        else
-                            break;
-
-                    case TypeCode.SByte:
-                        if (d >= sbyte.MinValue && d <= sbyte.MaxValue)
-                        {
-                            Value = (sbyte)d;
-                            return true;
-                        }
-                        else
-                            break;
-
-                    case TypeCode.Single:
-                        Value = (float)d;
-                        return true;
-
-                    case TypeCode.UInt16:
-                        if (d >= ushort.MinValue && d <= ushort.MaxValue)
-                        {
-                            Value = (ushort)d;
-                            return true;
-                        }
-                        else
-                            break;
-
-                    case TypeCode.UInt32:
-                        if (d >= uint.MinValue && d <= uint.MaxValue)
-                        {
-                            Value = (uint)d;
-                            return true;
-                        }
-                        else
-                            break;
-
-                    case TypeCode.UInt64:
-                        if (d >= ulong.MinValue && d <= ulong.MaxValue)
-                        {
-                            Value = (ulong)d;
-                            return true;
-                        }
-                        else
-                            break;
-
-                    case TypeCode.Object:
-                        if (DesiredType==typeof(ComplexNumber))
-                        {
-                            Value = this;
-                            return true;
-                        }
-                        break;
-                }
-#endif
 			}
 
 			Value = null;

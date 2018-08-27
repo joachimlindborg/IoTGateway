@@ -1,14 +1,13 @@
 ﻿using System;
-#if !WINDOWS_UWP
-using System.Drawing;
-#endif
 using System.IO;
 using System.Collections.Generic;
 using System.Text;
 using System.Xml;
+using SkiaSharp;
+using Waher.Content.Xml;
 using Waher.Events;
 using Waher.Runtime.Cache;
-using Waher.Script;
+using Waher.Runtime.Inventory;
 
 namespace Waher.Content.Markdown.Model.Multimedia
 {
@@ -35,6 +34,18 @@ namespace Waher.Content.Markdown.Model.Multimedia
 				return Grade.Ok;
 			else
 				return Grade.Barely;
+		}
+
+		/// <summary>
+		/// If the link provided should be embedded in a multi-media construct automatically.
+		/// </summary>
+		/// <param name="Url">Inline link.</param>
+		public override bool EmbedInlineLink(string Url)
+		{
+			string Extension = Path.GetExtension(Url);
+			string ContentType = InternetContent.GetContentType(Extension);
+
+			return ContentType.StartsWith("image/");
 		}
 
 		/// <summary>
@@ -187,34 +198,14 @@ namespace Waher.Content.Markdown.Model.Multimedia
 
 				if ((Source = Item.Url).StartsWith("data:", StringComparison.CurrentCultureIgnoreCase) && (i = Item.Url.IndexOf("base64,")) > 0)
 				{
-					byte[] Data = System.Convert.FromBase64String(Item.Url.Substring(i + 7));
-
-					using (TemporaryFile File = new TemporaryFile())
+					byte[] Data = Convert.FromBase64String(Item.Url.Substring(i + 7));
+					using (SKBitmap Bitmap = SKBitmap.Decode(Data))
 					{
-						lock(synchObject)
-						{
-							if (temporaryFiles == null)
-							{
-								temporaryFiles = new Cache<string, bool>(65536, TimeSpan.MaxValue, new TimeSpan(0, 20, 0));
-								temporaryFiles.Removed += TemporaryFiles_Removed;
-							}
-
-							temporaryFiles.Add(File.FileName, true);
-						}
-
-						File.DeleteWhenDisposed = false;
-						File.Write(Data, 0, Data.Length);
-
-						Source = File.FileName;
+						Width = Bitmap.Width;
+						Height = Bitmap.Height;
 					}
 
-#if !WINDOWS_UWP
-					using (Image Bmp = Image.FromFile(Source))
-					{
-						Width = Bmp.Width;
-						Height = Bmp.Height;
-					}
-#endif
+					Source = GetTemporaryFile(Data);
 				}
 
 				Output.WriteStartElement("Image");
@@ -235,43 +226,52 @@ namespace Waher.Content.Markdown.Model.Multimedia
 			}
 		}
 
-		private void TemporaryFiles_Removed(object Sender, CacheItemEventArgs<string, bool> e)
+		/// <summary>
+		/// Stores an image in binary form as a temporary file. Files will be deleted when application closes.
+		/// </summary>
+		/// <param name="BinaryImage">Binary image.</param>
+		/// <returns>Temporary file name.</returns>
+		public static string GetTemporaryFile(byte[] BinaryImage)
 		{
-			try
+			string FileName = Path.GetTempFileName();
+			System.IO.File.WriteAllBytes(FileName, BinaryImage);
+
+			lock (synchObject)
 			{
-				File.Delete(e.Key);
+				if (temporaryFiles == null)
+				{
+					temporaryFiles = new Dictionary<string, bool>();
+					Log.Terminating += CurrentDomain_ProcessExit;
+				}
+
+				temporaryFiles[FileName] = true;
 			}
-			catch (Exception ex)
-			{
-				Log.Critical(ex);
-			}
+
+			return FileName;
 		}
 
-		private static Cache<string, bool> temporaryFiles = null;
+		private static Dictionary<string, bool> temporaryFiles = null;
 		private static object synchObject = new object();
 
-#if WINDOWS_UWP
-		/// <summary>
-		/// Must be called in UWP application when the application is terminated. Deletes all temperary files.
-		/// </summary>
-		public static void Terminate()
-		{
-			CurrentDomain_ProcessExit(null, new EventArgs());
-		}
-#else
-		static ImageContent()
-		{
-			AppDomain.CurrentDomain.ProcessExit += CurrentDomain_ProcessExit;
-		}
-#endif
 		private static void CurrentDomain_ProcessExit(object sender, EventArgs e)
 		{
-			lock(synchObject)
+			lock (synchObject)
 			{
 				if (temporaryFiles != null)
 				{
-					temporaryFiles.Dispose();
-					temporaryFiles = null;
+					foreach (string FileName in temporaryFiles.Keys)
+					{
+						try
+						{
+							File.Delete(FileName);
+						}
+						catch (Exception)
+						{
+							// Ignore
+						}
+					}
+
+					temporaryFiles.Clear();
 				}
 			}
 		}

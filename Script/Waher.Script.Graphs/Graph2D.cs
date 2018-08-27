@@ -1,22 +1,30 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Drawing.Text;
-using System.Text;
-using Waher.Script;
+using SkiaSharp;
 using Waher.Script.Abstraction.Elements;
 using Waher.Script.Abstraction.Sets;
 using Waher.Script.Exceptions;
 using Waher.Script.Functions.Vectors;
 using Waher.Script.Model;
 using Waher.Script.Objects;
+using Waher.Script.Objects.Sets;
+using Waher.Script.Objects.VectorSpaces;
 using Waher.Script.Operators.Vectors;
 
 namespace Waher.Script.Graphs
 {
-	public delegate void DrawCallback(Graphics Canvas, PointF[] Points, object[] Parameters);
+	/// <summary>
+	/// Delegate for drawing callback methods.
+	/// </summary>
+	/// <param name="Canvas">Canvas to draw on.</param>
+	/// <param name="Points">Points to draw.</param>
+	/// <param name="Parameters">Graph-specific parameters.</param>
+	/// <param name="PrevPoints">Points of previous graph of same type (if available), null (if not available).</param>
+	/// <param name="PrevParameters">Parameters of previous graph of same type (if available), null (if not available).</param>
+	/// <param name="DrawingArea">Current drawing area.</param>
+	public delegate void DrawCallback(SKCanvas Canvas, SKPoint[] Points, object[] Parameters, SKPoint[] PrevPoints, object[] PrevParameters,
+		DrawingArea DrawingArea);
 
 	/// <summary>
 	/// Handles two-dimensional graphs.
@@ -31,8 +39,14 @@ namespace Waher.Script.Graphs
 		private IElement minY, maxY;
 		private Type axisTypeX;
 		private Type axisTypeY;
+		private string title = string.Empty;
 		private string labelX = string.Empty;
 		private string labelY = string.Empty;
+		private bool showXAxis = true;
+		private bool showYAxis = true;
+		private bool showGrid = true;
+		private readonly bool showZeroX = false;
+		private readonly bool showZeroY = false;
 
 		/// <summary>
 		/// Base class for two-dimensional graphs.
@@ -48,25 +62,134 @@ namespace Waher.Script.Graphs
 		/// <param name="X">X-axis</param>
 		/// <param name="Y">Y-axis</param>
 		/// <param name="PlotCallback">Callback method that performs the plotting.</param>
-		public Graph2D(IVector X, IVector Y, DrawCallback PlotCallback, params object[] Parameters)
+		/// <param name="ShowZeroX">If the y-axis (x=0) should always be shown.</param>
+		/// <param name="ShowZeroY">If the x-axis (y=0) should always be shown.</param>
+		/// <param name="Node">Node creating the graph.</param>
+		/// <param name="Parameters">Graph-specific parameters.</param>
+		public Graph2D(IVector X, IVector Y, DrawCallback PlotCallback, bool ShowZeroX, bool ShowZeroY,
+			ScriptNode Node, params object[] Parameters)
 			: base()
 		{
-			if (X.Dimension != Y.Dimension)
+			if (X is Interval XI)
+				X = new DoubleVector(XI.GetArray());
+
+			if (Y is Interval YI)
+				Y = new DoubleVector(YI.GetArray());
+
+			int i, c = X.Dimension;
+			bool HasNull = false;
+			IElement ex, ey;
+
+			if (c != Y.Dimension)
 				throw new ScriptException("X and Y series must be equally large.");
 
-			this.axisTypeX = X.GetType();
-			this.axisTypeY = Y.GetType();
+			for (i = 0; i < c; i++)
+			{
+				ex = X.GetElement(i);
+				ey = Y.GetElement(i);
 
-			this.x.AddLast(X);
-			this.y.AddLast(Y);
-			this.callbacks.AddLast(PlotCallback);
-			this.parameters.AddLast(Parameters);
+				if (ex.AssociatedObjectValue == null || ey.AssociatedObjectValue == null)
+				{
+					HasNull = true;
+					break;
+				}
+			}
+
+			this.showZeroX = ShowZeroX;
+			this.showZeroY = ShowZeroY;
 
 			this.minX = Min.CalcMin(X, null);
 			this.maxX = Max.CalcMax(X, null);
 
 			this.minY = Min.CalcMin(Y, null);
 			this.maxY = Max.CalcMax(Y, null);
+
+			if (HasNull)
+			{
+				LinkedList<IElement> X2 = new LinkedList<IElement>();
+				LinkedList<IElement> Y2 = new LinkedList<IElement>();
+
+				this.axisTypeX = null;
+				this.axisTypeY = null;
+
+				for (i = 0; i < c; i++)
+				{
+					ex = X.GetElement(i);
+					ey = Y.GetElement(i);
+
+					if (ex.AssociatedObjectValue == null || ey.AssociatedObjectValue == null)
+					{
+						if (X2.First != null)
+						{
+							this.AddSegment(X, Y, X2, Y2, Node, PlotCallback, Parameters);
+							X2 = new LinkedList<IElement>();
+							Y2 = new LinkedList<IElement>();
+						}
+					}
+					else
+					{
+						X2.AddLast(ex);
+						Y2.AddLast(ey);
+					}
+				}
+
+				if (X2.First != null)
+					this.AddSegment(X, Y, X2, Y2, Node, PlotCallback, Parameters);
+			}
+			else
+			{
+				this.axisTypeX = X.GetType();
+				this.axisTypeY = Y.GetType();
+
+				if (c > 0)
+				{
+					this.x.AddLast(X);
+					this.y.AddLast(Y);
+					this.callbacks.AddLast(PlotCallback);
+					this.parameters.AddLast(Parameters);
+				}
+			}
+
+			IElement Zero = null;
+
+			if (ShowZeroX && c > 0 && this.minX.AssociatedSet is IAbelianGroup AG)
+			{
+				Zero = AG.AdditiveIdentity;
+
+				this.minX = Min.CalcMin(new ObjectVector(this.minX, Zero), null);
+				this.maxX = Max.CalcMax(new ObjectVector(this.maxX, Zero), null);
+			}
+
+			if (ShowZeroY && c > 0 && this.minY.AssociatedSet is IAbelianGroup AG2)
+			{
+				Zero = AG2.AdditiveIdentity;
+
+				this.minY = Min.CalcMin(new ObjectVector(this.minY, Zero), null);
+				this.maxY = Max.CalcMax(new ObjectVector(this.maxY, Zero), null);
+			}
+		}
+
+		private void AddSegment(IVector X, IVector Y, ICollection<IElement> X2, ICollection<IElement> Y2,
+			ScriptNode Node, DrawCallback PlotCallback, params object[] Parameters)
+		{
+			IVector X2V = (IVector)X.Encapsulate(X2, Node);
+			IVector Y2V = (IVector)Y.Encapsulate(Y2, Node);
+
+			if (this.axisTypeX == null)
+			{
+				this.axisTypeX = X2V.GetType();
+				this.axisTypeY = Y2V.GetType();
+			}
+			else
+			{
+				if (X2V.GetType() != this.axisTypeX || Y2V.GetType() != this.axisTypeY)
+					throw new ScriptException("Incompatible types of series.");
+			}
+
+			this.x.AddLast(X2V);
+			this.y.AddLast(Y2V);
+			this.callbacks.AddLast(PlotCallback);
+			this.parameters.AddLast(Parameters);
 		}
 
 		/// <summary>
@@ -126,11 +249,21 @@ namespace Waher.Script.Graphs
 		}
 
 		/// <summary>
+		/// Title for graph.
+		/// </summary>
+		public string Title
+		{
+			get { return this.title; }
+			set { this.title = value; }
+		}
+
+		/// <summary>
 		/// Label for x-axis.
 		/// </summary>
 		public string LabelX
 		{
 			get { return this.labelX; }
+			set { this.labelX = value; }
 		}
 
 		/// <summary>
@@ -139,6 +272,34 @@ namespace Waher.Script.Graphs
 		public string LabelY
 		{
 			get { return this.labelY; }
+			set { this.labelY = value; }
+		}
+
+		/// <summary>
+		/// If the X-axis is to be displayed.
+		/// </summary>
+		public bool ShowXAxis
+		{
+			get { return this.showXAxis; }
+			set { this.showXAxis = value; }
+		}
+
+		/// <summary>
+		/// If the Y-axis is to be displayed.
+		/// </summary>
+		public bool ShowYAxis
+		{
+			get { return this.showYAxis; }
+			set { this.showYAxis = value; }
+		}
+
+		/// <summary>
+		/// If the grid is to be displayed.
+		/// </summary>
+		public bool ShowGrid
+		{
+			get { return this.showGrid; }
+			set { this.showGrid = value; }
 		}
 
 		/// <summary>
@@ -158,14 +319,23 @@ namespace Waher.Script.Graphs
 		/// <returns>Result, if understood, null otherwise.</returns>
 		public override ISemiGroupElement AddRight(ISemiGroupElement Element)
 		{
-			Graph2D G = Element as Graph2D;
-			if (G == null)
+			if (this.x.First == null)
+				return Element;
+
+			if (!(Element is Graph2D G))
 				return null;
 
-			Graph2D Result = new Graph2D();
+			if (G.x.First == null)
+				return this;
 
-			Result.axisTypeX = this.axisTypeX;
-			Result.axisTypeY = this.axisTypeY;
+			Graph2D Result = new Graph2D()
+			{
+				axisTypeX = this.axisTypeX,
+				axisTypeY = this.axisTypeY,
+				title = this.title,
+				labelX = this.labelX,
+				labelY = this.labelY
+			};
 
 			foreach (IVector v in this.x)
 				Result.x.AddLast(v);
@@ -202,20 +372,22 @@ namespace Waher.Script.Graphs
 				Result.parameters.AddLast(P);
 
 			Result.minX = Min.CalcMin((IVector)VectorDefinition.Encapsulate(new IElement[] { this.minX, G.minX }, false, null), null);
-			Result.maxX = Min.CalcMin((IVector)VectorDefinition.Encapsulate(new IElement[] { this.maxX, G.maxX }, false, null), null);
+			Result.maxX = Max.CalcMax((IVector)VectorDefinition.Encapsulate(new IElement[] { this.maxX, G.maxX }, false, null), null);
 			Result.minY = Min.CalcMin((IVector)VectorDefinition.Encapsulate(new IElement[] { this.minY, G.minY }, false, null), null);
-			Result.maxY = Min.CalcMin((IVector)VectorDefinition.Encapsulate(new IElement[] { this.maxY, G.maxY }, false, null), null);
+			Result.maxY = Max.CalcMax((IVector)VectorDefinition.Encapsulate(new IElement[] { this.maxY, G.maxY }, false, null), null);
+
+			Result.showXAxis |= G.showXAxis;
+			Result.showYAxis |= G.showYAxis;
 
 			return Result;
 		}
 
 		/// <summary>
-		/// <see cref="Object.Equals"/>
+		/// <see cref="Object.Equals(object)"/>
 		/// </summary>
 		public override bool Equals(object obj)
 		{
-			Graph2D G = obj as Graph2D;
-			if (G == null)
+			if (!(obj is Graph2D G))
 				return false;
 
 			return (
@@ -225,8 +397,12 @@ namespace Waher.Script.Graphs
 				this.maxY.Equals(G.maxY) &&
 				this.axisTypeX.Equals(G.axisTypeX) &&
 				this.axisTypeY.Equals(G.axisTypeY) &&
+				this.title.Equals(G.title) &&
 				this.labelX.Equals(G.labelX) &&
 				this.labelY.Equals(G.labelY) &&
+				this.showXAxis.Equals(G.showXAxis) &&
+				this.showYAxis.Equals(G.showYAxis) &&
+				this.showGrid.Equals(G.showGrid) &&
 				this.Equals(this.x.GetEnumerator(), G.x.GetEnumerator()) &&
 				this.Equals(this.y.GetEnumerator(), G.y.GetEnumerator()) &&
 				this.Equals(this.parameters.GetEnumerator(), G.parameters.GetEnumerator()) &&
@@ -262,8 +438,12 @@ namespace Waher.Script.Graphs
 				this.maxY.GetHashCode() ^
 				this.axisTypeX.GetHashCode() ^
 				this.axisTypeY.GetHashCode() ^
+				this.title.GetHashCode() ^
 				this.labelX.GetHashCode() ^
-				this.labelY.GetHashCode();
+				this.labelY.GetHashCode() ^
+				this.showXAxis.GetHashCode() ^
+				this.showYAxis.GetHashCode() ^
+				this.showGrid.GetHashCode();
 
 			foreach (IElement E in this.x)
 				Result ^= E.GetHashCode();
@@ -287,21 +467,15 @@ namespace Waher.Script.Graphs
 		/// <param name="States">State object(s) that contain graph-specific information about its inner states.
 		/// These can be used in calls back to the graph object to make actions on the generated graph.</param>
 		/// <returns>Bitmap</returns>
-		public override Bitmap CreateBitmap(GraphSettings Settings, out object[] States)
+		public override SKImage CreateBitmap(GraphSettings Settings, out object[] States)
 		{
-			Bitmap Bmp = new Bitmap(Settings.Width, Settings.Height);
-
-			States = new object[0];
-
-			using (Graphics Canvas = Graphics.FromImage(Bmp))
+			using (SKSurface Surface = SKSurface.Create(Settings.Width, Settings.Height, SKImageInfo.PlatformColorType, SKAlphaType.Premul))
 			{
-				Canvas.Clear(Settings.BackgroundColor);
+				SKCanvas Canvas = Surface.Canvas;
 
-				Canvas.CompositingMode = CompositingMode.SourceOver;
-				Canvas.CompositingQuality = CompositingQuality.HighQuality;
-				Canvas.InterpolationMode = InterpolationMode.HighQualityBicubic;
-				Canvas.SmoothingMode = SmoothingMode.HighQuality;
-				Canvas.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+				States = new object[0];
+
+				Canvas.Clear(Settings.BackgroundColor);
 
 				int x1, y1, x2, y2, x3, y3, w, h;
 
@@ -310,103 +484,254 @@ namespace Waher.Script.Graphs
 				y1 = Settings.MarginTop;
 				y2 = Settings.Height - Settings.MarginBottom;
 
-				LabelType YLabelType;
-				IVector YLabels = GetLabels(this.minY, this.maxY, this.y, Settings.ApproxNrLabelsY, out YLabelType);
-				Font Font = new Font(Settings.FontName, (float)Settings.LabelFontSize);
-				SizeF Size;
+				if (!string.IsNullOrEmpty(this.labelY))
+					x1 += (int)(Settings.LabelFontSize * 2 + 0.5);
+
+				if (!string.IsNullOrEmpty(this.labelX))
+					y2 -= (int)(Settings.LabelFontSize * 2 + 0.5);
+
+				if (!string.IsNullOrEmpty(this.title))
+					y1 += (int)(Settings.LabelFontSize * 2 + 0.5);
+
+				IVector YLabels = GetLabels(ref this.minY, ref this.maxY, this.y, Settings.ApproxNrLabelsY, out LabelType YLabelType);
+				SKPaint Font = new SKPaint()
+				{
+					FilterQuality = SKFilterQuality.High,
+					HintingLevel = SKPaintHinting.Full,
+					SubpixelText = true,
+					IsAntialias = true,
+					Style = SKPaintStyle.Fill,
+					Color = Settings.AxisColor,
+					Typeface = SKTypeface.FromFamilyName(Settings.FontName, SKTypefaceStyle.Normal),
+					TextSize = (float)Settings.LabelFontSize
+				};
+				float Size;
 				double MaxSize = 0;
 
-				foreach (IElement Label in YLabels.ChildElements)
+				if (this.showYAxis)
 				{
-					Size = Canvas.MeasureString(LabelString(Label, YLabelType), Font);
-					if (Size.Width > MaxSize)
-						MaxSize = Size.Width;
+					foreach (IElement Label in YLabels.ChildElements)
+					{
+						Size = Font.MeasureText(LabelString(Label, YLabelType));
+						if (Size > MaxSize)
+							MaxSize = Size;
+					}
 				}
 
 				x3 = (int)Math.Ceiling(x1 + MaxSize) + Settings.MarginLabel;
 
-				LabelType XLabelType;
-				IVector XLabels = GetLabels(this.minX, this.maxX, this.x, Settings.ApproxNrLabelsX, out XLabelType);
+				IVector XLabels = GetLabels(ref this.minX, ref this.maxX, this.x, Settings.ApproxNrLabelsX, out LabelType XLabelType);
 				MaxSize = 0;
 
-				foreach (IElement Label in XLabels.ChildElements)
+				if (this.showXAxis)
 				{
-					Size = Canvas.MeasureString(LabelString(Label, XLabelType), Font);
-					if (Size.Height > MaxSize)
-						MaxSize = Size.Height;
+					foreach (IElement Label in XLabels.ChildElements)
+					{
+						Size = Font.MeasureText(LabelString(Label, XLabelType));
+						if (Size > MaxSize)
+							MaxSize = Size;
+					}
 				}
 
 				y3 = (int)Math.Floor(y2 - MaxSize) - Settings.MarginLabel;
 				w = x2 - x3;
 				h = y3 - y1;
 
-				Brush AxisBrush = new SolidBrush(Settings.AxisColor);
-				Brush GridBrush = new SolidBrush(Settings.GridColor);
-				Pen AxisPen = new Pen(AxisBrush, Settings.AxisWidth);
-				Pen GridPen = new Pen(GridBrush, Settings.GridWidth);
-				double[] LabelYY = Scale(YLabels, this.minY, this.maxY, y3, -h);
+				SKPaint AxisBrush = new SKPaint()
+				{
+					FilterQuality = SKFilterQuality.High,
+					IsAntialias = true,
+					Style = SKPaintStyle.Fill,
+					Color = Settings.AxisColor
+				};
+				SKPaint GridBrush = new SKPaint()
+				{
+					FilterQuality = SKFilterQuality.High,
+					IsAntialias = true,
+					Style = SKPaintStyle.Fill,
+					Color = Settings.GridColor
+				};
+				SKPaint AxisPen = new SKPaint()
+				{
+					FilterQuality = SKFilterQuality.High,
+					IsAntialias = true,
+					Style = SKPaintStyle.Stroke,
+					Color = Settings.AxisColor,
+					StrokeWidth = Settings.AxisWidth
+				};
+				SKPaint GridPen = new SKPaint()
+				{
+					FilterQuality = SKFilterQuality.High,
+					IsAntialias = true,
+					Style = SKPaintStyle.Stroke,
+					Color = Settings.GridColor,
+					StrokeWidth = Settings.GridWidth
+				};
+
+				double OrigoX;
+				double OrigoY;
+
+				if (this.minX.AssociatedSet is IAbelianGroup AgX)
+					OrigoX = Scale(new ObjectVector(AgX.AdditiveIdentity), this.minX, this.maxX, x3, w)[0];
+				else
+					OrigoX = 0;
+
+				if (this.minY.AssociatedSet is IAbelianGroup AgY)
+					OrigoY = Scale(new ObjectVector(AgY.AdditiveIdentity), this.minY, this.maxY, y3, -h)[0];
+				else
+					OrigoY = 0;
+
+				DrawingArea DrawingArea = new DrawingArea(this.minX, this.maxX, this.minY, this.maxY, x3, y3, w, -h, (float)OrigoX, (float)OrigoY);
+				double[] LabelYY = DrawingArea.ScaleY(YLabels);
 				int i = 0;
 				float f;
 				string s;
 
 				foreach (IElement Label in YLabels.ChildElements)
 				{
-					Size = Canvas.MeasureString(s = LabelString(Label, YLabelType), Font);
+					Size = Font.MeasureText(s = LabelString(Label, YLabelType));
 					f = (float)LabelYY[i++];
 
-					if (Label is DoubleNumber && ((DoubleNumber)Label).Value == 0)
-						Canvas.DrawLine(AxisPen, x3, f, x2, f);
-					else
-						Canvas.DrawLine(GridPen, x3, f, x2, f);
+					if (this.showGrid)
+					{
+						if (Label is DoubleNumber && ((DoubleNumber)Label).Value == 0)
+							Canvas.DrawLine(x3, f, x2, f, AxisPen);
+						else
+							Canvas.DrawLine(x3, f, x2, f, GridPen);
+					}
 
-					f -= Size.Height * 0.5f;
-					Canvas.DrawString(s, Font, AxisBrush, x3 - Size.Width - Settings.MarginLabel, f);
+					if (this.showYAxis)
+					{
+						f += (float)Settings.LabelFontSize * 0.5f;
+						Canvas.DrawText(s, x3 - Size - Settings.MarginLabel, f, Font);
+					}
 				}
 
-				double[] LabelXX = Scale(XLabels, this.minX, this.maxX, x3, w);
+				double[] LabelXX = DrawingArea.ScaleX(XLabels);
 				i = 0;
 
 				foreach (IElement Label in XLabels.ChildElements)
 				{
-					Size = Canvas.MeasureString(s = LabelString(Label, XLabelType), Font);
+					Size = Font.MeasureText(s = LabelString(Label, XLabelType));
 					f = (float)LabelXX[i++];
 
-					if (Label is DoubleNumber && ((DoubleNumber)Label).Value == 0)
-						Canvas.DrawLine(AxisPen, f, y1, f, y3);
-					else
-						Canvas.DrawLine(GridPen, f, y1, f, y3);
+					if (this.showGrid)
+					{
+						if (Label is DoubleNumber && ((DoubleNumber)Label).Value == 0)
+							Canvas.DrawLine(f, y1, f, y3, AxisPen);
+						else
+							Canvas.DrawLine(f, y1, f, y3, GridPen);
+					}
 
-					f -= Size.Width * 0.5f;
+					if (this.showXAxis)
+					{
+						f -= Size * 0.5f;
+						if (f < x3)
+							f = x3;
+						else if (f + Size > x3 + w)
+							f = x3 + w - Size;
+
+						Canvas.DrawText(s, f, y3 + Settings.MarginLabel + (float)Settings.LabelFontSize, Font);
+					}
+				}
+
+				Font.Dispose();
+				Font = null;
+
+				Font = new SKPaint()
+				{
+					FilterQuality = SKFilterQuality.High,
+					HintingLevel = SKPaintHinting.Full,
+					SubpixelText = true,
+					IsAntialias = true,
+					Style = SKPaintStyle.Fill,
+					Color = Settings.AxisColor,
+					Typeface = SKTypeface.FromFamilyName(Settings.FontName, SKTypefaceStyle.Bold),
+					TextSize = (float)(Settings.LabelFontSize * 1.5)
+				};
+
+				if (!string.IsNullOrEmpty(this.title))
+				{
+					Size = Font.MeasureText(this.title);
+
+					f = x3 + (x2 - x3 - Size) * 0.5f;
+
 					if (f < x3)
 						f = x3;
-					else if (f + Size.Width > x3 + w)
-						f = x3 + w - Size.Width;
+					else if (f + Size > x3 + w)
+						f = x3 + w - Size;
 
-					Canvas.DrawString(s, Font, AxisBrush, f, y3 + Settings.MarginLabel);
+					Canvas.DrawText(this.title, f, (float)(Settings.MarginTop + 1.5 * Settings.LabelFontSize), Font);
+				}
+
+				if (!string.IsNullOrEmpty(this.labelX))
+				{
+					Size = Font.MeasureText(this.labelX);
+
+					f = x3 + (x2 - x3 - Size) * 0.5f;
+
+					if (f < x3)
+						f = x3;
+					else if (f + Size > x3 + w)
+						f = x3 + w - Size;
+
+					Canvas.DrawText(this.labelX, f, (float)(y2 + 0.45 * Settings.LabelFontSize), Font);
+				}
+
+				if (!string.IsNullOrEmpty(this.labelY))
+				{
+					Size = Font.MeasureText(this.labelY);
+
+					f = y3 - (y3 - y1 - Size) * 0.5f;
+
+					if (f - Size < y1)
+						f = y1 + Size;
+					else if (f > y3 + h)
+						f = y3 + h;
+
+					Canvas.Translate((float)(Settings.MarginLeft + 0.05 * Settings.LabelFontSize), f);
+					Canvas.RotateDegrees(-90);
+					Canvas.DrawText(this.labelY, 0, 0, Font);
+					Canvas.ResetMatrix();
 				}
 
 				IEnumerator<IVector> ex = this.x.GetEnumerator();
 				IEnumerator<IVector> ey = this.y.GetEnumerator();
 				IEnumerator<object[]> eParameters = this.parameters.GetEnumerator();
 				IEnumerator<DrawCallback> eCallbacks = this.callbacks.GetEnumerator();
-				PointF[] Points;
+				SKPoint[] Points;
+				SKPoint[] PrevPoints = null;
+				object[] PrevParameters = null;
+				DrawCallback PrevCallback = null;
 
 				while (ex.MoveNext() && ey.MoveNext() && eParameters.MoveNext() && eCallbacks.MoveNext())
 				{
-					Points = Scale(ex.Current, ey.Current, this.minX, this.maxX, this.minY, this.maxY, x3, y3, w, -h);
-					eCallbacks.Current(Canvas, Points, eParameters.Current);
+					Points = DrawingArea.Scale(ex.Current, ey.Current);
+
+					if (PrevCallback != null && eCallbacks.Current.Target.GetType() == PrevCallback.Target.GetType())
+						eCallbacks.Current(Canvas, Points, eParameters.Current, PrevPoints, PrevParameters, DrawingArea);
+					else
+						eCallbacks.Current(Canvas, Points, eParameters.Current, null, null, DrawingArea);
+
+					PrevPoints = Points;
+					PrevParameters = eParameters.Current;
+					PrevCallback = eCallbacks.Current;
 				}
 
-				Font.Dispose();
+				SKImage Result = Surface.Snapshot();
+
+				if (Font != null)
+					Font.Dispose();
+
 				AxisBrush.Dispose();
 				GridBrush.Dispose();
 				GridPen.Dispose();
 				AxisPen.Dispose();
 
-				States = new object[] { this.minX, this.maxX, this.minY, this.maxY, x3, y3, w, -h };
-			}
+				States = new object[] { DrawingArea };
 
-			return Bmp;
+				return Result;
+			}
 		}
 
 		/// <summary>
@@ -418,39 +743,12 @@ namespace Waher.Script.Graphs
 		/// <returns>Script.</returns>
 		public override string GetBitmapClickScript(double X, double Y, object[] States)
 		{
-			IElement MinX = (IElement)States[0];
-			IElement MaxX = (IElement)States[1];
-			IElement MinY = (IElement)States[2];
-			IElement MaxY = (IElement)States[3];
-			double OffsetX = Expression.ToDouble(States[4]);
-			double OffsetY = Expression.ToDouble(States[5]);
-			double Width = Expression.ToDouble(States[6]);
-			double Height = Expression.ToDouble(States[7]);
+			DrawingArea DrawingArea = (DrawingArea)States[0];
 
-			IElement X2 = this.Descale(X, MinX, MaxX, OffsetX, Width);
-			IElement Y2 = this.Descale(Y, MinY, MaxY, OffsetY, Height);
+			IElement X2 = DrawingArea.DescaleX(X);
+			IElement Y2 = DrawingArea.DescaleY(Y);
 
 			return "[" + X2.ToString() + "," + Y2.ToString() + "]";
-		}
-
-		private IElement Descale(double Value, IElement Min, IElement Max, double Offset, double Size)
-		{
-			// (v-Offset)*(Max-Min)/Size+Min
-
-			if (Min is DoubleNumber && Max is DoubleNumber)
-			{
-				double min = ((DoubleNumber)Min).Value;
-				double max = ((DoubleNumber)Max).Value;
-
-				return new DoubleNumber((Value - Offset) * (max - min) / Size + min);
-			}
-			else
-			{
-				IElement Delta = Operators.Arithmetics.Subtract.EvaluateSubtraction(Max, Min, null);
-				IElement Result = Operators.Arithmetics.Multiply.EvaluateMultiplication(new DoubleNumber(Value - Offset), Delta, null);
-				Result = Operators.Arithmetics.Divide.EvaluateDivision(Result, new DoubleNumber(Size), null);
-				return Operators.Arithmetics.Add.EvaluateAddition(Result, Min, null);
-			}
 		}
 
 	}

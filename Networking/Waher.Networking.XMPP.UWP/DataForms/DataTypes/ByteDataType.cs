@@ -10,9 +10,22 @@ namespace Waher.Networking.XMPP.DataForms.DataTypes
 	public class ByteDataType : DataType
 	{
 		/// <summary>
+		/// Public instance of data type.
+		/// </summary>
+		public static readonly ByteDataType Instance = new ByteDataType();
+
+		/// <summary>
 		/// Byte Data Type (xs:byte)
 		/// </summary>
-		/// <param name="TypeName">Type Name</param>
+		public ByteDataType()
+			: this("xs:byte")
+		{
+		}
+
+		/// <summary>
+		/// Byte Data Type (xs:byte)
+		/// </summary>
+		/// <param name="DataType">Data Type</param>
 		public ByteDataType(string DataType)
 			: base(DataType)
 		{
@@ -25,9 +38,7 @@ namespace Waher.Networking.XMPP.DataForms.DataTypes
 		/// <returns>Parsed value, if possible, null otherwise.</returns>
 		public override object Parse(string Value)
 		{
-			sbyte Result;
-
-			if (sbyte.TryParse(Value, out Result))
+			if (sbyte.TryParse(Value, out sbyte Result))
 				return Result;
 			else
 				return null;

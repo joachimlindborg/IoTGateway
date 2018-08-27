@@ -4,9 +4,11 @@ using System.Text;
 using System.Xml;
 using System.Windows;
 using System.Windows.Media;
-using Waher.Content;
 using Waher.Content.Markdown;
+using Waher.Content.Xml;
 using Waher.Networking.XMPP;
+using System.Windows.Controls;
+using System.Windows.Media.Imaging;
 
 namespace Waher.Client.WPF.Model
 {
@@ -15,17 +17,19 @@ namespace Waher.Client.WPF.Model
 	/// </summary>
 	public class XmppContact : TreeNode
 	{
-		private RosterItem rosterItem;
+		private readonly XmppClient client;
+		private readonly string bareJid;
 
-		public XmppContact(TreeNode Parent, RosterItem RosterItem)
+		public XmppContact(TreeNode Parent, XmppClient Client, string BareJid)
 			: base(Parent)
 		{
-			this.rosterItem = RosterItem;
+			this.client = Client;
+			this.bareJid = BareJid;
 		}
 
 		public override string Header
 		{
-			get { return this.rosterItem.BareJid; }
+			get { return this.bareJid; }
 		}
 
 		public override string TypeName
@@ -35,13 +39,22 @@ namespace Waher.Client.WPF.Model
 
 		public string BareJID
 		{
-			get { return this.rosterItem.BareJid; }
+			get { return this.bareJid; }
 		}
 
 		public RosterItem RosterItem
 		{
-			get { return this.rosterItem; }
-			internal set { this.rosterItem = value; }
+			get
+			{
+				return this.client[this.bareJid];
+			}
+
+			internal set
+			{
+				RosterItem Item = this.client[this.bareJid];
+				if (Item != value)
+					this.client[this.bareJid] = value;
+			}
 		}
 
 		public override void Write(XmlWriter Output)
@@ -57,12 +70,29 @@ namespace Waher.Client.WPF.Model
 				if (AccountNode == null || !AccountNode.IsOnline)
 					return Availability.Offline;
 
-				PresenceEventArgs e = this.rosterItem.LastPresence;
+				RosterItem Item = this.client[this.bareJid];
+				PresenceEventArgs e = Item?.LastPresence;
 
 				if (e == null)
 					return Availability.Offline;
 				else
 					return e.Availability;
+			}
+		}
+
+		public SubscriptionState SubscriptionState
+		{
+			get
+			{
+				XmppAccountNode AccountNode = this.XmppAccountNode;
+				if (AccountNode == null || !AccountNode.IsOnline)
+					return SubscriptionState.Unknown;
+
+				RosterItem Item = this.client[this.bareJid];
+				if (Item == null)
+					return SubscriptionState.Unknown;
+				else
+					return Item.State;
 			}
 		}
 
@@ -82,7 +112,7 @@ namespace Waher.Client.WPF.Model
 						return XmppAccountNode.busy;
 
 					case Availability.ExtendedAway:
-						return XmppAccountNode.away;	// TODO: Add icon
+						return XmppAccountNode.extendedAway;
 
 					case Availability.Online:
 						return XmppAccountNode.online;
@@ -90,6 +120,50 @@ namespace Waher.Client.WPF.Model
 					case Availability.Offline:
 					default:
 						return XmppAccountNode.offline;
+				}
+			}
+		}
+
+		public override ImageSource ImageResource2
+		{
+			get
+			{
+				switch (this.SubscriptionState)
+				{
+					case SubscriptionState.None:
+						return XmppAccountNode.none;
+
+					case SubscriptionState.From:
+						return XmppAccountNode.from;
+
+					case SubscriptionState.To:
+						return XmppAccountNode.to;
+
+					case SubscriptionState.Both:
+						return XmppAccountNode.both;
+
+					case SubscriptionState.Unknown:
+					default:
+						return null;
+				}
+			}
+		}
+
+		public override Visibility ImageResource2Visibility
+		{
+			get
+			{
+				switch (this.SubscriptionState)
+				{
+					case SubscriptionState.None:
+					case SubscriptionState.From:
+					case SubscriptionState.To:
+					case SubscriptionState.Both:
+						return Visibility.Visible;
+
+					case SubscriptionState.Unknown:
+					default:
+						return Visibility.Hidden;
 				}
 			}
 		}
@@ -104,7 +178,7 @@ namespace Waher.Client.WPF.Model
 				else if (!AccountNode.IsOnline)
 					return AccountNode.BareJID + " is not connected.";
 
-				PresenceEventArgs e = this.rosterItem.LastPresence;
+				PresenceEventArgs e = this.RosterItem?.LastPresence;
 
 				if (e == null)
 					return "Status unknown. No presence received.";
@@ -140,6 +214,16 @@ namespace Waher.Client.WPF.Model
 			get { return false; }
 		}
 
+		public override bool CanDelete
+		{
+			get { return true; }
+		}
+
+		public override bool CanEdit
+		{
+			get { return false; }	// TODO: Edit Friendly name, groups
+		}
+
 		public override bool CanRecycle
 		{
 			get { return false; }
@@ -147,14 +231,19 @@ namespace Waher.Client.WPF.Model
 
 		public override string Key
 		{
-			get { return this.rosterItem.BareJid; }
+			get { return this.bareJid; }
 		}
 
 		public override bool CanChat
 		{
 			get
 			{
-				return this.Availability != Availability.Offline;
+				Availability Availability = this.Availability;
+
+				return Availability == Availability.Chat ||
+					Availability == Availability.Online ||
+					Availability == Availability.Away ||
+					Availability == Availability.ExtendedAway;
 			}
 		}
 
@@ -181,17 +270,89 @@ namespace Waher.Client.WPF.Model
 			if (XmppAccountNode != null)
 			{
 				if (Markdown == null)
-					XmppAccountNode.Client.SendChatMessage(this.rosterItem.LastPresenceFullJid, Message);
+					XmppAccountNode.Client.SendChatMessage(this.RosterItem?.LastPresenceFullJid, Message);
 				else
 				{
-					string PlainText = Markdown.GeneratePlainText();
+					string PlainText = Markdown.GeneratePlainText().Trim();
 
-					XmppAccountNode.Client.SendMessage(QoSLevel.Unacknowledged, MessageType.Chat, this.rosterItem.LastPresenceFullJid,
+					XmppAccountNode.Client.SendMessage(QoSLevel.Unacknowledged, MessageType.Chat, this.RosterItem?.LastPresenceFullJid,
 						"<content xmlns=\"urn:xmpp:content\" type=\"text/markdown\">" + XML.Encode(Message) + "</content>", PlainText,
 						string.Empty, string.Empty, string.Empty, string.Empty, null, null);
 				}
 			}
 		}
 
+		public override void AddContexMenuItems(ref string CurrentGroup, ContextMenu Menu)
+		{
+			base.AddContexMenuItems(ref CurrentGroup, Menu);
+
+			XmppAccountNode XmppAccountNode = this.XmppAccountNode;
+
+			if (XmppAccountNode != null && XmppAccountNode.IsOnline)
+			{
+				SubscriptionState SubscriptionState = this.SubscriptionState;
+				MenuItem MenuItem;
+				string s;
+
+				if (SubscriptionState == SubscriptionState.None || SubscriptionState == SubscriptionState.From)
+				{
+					CurrentGroup = "Subscriptions";
+
+					if (SubscriptionState == SubscriptionState.None)
+						s = "../Graphics/To.png";
+					else
+						s = "../Graphics/Both.png";
+
+					Menu.Items.Add(MenuItem = new MenuItem()
+					{
+						Header = "_Subscribe to",
+						IsEnabled = true,
+						Icon = new Image()
+						{
+							Source = new BitmapImage(new Uri(s, UriKind.Relative)),
+							Width = 16,
+							Height = 16
+						}
+					});
+
+					MenuItem.Click += Subscribe_Click;
+				}
+
+				if (SubscriptionState == SubscriptionState.To || SubscriptionState == SubscriptionState.Both)
+				{
+					CurrentGroup = "Subscriptions";
+
+					if (SubscriptionState == SubscriptionState.To)
+						s = "../Graphics/None.png";
+					else
+						s = "../Graphics/From.png";
+
+					Menu.Items.Add(MenuItem = new MenuItem()
+					{
+						Header = "_Unsubscribe from",
+						IsEnabled = true,
+						Icon = new Image()
+						{
+							Source = new BitmapImage(new Uri(s, UriKind.Relative)),
+							Width = 16,
+							Height = 16
+						}
+					});
+
+					MenuItem.Click += Unsubscribe_Click;
+				}
+
+			}
+		}
+
+		private void Subscribe_Click(object sender, RoutedEventArgs e)
+		{
+			this.XmppAccountNode?.Client?.RequestPresenceSubscription(this.bareJid);
+		}
+
+		private void Unsubscribe_Click(object sender, RoutedEventArgs e)
+		{
+			this.XmppAccountNode?.Client?.RequestPresenceUnsubscription(this.bareJid);
+		}
 	}
 }

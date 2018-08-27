@@ -62,8 +62,9 @@ namespace Waher.Things.SensorData
 		/// <param name="QoS">Quality of Service flags.</param>
 		/// <param name="Writable">If the field is writable, i.e. corresponds to a control parameter.</param>
 		/// <param name="Module">Language Module for localization purposes.</param>
-		/// <param name="StringIdSteps">String ID steps.</param>
-		public Field(ThingReference Thing, DateTime Timestamp, string Name, FieldType Type, FieldQoS QoS, bool Writable, string Module, params int[] StringIds)
+		/// <param name="StringIds">String ID steps.</param>
+		public Field(ThingReference Thing, DateTime Timestamp, string Name, FieldType Type, FieldQoS QoS, bool Writable, string Module, 
+			params int[] StringIds)
 		{
 			this.thing = Thing;
 			this.timestamp = Timestamp;
@@ -106,8 +107,9 @@ namespace Waher.Things.SensorData
 		/// <param name="Type">Field Type flags.</param>
 		/// <param name="QoS">Quality of Service flags.</param>
 		/// <param name="Module">Language Module for localization purposes.</param>
-		/// <param name="StringIdSteps">String ID steps.</param>
-		public Field(ThingReference Thing, DateTime Timestamp, string Name, FieldType Type, FieldQoS QoS, string Module, params int[] StringIds)
+		/// <param name="StringIds">String IDs.</param>
+		public Field(ThingReference Thing, DateTime Timestamp, string Name, FieldType Type, FieldQoS QoS, string Module, 
+			params int[] StringIds)
 		{
 			this.thing = Thing;
 			this.timestamp = Timestamp;
@@ -302,35 +304,8 @@ namespace Waher.Things.SensorData
 			if (this.type.HasFlag(FieldType.Status))
 				this.Append(sb, "Status", ref First);
 
-			if (this.type.HasFlag(FieldType.HistoricalSecond))
-				this.Append(sb, "HistoricalSecond", ref First);
-
-			if (this.type.HasFlag(FieldType.HistoricalMinute))
-				this.Append(sb, "HistoricalMinute", ref First);
-
-			if (this.type.HasFlag(FieldType.HistoricalHour))
-				this.Append(sb, "HistoricalHour", ref First);
-
-			if (this.type.HasFlag(FieldType.HistoricalDay))
-				this.Append(sb, "HistoricalDay", ref First);
-
-			if (this.type.HasFlag(FieldType.HistoricalWeek))
-				this.Append(sb, "HistoricalWeek", ref First);
-
-			if (this.type.HasFlag(FieldType.HistoricalMonth))
-				this.Append(sb, "HistoricalMonth", ref First);
-
-			if (this.type.HasFlag(FieldType.HistoricalQuarter))
-				this.Append(sb, "HistoricalQuarter", ref First);
-
-			if (this.type.HasFlag(FieldType.HistoricalYear))
-				this.Append(sb, "HistoricalYear", ref First);
-
-			if (this.type.HasFlag(FieldType.HistoricalQuarter))
-				this.Append(sb, "HistoricalQuarter", ref First);
-
-			if (this.type.HasFlag(FieldType.HistoricalOther))
-				this.Append(sb, "HistoricalOther", ref First);
+			if (this.type.HasFlag(FieldType.Historical))
+				this.Append(sb, "Historical", ref First);
 
 			if (this.qos.HasFlag(FieldQoS.Missing))
 				this.Append(sb, "Missing", ref First);
@@ -398,7 +373,7 @@ namespace Waher.Things.SensorData
 		}
 
 		/// <summary>
-		/// Provides a string identifying the data type of the field. Should conform to field value data types specified in XEP-0323, if possible:
+		/// Provides a string identifying the data type of the field. Should conform to field value data types specified in the IEEE XMPP IoT extensions, if possible:
 		/// http://xmpp.org/extensions/xep-0323.html#fieldvaluetypes
 		/// </summary>
 		public abstract string FieldDataTypeName

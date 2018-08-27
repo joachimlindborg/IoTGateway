@@ -19,6 +19,7 @@ namespace Waher.Script.Model
 		/// <param name="Operand">Operand.</param>
 		/// <param name="Start">Start position in script expression.</param>
 		/// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
 		public UnaryBooleanOperator(ScriptNode Operand, int Start, int Length, Expression Expression)
 			: base(Operand, Start, Length, Expression)
 		{
@@ -32,9 +33,8 @@ namespace Waher.Script.Model
 		public override IElement Evaluate(Variables Variables)
 		{
 			IElement Op = this.op.Evaluate(Variables);
-			BooleanValue BOp = Op as BooleanValue;
 
-			if (BOp != null)
+			if (Op is BooleanValue BOp)
 				return this.Evaluate(BOp.Value);
 			else
 				return this.Evaluate(Op, Variables);
@@ -44,12 +44,11 @@ namespace Waher.Script.Model
 		/// Evaluates the operator on scalar operands.
 		/// </summary>
 		/// <param name="Operand">Operand.</param>
+		/// <param name="Variables">Variables collection.</param>
 		/// <returns>Result</returns>
 		public override IElement EvaluateScalar(IElement Operand, Variables Variables)
 		{
-			BooleanValue BOp = Operand as BooleanValue;
-
-			if (BOp != null)
+			if (Operand is BooleanValue BOp)
 				return this.Evaluate(BOp.Value);
 			else
 				throw new ScriptRuntimeException("Scalar operands must be boolean values.", this);

@@ -11,7 +11,7 @@ namespace Waher.Script.Operators.Arithmetics
 	/// <summary>
 	/// Negation operator.
 	/// </summary>
-	public class Negate : UnaryDoubleOperator
+	public class Negate : UnaryDoubleOperator, IDifferentiable
 	{
 		/// <summary>
 		/// Negation operator.
@@ -19,6 +19,7 @@ namespace Waher.Script.Operators.Arithmetics
 		/// <param name="Operand">Operand.</param>
 		/// <param name="Start">Start position in script expression.</param>
 		/// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
 		public Negate(ScriptNode Operand, int Start, int Length, Expression Expression)
 			: base(Operand, Start, Length, Expression)
 		{
@@ -38,11 +39,11 @@ namespace Waher.Script.Operators.Arithmetics
 		/// Evaluates the operator on scalar operands.
 		/// </summary>
 		/// <param name="Operand">Operand.</param>
+		/// <param name="Variables">Variables collection.</param>
 		/// <returns>Result</returns>
 		public override IElement EvaluateScalar(IElement Operand, Variables Variables)
 		{
-			IGroupElement GE = Operand as IGroupElement;
-			if (GE != null)
+			if (Operand is IGroupElement GE)
 				return GE.Negate();
 			else
 				throw new ScriptRuntimeException("Unable to negate objects of type " + Operand.GetType().FullName + ".", this);
@@ -55,11 +56,28 @@ namespace Waher.Script.Operators.Arithmetics
 		/// <returns>Negated version.</returns>
 		public static IElement EvaluateNegation(IElement Operand)
 		{
-			IGroupElement E = Operand as IGroupElement;
-			if (E != null)
+			if (Operand is IGroupElement E)
 				return E.Negate();
 			else
 				throw new ScriptException("Operand cannot be negated.");
+		}
+
+		/// <summary>
+		/// Differentiates a script node, if possible.
+		/// </summary>
+		/// <param name="VariableName">Name of variable to differentiate on.</param>
+		/// <param name="Variables">Collection of variables.</param>
+		/// <returns>Differentiated node.</returns>
+		public ScriptNode Differentiate(string VariableName, Variables Variables)
+		{
+			if (this.op is IDifferentiable Differentiable)
+			{
+				return new Negate(
+					Differentiable.Differentiate(VariableName, Variables),
+					this.Start, this.Length, this.Expression);
+			}
+			else
+				throw new ScriptRuntimeException("Operand not differentiable.", this);
 		}
 
 	}

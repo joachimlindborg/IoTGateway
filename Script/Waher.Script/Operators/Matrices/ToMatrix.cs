@@ -18,6 +18,7 @@ namespace Waher.Script.Operators.Matrices
         /// <param name="Operand">Operand.</param>
         /// <param name="Start">Start position in script expression.</param>
         /// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
         public ToMatrix(ScriptNode Operand, int Start, int Length, Expression Expression)
             : base(Operand, Start, Length, Expression)
         {
@@ -35,14 +36,12 @@ namespace Waher.Script.Operators.Matrices
             if (E is IMatrix)
                 return E;
 
-            IVector V = E as IVector;
-            if (V != null)
+            if (E is IVector V)
                 return MatrixDefinition.Encapsulate(V.VectorElements, 1, V.Dimension, this);
 
-            ISet S = E as ISet;
-            if (S != null)
-            {
-                ICollection<IElement> Elements = S.ChildElements;
+            if (E is ISet S)
+			{
+				ICollection<IElement> Elements = S.ChildElements;
                 return MatrixDefinition.Encapsulate(Elements, 1, Elements.Count, this);
             }
 

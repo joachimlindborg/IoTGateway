@@ -18,6 +18,7 @@ namespace Waher.Script.Model
         /// <param name="Argument">Argument.</param>
         /// <param name="Start">Start position in script expression.</param>
         /// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
         public FunctionOneScalarVariable(ScriptNode Argument, int Start, int Length, Expression Expression)
             : base(Argument, Start, Length, Expression)
         {
@@ -33,32 +34,26 @@ namespace Waher.Script.Model
         {
             if (Argument.IsScalar)
             {
-                DoubleNumber DoubleNumber = Argument as DoubleNumber;
-                if (DoubleNumber != null)
+                if (Argument is DoubleNumber DoubleNumber)
                     return this.EvaluateScalar(DoubleNumber.Value, Variables);
 
-                ComplexNumber ComplexNumber = Argument as ComplexNumber;
-                if (ComplexNumber != null)
+                if (Argument is ComplexNumber ComplexNumber)
                     return this.EvaluateScalar(ComplexNumber.Value, Variables);
 
-                BooleanValue BooleanValue = Argument as BooleanValue;
-                if (BooleanValue != null)
+                if (Argument is BooleanValue BooleanValue)
                     return this.EvaluateScalar(BooleanValue.Value, Variables);
 
-                StringValue StringValue = Argument as StringValue;
-                if (StringValue != null)
+                if (Argument is StringValue StringValue)
                     return this.EvaluateScalar(StringValue.Value, Variables);
 
-				PhysicalQuantity PhysicalQuantity = Argument as PhysicalQuantity;
-				if (PhysicalQuantity != null)
+				if (Argument is PhysicalQuantity PhysicalQuantity)
 					return this.EvaluateScalar(PhysicalQuantity.Magnitude, Variables);
 
 				return this.EvaluateScalar(Argument, Variables);
             }
             else
             {
-                IVector Vector = Argument as IVector;
-                if (Vector != null)
+                if (Argument is IVector Vector)
                 {
                     LinkedList<IElement> Elements = new LinkedList<IElement>();
                     int i, c = Vector.Dimension;

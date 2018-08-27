@@ -9,8 +9,9 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Waher.Persistence.MongoDB.Test</RootNamespace>
     <AssemblyName>Waher.Persistence.MongoDB.Test</AssemblyName>
-    <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -48,7 +49,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Things\Waher.Things\Waher.Things.csproj">
-      <Project>{714b8894-f2f0-47d8-9b28-cd3b1e8d427a}</Project>
+      <Project>{1659833d-9a9a-4147-9237-2ba8d96086bc}</Project>
       <Name>Waher.Things</Name>
     </ProjectReference>
     <ProjectReference Include="..\Waher.Persistence.MongoDB\Waher.Persistence.MongoDB.csproj">
@@ -56,9 +57,15 @@
       <Name>Waher.Persistence.MongoDB</Name>
     </ProjectReference>
     <ProjectReference Include="..\Waher.Persistence\Waher.Persistence.csproj">
-      <Project>{f92fbbee-c739-4765-b351-8cfe89043c93}</Project>
+      <Project>{0286288f-4af3-4e64-a398-24c8957ceb04}</Project>
       <Name>Waher.Persistence</Name>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Service Include="{82A7F48D-3B50-4B1E-B82E-3ADA8210C358}" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="app.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

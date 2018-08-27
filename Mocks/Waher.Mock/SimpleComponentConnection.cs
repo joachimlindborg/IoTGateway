@@ -7,6 +7,10 @@ using System.Text;
 using System.Xml;
 using System.Xml.Schema;
 using Waher.Content;
+using Waher.Content.Xml;
+#if !WINDOWS_UWP
+using Waher.Content.Xsl;
+#endif
 using Waher.Networking.XMPP;
 
 namespace Waher.Mock
@@ -17,9 +21,9 @@ namespace Waher.Mock
 	public class SimpleComponentConfiguration
 	{
 #if !WINDOWS_UWP
-		private static readonly XmlSchema schema = Resources.LoadSchema("Waher.Mock.Schema.SimpleComponentConfiguration.xsd");
+		private static readonly XmlSchema schema = XSL.LoadSchema("Waher.Mock.Schema.SimpleComponentConfiguration.xsd");
 		private const string expectedRootElement = "SimpleComponentConfiguration";
-		private const string expectedNamespace = "http://waher.se/SimpleComponentConfiguration.xsd";
+		private const string expectedNamespace = "http://waher.se/Schema/SimpleComponentConfiguration.xsd";
 #endif
 		/// <summary>
 		/// Default XMPP component port number.
@@ -32,6 +36,9 @@ namespace Waher.Mock
 		private bool sniffer = false;
 		private int port = DefaultPort;
 
+		/// <summary>
+		/// Class containing information about a simple XMPP component connection.
+		/// </summary>
 		public SimpleComponentConfiguration()
 		{
 		}
@@ -49,7 +56,7 @@ namespace Waher.Mock
 			}
 
 #if !WINDOWS_UWP
-			XML.Validate(FileName, Xml, expectedRootElement, expectedNamespace, schema);
+			XSL.Validate(FileName, Xml, expectedRootElement, expectedNamespace, schema);
 #endif
 
 			this.Init(Xml.DocumentElement);
@@ -62,7 +69,7 @@ namespace Waher.Mock
 		public SimpleComponentConfiguration(XmlDocument Xml)
 		{
 #if !WINDOWS_UWP
-			XML.Validate(string.Empty, Xml, expectedRootElement, expectedNamespace, schema);
+			XSL.Validate(string.Empty, Xml, expectedRootElement, expectedNamespace, schema);
 #endif
 
 			this.Init(Xml.DocumentElement);
@@ -415,7 +422,7 @@ namespace Waher.Mock
 			StringBuilder Xml = new StringBuilder();
 
 			Xml.AppendLine("<?xml version='1.0' encoding='utf-8'?>");
-			Xml.AppendLine("<SimpleComponentConfiguration xmlns='http://waher.se/SimpleComponentConfiguration.xsd'>");
+			Xml.AppendLine("<SimpleComponentConfiguration xmlns='http://waher.se/Schema/SimpleComponentConfiguration.xsd'>");
 
 			Xml.Append("\t<Host>");
 			Xml.Append(XML.Encode(this.host));

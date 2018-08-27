@@ -20,9 +20,10 @@ namespace Waher.Script.Operators.Vectors
 		/// <summary>
 		/// Creates a vector using a FOR statement.
 		/// </summary>
-		/// <param name="Rows">Row vectors.</param>
+		/// <param name="Elements">Elements.</param>
 		/// <param name="Start">Start position in script expression.</param>
 		/// <param name="Length">Length of expression covered by node.</param>
+		/// <param name="Expression">Expression containing script.</param>
 		public VectorForDefinition(For Elements, int Start, int Length, Expression Expression)
 			: base(Elements.LeftOperand, Elements.MiddleOperand, Elements.Middle2Operand, Elements.RightOperand, Start, Length, Expression)
 		{

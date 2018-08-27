@@ -20,6 +20,7 @@
         <CommandBinding Command="SaveAs" Executed="SaveAs_Executed" />
         <CommandBinding Command="{x:Static wcw:MainWindow.Add}" Executed="Add_Executed" CanExecute="Add_CanExecute" />
         <CommandBinding Command="Delete" Executed="Delete_Executed" CanExecute="Delete_CanExecute" />
+        <CommandBinding Command="{x:Static wcw:MainWindow.Edit}" Executed="Edit_Executed" CanExecute="Edit_CanExecute" />
         <CommandBinding Command="{x:Static wcw:MainWindow.ConnectTo}" Executed="ConnectTo_Executed" />
         <CommandBinding Command="Refresh" Executed="Refresh_Executed" CanExecute="Refresh_CanExecute" />
         <CommandBinding Command="{x:Static wcw:MainWindow.Sniff}" Executed="Sniff_Executed" CanExecute="Sniff_CanExecute" />
@@ -27,13 +28,17 @@
         <CommandBinding Command="{x:Static wcw:MainWindow.Chat}" Executed="Chat_Executed" CanExecute="Chat_CanExecute" />
         <CommandBinding Command="{x:Static wcw:MainWindow.ReadMomentary}" Executed="ReadMomentary_Executed" CanExecute="ReadMomentary_CanExecute" />
         <CommandBinding Command="{x:Static wcw:MainWindow.ReadDetailed}" Executed="ReadDetailed_Executed" CanExecute="ReadDetailed_CanExecute" />
+        <CommandBinding Command="{x:Static wcw:MainWindow.SubscribeToMomentary}" Executed="SubscribeToMomentary_Executed" CanExecute="SubscribeToMomentary_CanExecute" />
         <CommandBinding Command="{x:Static wcw:MainWindow.Configure}" Executed="Configure_Executed" CanExecute="Configure_CanExecute" />
+        <CommandBinding Command="{x:Static wcw:MainWindow.Search}" Executed="Search_Executed" CanExecute="Search_CanExecute" />
+        <CommandBinding Command="{x:Static wcw:MainWindow.Script}" Executed="Script_Executed" CanExecute="Script_CanExecute" />
     </Window.CommandBindings>
     <Window.InputBindings>
         <KeyBinding Modifiers="Control" Key="O" Command="Open"/>
         <KeyBinding Modifiers="Control" Key="S" Command="Save"/>
         <KeyBinding Modifiers="Control" Key="N" Command="New"/>
         <KeyBinding Modifiers="Control" Key="Ins" Command="{x:Static wcw:MainWindow.Add}"/>
+        <KeyBinding Modifiers="Alt" Key="Enter" Command="{x:Static wcw:MainWindow.Edit}"/>
         <KeyBinding Modifiers="Control" Key="Del" Command="Delete"/>
         <KeyBinding Modifiers="Control" Key="F5" Command="Refresh"/>
         <KeyBinding Modifiers="Control" Key="F2" Command="{x:Static wcw:MainWindow.Sniff}"/>
@@ -41,7 +46,9 @@
         <KeyBinding Modifiers="Control" Key="C" Command="{x:Static wcw:MainWindow.Chat}"/>
         <KeyBinding Modifiers="Control" Key="M" Command="{x:Static wcw:MainWindow.ReadMomentary}"/>
         <KeyBinding Modifiers="Control" Key="D" Command="{x:Static wcw:MainWindow.ReadDetailed}"/>
+        <KeyBinding Modifiers="Control" Key="B" Command="{x:Static wcw:MainWindow.SubscribeToMomentary}"/>
         <KeyBinding Modifiers="Control" Key="Enter" Command="{x:Static wcw:MainWindow.Configure}"/>
+        <KeyBinding Modifiers="Control" Key="F" Command="{x:Static wcw:MainWindow.Search}"/>
     </Window.InputBindings>
     <DockPanel Name="DockPanel" VerticalAlignment="Stretch" Height="Auto" FocusManager.FocusedElement="{Binding ElementName=ConnectionTree}">
         <Menu Height="23" HorizontalAlignment="Left" Margin="0,0,0,0" Name="MainMenu" VerticalAlignment="Top" 
@@ -70,6 +77,11 @@
                         <Image Source="Graphics/Add.png" Width="16" Height="16" Style="{StaticResource ImageEnabled}"/>
                     </MenuItem.Icon>
                 </MenuItem>
+                <MenuItem Name="EditMenuItem" Header="_Edit..." IsEnabled="{Binding ElementName=EditButton, Path=IsEnabled}" Command="{x:Static wcw:MainWindow.Edit}">
+                    <MenuItem.Icon>
+                        <Image Source="Graphics/Properties-icon_16.png" Width="16" Height="16" Style="{StaticResource ImageEnabled}"/>
+                    </MenuItem.Icon>
+                </MenuItem>
                 <MenuItem Name="DeleteMenuItem" Header="_Delete..." IsEnabled="{Binding ElementName=DeleteButton, Path=IsEnabled}" Command="Delete">
                     <MenuItem.Icon>
                         <Image Source="Graphics/delete_32_h.png" Width="16" Height="16" Style="{StaticResource ImageEnabled}"/>
@@ -87,15 +99,15 @@
                         <Image Source="Graphics/refresh_document_16_h.png" Width="16" Height="16" Style="{StaticResource ImageEnabled}"/>
                     </MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Name="SniffMenuItem" Header="_Sniff" Command="{x:Static wcw:MainWindow.Sniff}" IsEnabled="{Binding ElementName=SniffButton, Path=IsEnabled}">
+                <MenuItem Name="SniffMenuItem" Header="_Sniff..." Command="{x:Static wcw:MainWindow.Sniff}" IsEnabled="{Binding ElementName=SniffButton, Path=IsEnabled}">
                     <MenuItem.Icon>
                         <Image Source="Graphics/Spy-icon.png" Width="16" Height="16" Style="{StaticResource ImageEnabled}"/>
                     </MenuItem.Icon>
                 </MenuItem>
                 <MenuItem/>
-                <MenuItem Name="ChatMenuItem" Header="C_hat" Command="{x:Static wcw:MainWindow.Chat}" IsEnabled="{Binding ElementName=ChatButton, Path=IsEnabled}">
+                <MenuItem Name="ChatMenuItem" Header="C_hat..." Command="{x:Static wcw:MainWindow.Chat}" IsEnabled="{Binding ElementName=ChatButton, Path=IsEnabled}">
                     <MenuItem.Icon>
-                        <Image Source="Graphics/mail_16_h.png" Width="16" Height="16" Style="{StaticResource ImageEnabled}"/>
+                        <Image Source="Graphics/Chat-icon_16.png" Width="16" Height="16" Style="{StaticResource ImageEnabled}"/>
                     </MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Name="ReadMomentaryMenuItem" Header="Read _Momentary Values..." Command="{x:Static wcw:MainWindow.ReadMomentary}" IsEnabled="{Binding ElementName=ReadMomentaryButton, Path=IsEnabled}">
@@ -108,13 +120,30 @@
                         <Image Source="Graphics/print_preview_lined_16_h.png" Width="16" Height="16" Style="{StaticResource ImageEnabled}"/>
                     </MenuItem.Icon>
                 </MenuItem>
+                <MenuItem Name="SubscribeToMomentaryMenuItem" Header="Su_bscribe to Momentary Values..." Command="{x:Static wcw:MainWindow.SubscribeToMomentary}" IsEnabled="{Binding ElementName=SubscribeToMomentaryButton, Path=IsEnabled}">
+                    <MenuItem.Icon>
+                        <Image Source="Graphics/rss-feed-icon_16.png" Width="16" Height="16" Style="{StaticResource ImageEnabled}"/>
+                    </MenuItem.Icon>
+                </MenuItem>
                 <MenuItem Name="ConfigureMenuItem" Header="Configure _Parameters..." Command="{x:Static wcw:MainWindow.Configure}" IsEnabled="{Binding ElementName=ConfigureButton, Path=IsEnabled}">
                     <MenuItem.Icon>
-                        <Image Source="Graphics/pinions-settings-icon.png" Width="16" Height="16" Style="{StaticResource ImageEnabled}"/>
+                        <Image Source="Graphics/Settings-icon_16.png" Width="16" Height="16" Style="{StaticResource ImageEnabled}"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem/>
+                <MenuItem Name="SearchMenuItem" Header="_Search" Command="{x:Static wcw:MainWindow.Search}" IsEnabled="{Binding ElementName=SearchButton, Path=IsEnabled}">
+                    <MenuItem.Icon>
+                        <Image Source="Graphics/search_16_h.png" Width="16" Height="16" Style="{StaticResource ImageEnabled}"/>
                     </MenuItem.Icon>
                 </MenuItem>
             </MenuItem>
-            <MenuItem Name="ViewMenu" Header="_View" />
+            <MenuItem Name="ViewMenu" Header="_View">
+                <MenuItem Name="ScriptMenuItem" Header="_Script" Command="{x:Static wcw:MainWindow.Script}" IsEnabled="{Binding ElementName=ScriptButton, Path=IsEnabled}">
+                    <MenuItem.Icon>
+                        <Image Source="Graphics/pi.ico" Width="16" Height="16" Style="{StaticResource ImageEnabled}"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+            </MenuItem>
             <MenuItem Name="HelpMenu" Header="_Help" />
         </Menu>
         <ToolBarTray Name="ToolBarTray" VerticalAlignment="Top" Width="{Binding ElementName=DockPanel, Path=ActualWidth}" DockPanel.Dock="Top">
@@ -144,13 +173,16 @@
                 <Button Name="AddButton" ToolTip="Add..." IsEnabled="False" Command="{x:Static wcw:MainWindow.Add}">
                     <Image Source="Graphics/Add.png" Width="32" Height="32" Style="{StaticResource ImageEnabled}"/>
                 </Button>
+                <Button Name="EditButton" ToolTip="Edit..." IsEnabled="False" Command="{x:Static wcw:MainWindow.Edit}">
+                    <Image Source="Graphics/Properties-icon_32.png" Width="32" Height="32" Style="{StaticResource ImageEnabled}"/>
+                </Button>
                 <Button Name="DeleteButton" ToolTip="Delete..." IsEnabled="False" Command="Delete">
                     <Image Source="Graphics/delete_32_h.png" Width="32" Height="32" Style="{StaticResource ImageEnabled}"/>
                 </Button>
             </ToolBar>
             <ToolBar Name="InteractionToolBar">
                 <Button Name="ChatButton" ToolTip="Chat..." IsEnabled="False" Command="{x:Static wcw:MainWindow.Chat}">
-                    <Image Source="Graphics/mail_32_h.png" Width="32" Height="32" Style="{StaticResource ImageEnabled}"/>
+                    <Image Source="Graphics/Chat-icon_32.png" Width="32" Height="32" Style="{StaticResource ImageEnabled}"/>
                 </Button>
                 <Button Name="ReadMomentaryButton" ToolTip="Read Momentary..." IsEnabled="False" Command="{x:Static wcw:MainWindow.ReadMomentary}">
                     <Image Source="Graphics/history_32_h.png" Width="32" Height="32" Style="{StaticResource ImageEnabled}"/>
@@ -158,16 +190,24 @@
                 <Button Name="ReadDetailedButton" ToolTip="Read Detailed..." IsEnabled="False" Command="{x:Static wcw:MainWindow.ReadDetailed}">
                     <Image Source="Graphics/print_preview_lined_32_h.png" Width="32" Height="32" Style="{StaticResource ImageEnabled}"/>
                 </Button>
+                <Button Name="SubscribeMomentaryButton" ToolTip="Subscribe to Momentary..." IsEnabled="False" Command="{x:Static wcw:MainWindow.SubscribeToMomentary}">
+                    <Image Source="Graphics/rss-feed-icon_32.png" Width="32" Height="32" Style="{StaticResource ImageEnabled}"/>
+                </Button>
                 <Button Name="ConfigureButton" ToolTip="Configure..." IsEnabled="False" Command="{x:Static wcw:MainWindow.Configure}">
-                    <Image Source="Graphics/pinions-settings-icon.png" Width="32" Height="32" Style="{StaticResource ImageEnabled}"/>
+                    <Image Source="Graphics/Settings-icon_32.png" Width="32" Height="32" Style="{StaticResource ImageEnabled}"/>
+                </Button>
+            </ToolBar>
+            <ToolBar Name="DatabaseToolBar">
+                <Button Name="SearchButton" ToolTip="Search..." IsEnabled="False" Command="{x:Static wcw:MainWindow.Search}">
+                    <Image Source="Graphics/search_32_h.png" Width="32" Height="32" Style="{StaticResource ImageEnabled}"/>
+                </Button>
+            </ToolBar>
+            <ToolBar Name="UtilitiesToolBar">
+                <Button Name="ScriptButton" ToolTip="Script..." IsEnabled="True" Command="{x:Static wcw:MainWindow.Script}">
+                    <Image Source="Graphics/pi.ico" Width="32" Height="32" Style="{StaticResource ImageEnabled}"/>
                 </Button>
             </ToolBar>
         </ToolBarTray>
-        <StatusBar Name="StatusBar" VerticalAlignment="Bottom" Width="{Binding ElementName=DockPanel, Path=ActualWidth}" DockPanel.Dock="Bottom">
-            <StatusBarItem Name="ConnectionStatus" Width="100" HorizontalAlignment="Left">
-                <Label Content="Offline." />
-            </StatusBarItem>
-        </StatusBar>
         <TabControl HorizontalAlignment="Left" Margin="0,0,0,0" Name="Tabs" 
                     Width="{Binding ElementName=DockPanel, Path=ActualWidth}" SelectionChanged="Tabs_SelectionChanged">
             <TabItem Header="Connections" Name="ConnectionTab">

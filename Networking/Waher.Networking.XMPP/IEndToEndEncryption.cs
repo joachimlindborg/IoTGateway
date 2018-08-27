@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 namespace Waher.Networking.XMPP
 {
 	/// <summary>
-	/// 
+	/// End-to-end encryption mode.
 	/// </summary>
 	public enum E2ETransmission
 	{
@@ -32,6 +32,22 @@ namespace Waher.Networking.XMPP
 	/// </summary>
 	public interface IEndToEndEncryption : IDisposable
 	{
+		/// <summary>
+		/// Encrypts binary data that can be sent to an XMPP client out of band.
+		/// </summary>
+		/// <param name="BareJid">Bare JID of recipient.</param>
+		/// <param name="Data">Data to encrypt.</param>
+		/// <returns>Encrypted data, if encryption was possible to the recipient, or null if not.</returns>
+		byte[] Encrypt(string BareJid, byte[] Data);
+
+		/// <summary>
+		/// Decrypts binary data received from an XMPP client out of band.
+		/// </summary>
+		/// <param name="BareJid">Bare JID of sender.</param>
+		/// <param name="Data">Data to decrypt.</param>
+		/// <returns>Decrypted data, if decryption was possible from the recipient, or null if not.</returns>
+		byte[] Decrypt(string BareJid, byte[] Data);
+
 		/// <summary>
 		/// Encrypts data into XML that can be sent over XMPP.
 		/// </summary>
@@ -108,8 +124,8 @@ namespace Waher.Networking.XMPP
 		/// <param name="RetryTimeout">Retry Timeout, in milliseconds.</param>
 		/// <param name="NrRetries">Number of retries.</param>
 		/// <param name="DropOff">If the retry timeout should be doubled between retries (true), or if the same retry timeout 
-		/// should be used for all retries. The retry timeout will never exceed <paramref name="MaxRetryTieout"/>.</param>
-		/// <param name="MaxRetryTimeout">Maximum retry timeout. Used if <see cref="DropOff"/> is true.</param>
+		/// should be used for all retries. The retry timeout will never exceed <paramref name="MaxRetryTimeout"/>.</param>
+		/// <param name="MaxRetryTimeout">Maximum retry timeout. Used if <paramref name="DropOff"/> is true.</param>
 		/// <returns>ID of IQ stanza</returns>
 		uint SendIqGet(XmppClient Client, E2ETransmission E2ETransmission, string To, string Xml, 
 			IqResultEventHandler Callback, object State, int RetryTimeout, int NrRetries, bool DropOff, 
@@ -158,8 +174,8 @@ namespace Waher.Networking.XMPP
 		/// <param name="RetryTimeout">Retry Timeout, in milliseconds.</param>
 		/// <param name="NrRetries">Number of retries.</param>
 		/// <param name="DropOff">If the retry timeout should be doubled between retries (true), or if the same retry timeout 
-		/// should be used for all retries. The retry timeout will never exceed <paramref name="MaxRetryTieout"/>.</param>
-		/// <param name="MaxRetryTimeout">Maximum retry timeout. Used if <see cref="DropOff"/> is true.</param>
+		/// should be used for all retries. The retry timeout will never exceed <paramref name="MaxRetryTimeout"/>.</param>
+		/// <param name="MaxRetryTimeout">Maximum retry timeout. Used if <paramref name="DropOff"/> is true.</param>
 		/// <returns>ID of IQ stanza</returns>
 		uint SendIqSet(XmppClient Client, E2ETransmission E2ETransmission, string To, string Xml, 
 			IqResultEventHandler Callback, object State, int RetryTimeout, int NrRetries, bool DropOff, 

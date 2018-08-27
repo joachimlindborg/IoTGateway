@@ -4,8 +4,8 @@ using System.Collections.Generic;
 using System.Text;
 using System.Xml;
 using System.Xml.Schema;
-using Waher.Content;
-using System.Windows;
+using Waher.Content.Xml;
+using Waher.Content.Xsl;
 
 namespace Waher.Client.WPF.Model
 {
@@ -15,7 +15,7 @@ namespace Waher.Client.WPF.Model
 	public class Connections
 	{
 		private const string xmlRootElement = "ClientConnections";
-		private const string xmlNamespace = "http://waher.se/ClientConnections.xsd";
+		private const string xmlNamespace = "http://waher.se/Schema/ClientConnections.xsd";
 
 		private MainWindow owner;
 		private List<TreeNode> connections = new List<TreeNode>();
@@ -95,6 +95,7 @@ namespace Waher.Client.WPF.Model
 		public bool Modified
 		{
 			get { return this.modified; }
+			internal set{ this.modified = true; }
 		}
 
 		/// <summary>
@@ -105,7 +106,7 @@ namespace Waher.Client.WPF.Model
 		{
 			lock (this.connections)
 			{
-				using (FileStream f = File.OpenWrite(FileName))
+				using (FileStream f = File.Create(FileName))
 				{
 					using (XmlWriter w = XmlWriter.Create(f, XML.WriterSettings(true, false)))
 					{
@@ -118,6 +119,8 @@ namespace Waher.Client.WPF.Model
 						w.Flush();
 					}
 				}
+
+				this.modified = false;
 			}
 		}
 
@@ -139,7 +142,7 @@ namespace Waher.Client.WPF.Model
 		/// <param name="Xml">XML document.</param>
 		public void Load(string FileName, XmlDocument Xml)
 		{
-			XML.Validate(FileName, Xml, xmlRootElement, xmlNamespace, schema);
+			XSL.Validate(FileName, Xml, xmlRootElement, xmlNamespace, schema);
 
 			lock (this.connections)
 			{
@@ -157,7 +160,7 @@ namespace Waher.Client.WPF.Model
 			}
 		}
 
-		private static readonly XmlSchema schema = Resources.LoadSchema("Waher.Client.WPF.Schema.ClientConnections.xsd");
+		private static readonly XmlSchema schema = XSL.LoadSchema("Waher.Client.WPF.Schema.ClientConnections.xsd");
 
 		/// <summary>
 		/// Creates a new environment.

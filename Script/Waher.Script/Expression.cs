@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Numerics;
 using System.Reflection;
+using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using Waher.Events;
+using Waher.Runtime.Inventory;
 using Waher.Script.Abstraction.Elements;
 using Waher.Script.Abstraction.Sets;
 using Waher.Script.Exceptions;
@@ -34,11 +36,11 @@ namespace Waher.Script
 	{
 		private static readonly Dictionary<string, bool> keywords = GetKeywords();
 
-		private ScriptNode root;
+		private readonly ScriptNode root;
 		private string script;
 		private object tag;
 		private int pos;
-		private int len;
+		private readonly int len;
 		private bool containsImplicitPrint = false;
 
 		/// <summary>
@@ -69,43 +71,44 @@ namespace Waher.Script
 
 		private static Dictionary<string, bool> GetKeywords()
 		{
-			Dictionary<string, bool> Result = new Dictionary<string, bool>(StringComparer.CurrentCultureIgnoreCase);
-
-			Result["AND"] = true;
-			Result["AS"] = true;
-			Result["CARTESIAN"] = true;
-			Result["CATCH"] = true;
-			Result["CROSS"] = true;
-			Result["DO"] = true;
-			Result["DOT"] = true;
-			Result["EACH"] = true;
-			Result["ELSE"] = true;
-			Result["FINALLY"] = true;
-			Result["FOR"] = true;
-			Result["FOREACH"] = true;
-			Result["IF"] = true;
-			Result["IN"] = true;
-			Result["INTERSECT"] = true;
-			Result["INTERSECTION"] = true;
-			Result["IS"] = true;
-			Result["LIKE"] = true;
-			Result["MOD"] = true;
-			Result["NAND"] = true;
-			Result["NOR"] = true;
-			Result["NOT"] = true;
-			Result["NOTIN"] = true;
-			Result["NOTLIKE"] = true;
-			Result["OR"] = true;
-			Result["OVER"] = true;
-			Result["STEP"] = true;
-			Result["THEN"] = true;
-			Result["TO"] = true;
-			Result["TRY"] = true;
-			Result["UNION"] = true;
-			Result["UNLIKE"] = true;
-			Result["WHILE"] = true;
-			Result["XNOR"] = true;
-			Result["XOR"] = true;
+			Dictionary<string, bool> Result = new Dictionary<string, bool>(StringComparer.CurrentCultureIgnoreCase)
+			{
+				{ "AND", true },
+				{ "AS", true },
+				{ "CARTESIAN", true },
+				{ "CATCH", true },
+				{ "CROSS", true },
+				{ "DO", true },
+				{ "DOT", true },
+				{ "EACH", true },
+				{ "ELSE", true },
+				{ "FINALLY", true },
+				{ "FOR", true },
+				{ "FOREACH", true },
+				{ "IF", true },
+				{ "IN", true },
+				{ "INTERSECT", true },
+				{ "INTERSECTION", true },
+				{ "IS", true },
+				{ "LIKE", true },
+				{ "MOD", true },
+				{ "NAND", true },
+				{ "NOR", true },
+				{ "NOT", true },
+				{ "NOTIN", true },
+				{ "NOTLIKE", true },
+				{ "OR", true },
+				{ "OVER", true },
+				{ "STEP", true },
+				{ "THEN", true },
+				{ "TO", true },
+				{ "TRY", true },
+				{ "UNION", true },
+				{ "UNLIKE", true },
+				{ "WHILE", true },
+				{ "XNOR", true },
+				{ "XOR", true }
+			};
 
 			return Result;
 		}
@@ -174,7 +177,9 @@ namespace Waher.Script
 
 		private void SkipWhiteSpace()
 		{
-			while (this.pos < this.len && this.script[this.pos] <= ' ')
+			char ch;
+
+			while (this.pos < this.len && ((ch = this.script[this.pos]) <= ' ' || ch == 160))
 				this.pos++;
 		}
 
@@ -259,7 +264,7 @@ namespace Waher.Script
 						ScriptNode Statement = this.AssertOperandNotNull(this.ParseStatement());
 
 						this.SkipWhiteSpace();
-						if (this.PeekNextToken() != "WHILE")
+						if (this.PeekNextToken().ToUpper() != "WHILE")
 							throw new SyntaxException("Expected WHILE.", this.pos, this.script);
 
 						this.pos += 5;
@@ -347,8 +352,7 @@ namespace Waher.Script
 							}
 							else
 							{
-								Assignment Assignment = this.AssertOperandNotNull(this.ParseList()) as Assignment;
-								if (Assignment == null)
+								if (!(this.AssertOperandNotNull(this.ParseList()) is Assignment Assignment))
 									throw new SyntaxException("Assignment expected", this.pos, this.script);
 
 								this.SkipWhiteSpace();
@@ -467,8 +471,10 @@ namespace Waher.Script
 			this.SkipWhiteSpace();
 			if (this.PeekNextChar() == ',')
 			{
-				List<ScriptNode> Elements = new List<ScriptNode>();
-				Elements.Add(Node);
+				List<ScriptNode> Elements = new List<ScriptNode>()
+				{
+					Node
+				};
 
 				while (this.PeekNextChar() == ',')
 				{
@@ -581,9 +587,8 @@ namespace Waher.Script
 							return new MatrixRowAssignment((RowVector)Left, Right, Start, this.pos - Start, this);
 						else if (Left is DynamicIndex)
 							return new DynamicIndexAssignment((DynamicIndex)Left, Right, Start, this.pos - Start, this);
-						else if (Left is NamedFunctionCall)
+						else if (Left is NamedFunctionCall f)
 						{
-							NamedFunctionCall f = (NamedFunctionCall)Left;
 							List<string> ArgumentNames = new List<string>();
 							List<ArgumentType> ArgumentTypes = new List<ArgumentType>();
 							ArgumentType ArgumentType;
@@ -899,9 +904,8 @@ namespace Waher.Script
 					int Start = Left.Start;
 					string[] ArgumentNames;
 					ArgumentType[] ArgumentTypes;
-					VariableReference Ref;
 
-					if ((Ref = Left as VariableReference) != null)
+					if (Left is VariableReference Ref)
 					{
 						ArgumentNames = new string[] { Ref.VariableName };
 						ArgumentTypes = new ArgumentType[] { ArgumentType.Normal };
@@ -942,9 +946,8 @@ namespace Waher.Script
 						ArgumentNames = new string[] { Ref.VariableName };
 						ArgumentTypes = new ArgumentType[] { ArgumentType.Set };
 					}
-					else if (Left is VectorDefinition)
+					else if (Left is VectorDefinition Def)
 					{
-						VectorDefinition Def = (VectorDefinition)Left;
 						if (Def.Elements.Length != 1 || (Ref = Def.Elements[0] as VariableReference) == null)
 						{
 							throw new SyntaxException("Expected variable reference, with optional scalar, vector, set or matrix attribute types.",
@@ -1002,10 +1005,9 @@ namespace Waher.Script
 
 								ArgumentTypes[i] = ArgumentType.Set;
 							}
-							else if (Argument is VectorDefinition)
+							else if (Argument is VectorDefinition Def2)
 							{
-								VectorDefinition Def = (VectorDefinition)Argument;
-								if (Def.Elements.Length != 1 || (Ref = Def.Elements[0] as VariableReference) == null)
+								if (Def2.Elements.Length != 1 || (Ref = Def2.Elements[0] as VariableReference) == null)
 								{
 									throw new SyntaxException("Expected variable reference, with optional scalar, vector, set or matrix attribute types.",
 										Left.Start, this.script);
@@ -2012,8 +2014,7 @@ namespace Waher.Script
 					if ((ch = this.PeekNextChar()) == '-')
 					{
 						this.pos++;
-						VariableReference Ref = this.ParseUnaryPrefixOperator() as VariableReference;
-						if (Ref == null)
+						if (!(this.ParseUnaryPrefixOperator() is VariableReference Ref))
 							throw new SyntaxException("The -- operator can only work on variable references.", this.pos, this.script);
 
 						return new PreDecrement(Ref.VariableName, Start, this.pos - Start, this);
@@ -2029,15 +2030,14 @@ namespace Waher.Script
 						return this.ParseSuffixOperator();
 					}
 					else
-						return new Negate(this.AssertOperandNotNull(this.ParseUnaryPrefixOperator()), Start, this.pos - Start, this);
+						return new Negate(this.AssertOperandNotNull(this.ParseFactors()), Start, this.pos - Start, this);
 
 				case '+':
 					this.pos++;
 					if ((ch = this.PeekNextChar()) == '+')
 					{
 						this.pos++;
-						VariableReference Ref = this.ParseUnaryPrefixOperator() as VariableReference;
-						if (Ref == null)
+						if (!(this.ParseUnaryPrefixOperator() is VariableReference Ref))
 							throw new SyntaxException("The ++ operator can only work on variable references.", this.pos, this.script);
 
 						return new PreIncrement(Ref.VariableName, Start, this.pos - Start, this);
@@ -2045,7 +2045,7 @@ namespace Waher.Script
 					else if ((ch >= '0' && ch <= '9') || (ch == '.'))
 						return this.ParseSuffixOperator();
 					else
-						return this.AssertOperandNotNull(this.ParseUnaryPrefixOperator());
+						return this.AssertOperandNotNull(this.ParseFactors());
 
 				case '!':
 					this.pos++;
@@ -2122,14 +2122,13 @@ namespace Waher.Script
 						Ref = Node as VariableReference;
 						if (Ref == null)
 						{
-							NamedMember NamedMember = Node as NamedMember;
-							if (NamedMember != null)
+							if (Node is NamedMember NamedMember)
 							{
 								if (Right == null)
 									Node = new NamedMethodCall(NamedMember.Operand, NamedMember.Name, new ScriptNode[0], Start, this.pos - Start, this);
-								else if(Right.GetType() == typeof(ElementList))
+								else if (Right.GetType() == typeof(ElementList))
 									Node = new NamedMethodCall(NamedMember.Operand, NamedMember.Name, ((ElementList)Right).Elements, Start, this.pos - Start, this);
-								else 
+								else
 									Node = new NamedMethodCall(NamedMember.Operand, NamedMember.Name, new ScriptNode[] { Right }, Start, this.pos - Start, this);
 							}// TODO: Dynamic named method call.
 							else
@@ -2263,12 +2262,10 @@ namespace Waher.Script
 							this.pos++;
 
 							Unit Unit = new Unit(Prefix.None, new KeyValuePair<AtomicUnit, int>(new AtomicUnit("°" + new string(ch, 1)), 1));
-							ConstantElement ConstantElement = Node as ConstantElement;
 
-							if (ConstantElement != null)
+							if (Node is ConstantElement ConstantElement)
 							{
-								DoubleNumber DoubleNumber = ConstantElement.Constant as DoubleNumber;
-								if (DoubleNumber != null)
+								if (ConstantElement.Constant is DoubleNumber DoubleNumber)
 								{
 									Node = new ConstantElement(new PhysicalQuantity(DoubleNumber.Value, Unit),
 										ConstantElement.Start, this.pos - ConstantElement.Start, this);
@@ -2387,12 +2384,9 @@ namespace Waher.Script
 								return Node;
 							}
 
-							ConstantElement ConstantElement = Node as ConstantElement;
-
-							if (ConstantElement != null)
+							if (Node is ConstantElement ConstantElement)
 							{
-								DoubleNumber DoubleNumber = ConstantElement.Constant as DoubleNumber;
-								if (DoubleNumber != null)
+								if (ConstantElement.Constant is DoubleNumber DoubleNumber)
 								{
 									Node = new ConstantElement(new PhysicalQuantity(DoubleNumber.Value, Unit),
 										ConstantElement.Start, this.pos - ConstantElement.Start, this);
@@ -2457,7 +2451,7 @@ namespace Waher.Script
 			{
 				LastDivision = true;
 				ch = this.NextChar();
-				while (ch > 0 && ch <= ' ')
+				while (ch > 0 && (ch <= ' ' || ch == 160))
 					ch = this.NextChar();
 			}
 
@@ -2474,7 +2468,7 @@ namespace Waher.Script
 					}
 
 					ch = this.NextChar();
-					while (ch > 0 && ch <= ' ')
+					while (ch > 0 && (ch <= ' ' || ch == 160))
 						ch = this.NextChar();
 
 					if (ch != ')')
@@ -2483,7 +2477,7 @@ namespace Waher.Script
 					if (ch == '^')
 					{
 						ch = this.NextChar();
-						while (ch > 0 && ch <= ' ')
+						while (ch > 0 && (ch <= ' ' || ch == 160))
 							ch = this.NextChar();
 
 						if (ch == '-' || char.IsDigit(ch))
@@ -2573,13 +2567,13 @@ namespace Waher.Script
 					else if (!Unit.TryGetCompoundUnit(Name, out CompoundFactors))
 						CompoundFactors = null;
 
-					while (ch > 0 && ch <= ' ')
+					while (ch > 0 && (ch <= ' ' || ch == 160))
 						ch = this.NextChar();
 
 					if (ch == '^')
 					{
 						ch = this.NextChar();
-						while (ch > 0 && ch <= ' ')
+						while (ch > 0 && (ch <= ' ' || ch == 160))
 							ch = this.NextChar();
 
 						if (ch == '-' || char.IsDigit(ch))
@@ -2644,7 +2638,7 @@ namespace Waher.Script
 					}
 				}
 
-				while (ch > 0 && ch <= ' ')
+				while (ch > 0 && (ch <= ' ' || ch == 160))
 					ch = this.NextChar();
 
 				if (ch == 0)
@@ -2660,7 +2654,7 @@ namespace Waher.Script
 					break;
 
 				ch = this.NextChar();
-				while (ch > 0 && ch <= ' ')
+				while (ch > 0 && (ch <= ' ' || ch == 160))
 					ch = this.NextChar();
 
 				i = this.pos - 1;
@@ -2681,7 +2675,6 @@ namespace Waher.Script
 		private static ScriptNode GetFunction(string FunctionName, ScriptNode Arguments, int Start, int Length, Expression Expression)
 		{
 			Dictionary<string, FunctionRef> F;
-			FunctionRef Ref;
 			int NrParameters;
 			ElementList ElementList = null;
 			object[] P;
@@ -2716,7 +2709,7 @@ namespace Waher.Script
 				F = functions;
 			}
 
-			if (F.TryGetValue(FunctionName + " " + NrParameters.ToString(), out Ref))
+			if (F.TryGetValue(FunctionName + " " + NrParameters.ToString(), out FunctionRef Ref))
 				return (Function)Ref.Constructor.Invoke(P);
 			else
 			{
@@ -2738,9 +2731,7 @@ namespace Waher.Script
 				C = constants;
 			}
 
-			IConstant Constant;
-
-			if (!C.TryGetValue(Name, out Constant))
+			if (!C.TryGetValue(Name, out IConstant Constant))
 			{
 				ValueElement = null;
 				return false;
@@ -2750,11 +2741,10 @@ namespace Waher.Script
 			return true;
 		}
 
-		internal static LambdaDefinition GetFunctionLambdaDefinition(string FunctionName, int Start, int Length, 
+		internal static LambdaDefinition GetFunctionLambdaDefinition(string FunctionName, int Start, int Length,
 			Expression Expression)
 		{
 			Dictionary<string, FunctionRef> F;
-			FunctionRef Ref;
 
 			F = functions;
 			if (F == null)
@@ -2763,7 +2753,7 @@ namespace Waher.Script
 				F = functions;
 			}
 
-			if (F.TryGetValue(FunctionName, out Ref))
+			if (F.TryGetValue(FunctionName, out FunctionRef Ref))
 			{
 				string[] ArgumentNames = Ref.Function.DefaultArgumentNames;
 				int i, c = ArgumentNames.Length;
@@ -2799,26 +2789,19 @@ namespace Waher.Script
 					ParameterInfo[] Parameters;
 					ParameterInfo PInfo;
 					FunctionRef Ref;
-					object[] ParameterValues;
 					string[] Aliases;
 					Function Function;
 					string s;
 					int i, c;
-#if WINDOWS_UWP
 					TypeInfo TI;
-#endif
 
 					foreach (Type T in Types.GetTypesImplementingInterface(typeof(IFunction)))
 					{
-#if WINDOWS_UWP
 						TI = T.GetTypeInfo();
-						if (TI.IsAbstract)
-#else
-						if (T.IsAbstract)
-#endif
+						if (TI.IsAbstract || TI.IsGenericTypeDefinition)
 							continue;
 
-						foreach (ConstructorInfo CI in T.GetConstructors())
+						foreach (ConstructorInfo CI in TI.DeclaredConstructors)
 						{
 							Parameters = CI.GetParameters();
 							c = Parameters.Length;
@@ -2849,7 +2832,7 @@ namespace Waher.Script
 
 							try
 							{
-								if (!ParameterValuesPerNrParameters.TryGetValue(c, out ParameterValues))
+								if (!ParameterValuesPerNrParameters.TryGetValue(c, out object[] ParameterValues))
 								{
 									ParameterValues = new object[c];
 									ParameterValues[c - 1] = null;
@@ -2871,10 +2854,12 @@ namespace Waher.Script
 								}
 								else
 								{
-									Ref = new FunctionRef();
-									Ref.Constructor = CI;
-									Ref.Function = Function;
-									Ref.NrParameters = c - 3;
+									Ref = new FunctionRef()
+									{
+										Constructor = CI,
+										Function = Function,
+										NrParameters = c - 3
+									};
 
 									Found[s] = Ref;
 
@@ -2896,10 +2881,12 @@ namespace Waher.Script
 										}
 										else
 										{
-											Ref = new FunctionRef();
-											Ref.Constructor = CI;
-											Ref.Function = Function;
-											Ref.NrParameters = c - 3;
+											Ref = new FunctionRef()
+											{
+												Constructor = CI,
+												Function = Function,
+												NrParameters = c - 3
+											};
 
 											Found[s] = Ref;
 
@@ -2911,10 +2898,15 @@ namespace Waher.Script
 							}
 							catch (Exception ex)
 							{
-								while ((ex is TargetInvocationException || ex is AggregateException) || ex.InnerException != null)
-									ex = ex.InnerException;
+								ex = Log.UnnestException(ex);
 
-								Log.Critical(ex);
+								if (ex is AggregateException ex2)
+								{
+									foreach (Exception ex3 in ex2.InnerExceptions)
+										Log.Critical(ex3);
+								}
+								else
+									Log.Critical(ex);
 							}
 						}
 					}
@@ -2927,27 +2919,17 @@ namespace Waher.Script
 					Dictionary<string, IConstant> Found = new Dictionary<string, IConstant>(StringComparer.CurrentCultureIgnoreCase);
 					string[] Aliases;
 					string s;
-#if WINDOWS_UWP
 					TypeInfo TI;
-#endif
 
 					foreach (Type T in Types.GetTypesImplementingInterface(typeof(IConstant)))
 					{
-#if WINDOWS_UWP
 						TI = T.GetTypeInfo();
-						if (TI.IsAbstract)
-#else
-						if (T.IsAbstract)
-#endif
-							continue;
-
-						ConstructorInfo CI = T.GetConstructor(Types.NoTypes);
-						if (CI == null)
+						if (TI.IsAbstract || TI.IsGenericTypeDefinition)
 							continue;
 
 						try
 						{
-							IConstant Constant = (IConstant)CI.Invoke(Types.NoParameters);
+							IConstant Constant = (IConstant)Activator.CreateInstance(T);
 
 							s = Constant.ConstantName;
 							if (Found.ContainsKey(s))
@@ -2993,7 +2975,7 @@ namespace Waher.Script
 
 		private static Dictionary<string, FunctionRef> functions = null;
 		private static Dictionary<string, IConstant> constants = null;
-		private static object searchSynch = new object();
+		private readonly static object searchSynch = new object();
 
 		private ScriptNode ParseObject()
 		{
@@ -3014,6 +2996,7 @@ namespace Waher.Script
 
 				this.pos++;
 
+				Node.Start = Start;
 				return Node;
 			}
 			else if (ch == '[')
@@ -3034,33 +3017,29 @@ namespace Waher.Script
 
 				this.pos++;
 
-				if (Node is For)
+				if (Node is For For)
 				{
-					For For = (For)Node;
 					if (IsVectorDefinition(For.RightOperand))
 						return new MatrixForDefinition(For, Start, this.pos - Start, this);
 					else
 						return new VectorForDefinition(For, Start, this.pos - Start, this);
 				}
-				else if (Node is ForEach)
+				else if (Node is ForEach ForEach)
 				{
-					ForEach ForEach = (ForEach)Node;
 					if (IsVectorDefinition(ForEach.RightOperand))
 						return new MatrixForEachDefinition(ForEach, Start, this.pos - Start, this);
 					else
 						return new VectorForEachDefinition(ForEach, Start, this.pos - Start, this);
 				}
-				else if (Node is DoWhile)
+				else if (Node is DoWhile DoWhile)
 				{
-					DoWhile DoWhile = (DoWhile)Node;
 					if (IsVectorDefinition(DoWhile.LeftOperand))
 						return new MatrixDoWhileDefinition(DoWhile, Start, this.pos - Start, this);
 					else
 						return new VectorDoWhileDefinition(DoWhile, Start, this.pos - Start, this);
 				}
-				else if (Node is WhileDo)
+				else if (Node is WhileDo WhileDo)
 				{
-					WhileDo WhileDo = (WhileDo)Node;
 					if (IsVectorDefinition(WhileDo.RightOperand))
 						return new MatrixWhileDoDefinition(WhileDo, Start, this.pos - Start, this);
 					else
@@ -3226,10 +3205,8 @@ namespace Waher.Script
 					}
 				}
 
-				double d;
-
 				if (!double.TryParse(this.script.Substring(Start, this.pos - Start).
-					Replace(".", System.Globalization.NumberFormatInfo.CurrentInfo.NumberDecimalSeparator), out d))
+					Replace(".", System.Globalization.NumberFormatInfo.CurrentInfo.NumberDecimalSeparator), out double d))
 				{
 					throw new SyntaxException("Invalid double number.", this.pos, this.script);
 				}
@@ -3282,6 +3259,31 @@ namespace Waher.Script
 
 							case 'v':
 								ch2 = '\v';
+								break;
+
+							case 'x':
+								ch2 = this.NextChar();
+								if (ch2 >= '0' && ch2 <= '9')
+									ch2 -= '0';
+								else if (ch2 >= 'a' && ch2 <= 'f')
+									ch2 -= (char)('a' - 10);
+								else if (ch2 >= 'A' && ch2 <= 'F')
+									ch2 -= (char)('A' - 10);
+								else
+									throw new SyntaxException("Hexadecimal digit expected.", this.pos, this.script);
+
+								char ch3 = this.NextChar();
+								if (ch3 >= '0' && ch3 <= '9')
+									ch3 -= '0';
+								else if (ch3 >= 'a' && ch3 <= 'f')
+									ch3 -= (char)('a' - 10);
+								else if (ch3 >= 'A' && ch3 <= 'F')
+									ch3 -= (char)('A' - 10);
+								else
+									throw new SyntaxException("Hexadecimal digit expected.", this.pos, this.script);
+
+								ch2 <<= 4;
+								ch2 += ch3;
 								break;
 						}
 					}
@@ -3385,19 +3387,18 @@ namespace Waher.Script
 		}
 
 		/// <summary>
-		/// <see cref="Object.Equals"/>
+		/// <see cref="Object.Equals(Object)"/>
 		/// </summary>
 		public override bool Equals(object obj)
 		{
-			Expression Exp = obj as Expression;
-			if (Exp == null)
-				return false;
-			else
+			if (obj is Expression Exp)
 				return this.script.Equals(Exp.script);
+			else
+				return false;
 		}
 
 		/// <summary>
-		/// <see cref="Object.GetHashCode"/>
+		/// <see cref="Object.GetHashCode()"/>
 		/// </summary>
 		public override int GetHashCode()
 		{
@@ -3604,6 +3605,124 @@ namespace Waher.Script
 		}
 
 		/// <summary>
+		/// Converts a string value to a parsable expression string.
+		/// </summary>
+		/// <param name="s">Value</param>
+		/// <returns>Expression representation of string.</returns>
+		public static string ToString(string s)
+		{
+			StringBuilder sb = new StringBuilder();
+			int i = s.IndexOfAny(stringCharactersToEscape);
+			int j = 0;
+			int k;
+
+			sb.Append('"');
+
+			if (i < 0)
+				sb.Append(s);
+			else
+			{
+				while (i >= 0)
+				{
+					if (i > j)
+						sb.Append(s.Substring(j, i - j));
+
+					k = Array.IndexOf<char>(stringCharactersToEscape, s[i]);
+					sb.Append(stringEscapeSequences[k]);
+					j = i + 1;
+					i = s.IndexOfAny(stringCharactersToEscape, j);
+				}
+
+				if (j < s.Length)
+					sb.Append(s.Substring(j));
+			}
+
+			sb.Append('"');
+
+			return sb.ToString();
+		}
+
+		private static readonly char[] stringCharactersToEscape = new char[] { '\\', '"', '\n', '\r', '\t', '\b', '\f', '\a' };
+		private static readonly string[] stringEscapeSequences = new string[] { "\\\\", "\\\"", "\\n", "\\r", "\\t", "\\b", "\\f", "\\a" };
+
+		/// <summary>
+		/// Converts an object to a string.
+		/// </summary>
+		/// <param name="Value">Value</param>
+		/// <returns>String representation of value.</returns>
+		public static string ToString(object Value)
+		{
+			if (Value is double dbl)
+				return ToString(dbl);
+			else if (Value is decimal dec)
+				return ToString(dec);
+			else if (Value is Complex z)
+				return ToString(z);
+			else if (Value is bool b)
+				return ToString(b);
+			else if (Value is double[] dblA)
+				return ToString(dblA);
+			else if (Value is Complex[] zA)
+				return ToString(zA);
+			else if (Value is TimeSpan TS)
+				return ToString(TS);
+			else if (Value is DateTime DT)
+				return ToString(DT);
+			else if (Value is string s)
+				return ToString(s);
+			else if (Value is Exception ex)
+				return ToString(ex.Message);
+			else if (Value is Dictionary<string, IElement> ObjExNihilo)
+			{
+				StringBuilder sb = new StringBuilder();
+				bool First = true;
+
+				sb.Append('{');
+
+				foreach (KeyValuePair<string, IElement> P in ObjExNihilo)
+				{
+					if (First)
+						First = false;
+					else
+						sb.Append(',');
+
+					sb.Append(P.Key);
+					sb.Append(':');
+					sb.Append(P.Value.ToString());
+				}
+
+				sb.Append('}');
+
+				return sb.ToString();
+			}
+			else if (Value is IEnumerable Enumerable)
+			{
+				StringBuilder sb = new StringBuilder();
+				bool First = true;
+
+				sb.Append('[');
+
+				foreach (object Element in Enumerable)
+				{
+					if (First)
+						First = false;
+					else
+						sb.Append(',');
+
+					sb.Append(ToString(Element));
+				}
+
+				sb.Append(']');
+
+				return sb.ToString();
+			}
+			else if (Value == null)
+				return "null";
+			else
+				return Value.ToString();
+		}
+
+		/// <summary>
 		/// Converts an object to a double value.
 		/// </summary>
 		/// <param name="Object">Object.</param>
@@ -3616,62 +3735,38 @@ namespace Waher.Script
 				return (int)Object;
 			else
 			{
-#if WINDOWS_UWP
-				if (Object is bool)
-					return (bool)Object ? 1 : 0;
-				else if (Object is bool)
-					return (byte)Object;
-				else if (Object is bool)
-					return (char)Object;
-				else if (Object is bool)
-					return ((DateTime)Object).ToOADate();
-				else if (Object is bool)
-					return (double)(decimal)Object;
-				else if (Object is bool)
-					return (double)Object;
-				else if (Object is bool)
-					return (short)Object;
-				else if (Object is bool)
-					return (int)Object;
-				else if (Object is bool)
-					return (long)Object;
-				else if (Object is bool)
-					return (sbyte)Object;
-				else if (Object is bool)
-					return (float)Object;
-				else if (Object is bool)
-					return (ushort)Object;
-				else if (Object is bool)
-					return (uint)Object;
-				else if (Object is bool)
-					return (UInt64)Object;
+				if (Object is bool b)
+					return b ? 1 : 0;
+				else if (Object is byte bt)
+					return bt;
+				else if (Object is char ch)
+					return ch;
+				else if (Object is decimal dc)
+					return (double)dc;
+				else if (Object is double db)
+					return db;
+				else if (Object is short sh)
+					return sh;
+				else if (Object is int i)
+					return i;
+				else if (Object is long l)
+					return l;
+				else if (Object is sbyte sb)
+					return sb;
+				else if (Object is float f)
+					return f;
+				else if (Object is ushort us)
+					return us;
+				else if (Object is uint ui)
+					return ui;
+				else if (Object is ulong ul)
+					return ul;
 				else
 				{
-#else
-				switch (Type.GetTypeCode(Object.GetType()))
-				{
-					case TypeCode.Boolean: return (bool)Object ? 1 : 0;
-					case TypeCode.Byte: return (byte)Object;
-					case TypeCode.Char: return (char)Object;
-					case TypeCode.DateTime: return ((DateTime)Object).ToOADate();
-					case TypeCode.Decimal: return (double)(decimal)Object;
-					case TypeCode.Double: return (double)Object;
-					case TypeCode.Int16: return (short)Object;
-					case TypeCode.Int32: return (int)Object;
-					case TypeCode.Int64: return (long)Object;
-					case TypeCode.SByte: return (sbyte)Object;
-					case TypeCode.Single: return (float)Object;
-					case TypeCode.UInt16: return (ushort)Object;
-					case TypeCode.UInt32: return (uint)Object;
-					case TypeCode.UInt64: return (UInt64)Object;
-					default:
-#endif
-					double d;
-					if (!double.TryParse(Object.ToString(), out d))
+					if (!double.TryParse(Object.ToString(), out double d))
 						throw new ScriptException("Expected a double value.");
 
 					return d;
-
 				}
 			}
 		}
@@ -3696,161 +3791,127 @@ namespace Waher.Script
 		/// <returns>Encapsulated object.</returns>
 		public static IElement Encapsulate(object Value)
 		{
-#if WINDOWS_UWP
 			if (Value == null)
 				return ObjectValue.Null;
-			else if (Value is double)
-				return new DoubleNumber((double)Value);
-			else if (Value is bool)
-				return new BooleanValue((bool)Value);
-			else if (Value is string)
-				return new StringValue((string)Value);
-			else if (Value is int)
-				return new DoubleNumber((int)Value);
-			else if (Value is long)
-				return new DoubleNumber((long)Value);
-			else if (Value is byte)
-				return new DoubleNumber((byte)Value);
-			else if (Value is char)
-				return new StringValue(new string((char)Value, 1));
-			else if (Value is DateTime)
-				return new DateTimeValue((DateTime)Value);
-			else if (Value is decimal)
-				return new DoubleNumber((double)((decimal)Value));
-			else if (Value is short)
-				return new DoubleNumber((short)Value);
-			else if (Value is sbyte)
-				return new DoubleNumber((sbyte)Value);
-			else if (Value is float)
-				return new DoubleNumber((float)Value);
-			else if (Value is ushort)
-				return new DoubleNumber((ushort)Value);
-			else if (Value is uint)
-				return new DoubleNumber((uint)Value);
-			else if (Value is ulong)
-				return new DoubleNumber((ulong)Value);
+			else if (Value is double db)
+				return new DoubleNumber(db);
+			else if (Value is bool b)
+				return new BooleanValue(b);
+			else if (Value is string s)
+				return new StringValue(s);
+			else if (Value is int i)
+				return new DoubleNumber(i);
+			else if (Value is long l)
+				return new DoubleNumber(l);
+			else if (Value is byte bt)
+				return new DoubleNumber(bt);
+			else if (Value is char ch)
+				return new StringValue(new string(ch, 1));
+			else if (Value is DateTime DT)
+				return new DateTimeValue(DT);
+			else if (Value is decimal dc)
+				return new DoubleNumber((double)dc);
+			else if (Value is short sh)
+				return new DoubleNumber(sh);
+			else if (Value is sbyte sb)
+				return new DoubleNumber(sb);
+			else if (Value is float f)
+				return new DoubleNumber(f);
+			else if (Value is ushort us)
+				return new DoubleNumber(us);
+			else if (Value is uint ui)
+				return new DoubleNumber(ui);
+			else if (Value is ulong ul)
+				return new DoubleNumber(ul);
 			else
 			{
-#else
-			if (Value == null)
-				return ObjectValue.Null;
+				if (Value is IElement e)
+					return e;
 
-			Type T = Value.GetType();
+				else if (Value is double[] dv)
+					return new DoubleVector(dv);
+				else if (Value is double[,] dm)
+					return new DoubleMatrix(dm);
 
-			switch (Type.GetTypeCode(T))
-			{
-				case TypeCode.Boolean:
-					return new BooleanValue((bool)Value);
+				else if (Value is Complex c)
+					return new ComplexNumber(c);
+				else if (Value is Complex[] cv)
+					return new ComplexVector(cv);
+				else if (Value is Complex[,] cm)
+					return new ComplexMatrix(cm);
 
-				case TypeCode.Byte:
-					return new DoubleNumber((byte)Value);
+				else if (Value is bool[] bv)
+					return new BooleanVector(bv);
+				else if (Value is bool[,] bm)
+					return new BooleanMatrix(bm);
 
-				case TypeCode.Char:
-					return new StringValue(new string((char)Value, 1));
+				else if (Value is DateTime[] dv2)
+					return new DateTimeVector(dv2);
 
-				case TypeCode.DateTime:
-					return new DateTimeValue((DateTime)Value);
+				else if (Value is IElement[] ev)
+					return new ObjectVector((ICollection<IElement>)ev);
+				else if (Value is IElement[,] em)
+					return new ObjectMatrix(em);
+				else if (Value is object[] ov)
+					return new ObjectVector(ov);
+				else if (Value is object[,] om)
+					return new ObjectMatrix(om);
 
-				case TypeCode.DBNull:
-					return ObjectValue.Null;
-
-				case TypeCode.Decimal:
-					return new DoubleNumber((double)((decimal)Value));
-
-				case TypeCode.Double:
-					return new DoubleNumber((double)Value);
-
-				case TypeCode.Empty:
-					return ObjectValue.Null;
-
-				case TypeCode.Int16:
-					return new DoubleNumber((short)Value);
-
-				case TypeCode.Int32:
-					return new DoubleNumber((int)Value);
-
-				case TypeCode.Int64:
-					return new DoubleNumber((long)Value);
-
-				case TypeCode.SByte:
-					return new DoubleNumber((sbyte)Value);
-
-				case TypeCode.Single:
-					return new DoubleNumber((float)Value);
-
-				case TypeCode.String:
-					return new StringValue((string)Value);
-
-				case TypeCode.UInt16:
-					return new DoubleNumber((ushort)Value);
-
-				case TypeCode.UInt32:
-					return new DoubleNumber((uint)Value);
-
-				case TypeCode.UInt64:
-					return new DoubleNumber((ulong)Value);
-
-				case TypeCode.Object:
-				default:
-#endif
-				if (Value is IElement)
-					return (IElement)Value;
-
-				else if (Value is double[])
-					return new DoubleVector((double[])Value);
-				else if (Value is double[,])
-					return new DoubleMatrix((double[,])Value);
-
-				else if (Value is Complex)
-					return new ComplexNumber((Complex)Value);
-				else if (Value is Complex[])
-					return new ComplexVector((Complex[])Value);
-				else if (Value is Complex[,])
-					return new ComplexMatrix((Complex[,])Value);
-
-				else if (Value is bool[])
-					return new BooleanVector((bool[])Value);
-				else if (Value is bool[,])
-					return new BooleanMatrix((bool[,])Value);
-
-				else if (Value is DateTime[])
-					return new DateTimeVector((DateTime[])Value);
-
-				else if (Value is IElement[])
-					return new ObjectVector((ICollection<IElement>)(IElement[])Value);
-				else if (Value is IElement[,])
-					return new ObjectMatrix((IElement[,])Value);
-				else if (Value is object[])
-					return new ObjectVector((object[])Value);
-				else if (Value is object[,])
-					return new ObjectMatrix((object[,])Value);
-
-				else if (Value is Type)
-					return new TypeValue((Type)Value);
+				else if (Value is Type t)
+					return new TypeValue(t);
 				else
 					return new ObjectValue(Value);
 			}
 		}
 
+		/// <summary>
+		/// Upgrades elements if necessary, trying to make them compatible.
+		/// </summary>
+		/// <param name="E1">Element 1.</param>
+		/// <param name="Set1">Set containing element 1.</param>
+		/// <param name="E2">Element 2.</param>
+		/// <param name="Set2">Set containing element 2.</param>
+		/// <param name="Node">Script node requesting the upgrade.</param>
+		/// <returns>If elements have been upgraded to become compatible.</returns>
 		public static bool Upgrade(ref IElement E1, ref ISet Set1, ref IElement E2, ref ISet Set2, ScriptNode Node)
 		{
 			// TODO: Implement pluggable upgrades and a shortest path search to find optimal upgrades.
 
 			if (E1 is ComplexNumber)
 			{
-				if (E2 is DoubleNumber)
+				if (E2 is DoubleNumber D2)
 				{
-					E2 = new ComplexNumber(((DoubleNumber)E2).Value);
+					E2 = new ComplexNumber(D2.Value);
 					Set2 = ComplexNumbers.Instance;
 					return true;
 				}
 			}
 			else if (E2 is ComplexNumber)
 			{
-				if (E1 is DoubleNumber)
+				if (E1 is DoubleNumber D1)
 				{
-					E1 = new ComplexNumber(((DoubleNumber)E1).Value);
+					E1 = new ComplexNumber(D1.Value);
 					Set1 = ComplexNumbers.Instance;
+					return true;
+				}
+			}
+			else if (E1 is ObjectValue O1 && O1.AssociatedObjectValue is Enum Enum1 && E2 is DoubleNumber)
+			{
+				Type T1 =Enum.GetUnderlyingType(Enum1.GetType());
+				if (T1 == typeof(int))
+				{
+					E1 = new DoubleNumber(Convert.ToInt32(Enum1));
+					Set1 = DoubleNumbers.Instance;
+					return true;
+				}
+			}
+			else if (E2 is ObjectValue O2 && O2.AssociatedObjectValue is Enum Enum2 && E1 is DoubleNumber)
+			{
+				Type T2 = Enum.GetUnderlyingType(Enum2.GetType());
+				if (T2 == typeof(int))
+				{
+					E2 = new DoubleNumber(Convert.ToInt32(Enum2));
+					Set2 = DoubleNumbers.Instance;
 					return true;
 				}
 			}
@@ -3858,6 +3919,13 @@ namespace Waher.Script
 			return false;   // TODO: Implement Upgrade()
 		}
 
+		/// <summary>
+		/// Tries to conevert an element value to a desired type.
+		/// </summary>
+		/// <param name="Value">Element value.</param>
+		/// <param name="DesiredType">Desired type.</param>
+		/// <param name="Node">Script node making the request.</param>
+		/// <returns>Converted value.</returns>
 		public static object ConvertTo(IElement Value, Type DesiredType, ScriptNode Node)
 		{
 			return Value.AssociatedObjectValue;    // TODO: Implement .NET type conversion.

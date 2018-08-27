@@ -4,7 +4,6 @@ using System.Text;
 using System.Xml;
 using System.Windows;
 using Windows.UI.Popups;
-using Waher.Networking.Sniffers;
 
 namespace Waher.Mock
 {
@@ -22,6 +21,10 @@ namespace Waher.Mock
 		{
 		}
 
+		/// <summary>
+		/// Raises an event.
+		/// </summary>
+		/// <param name="h">Event handler.</param>
 		protected async void Raise(EventHandler h)
 		{
 			if (h != null)
